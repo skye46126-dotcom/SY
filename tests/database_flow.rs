@@ -4,9 +4,10 @@ use life_os_core::{
     BackupService, BackupType, CapexCostInput, CostService, CreateAiServiceConfigInput,
     CreateCloudSyncConfigInput, CreateExpenseRecordInput, CreateIncomeRecordInput,
     CreateLearningRecordInput, CreateProjectInput, CreateTagInput, CreateTimeRecordInput, Database,
-    DemoDataService, MonthlyCostBaselineInput, ProjectAllocation, ProjectService, RecordKind,
-    RecordService, RecurringCostRuleInput, RemoteBackupFile, RemoteDownloadResult,
-    RemoteUploadResult, ReviewService, SnapshotService, SnapshotWindow, cloud::CloudSyncTransport,
+    DemoDataService, DimensionOptionInput, MonthlyCostBaselineInput, ProjectAllocation,
+    ProjectService, RecordKind, RecordService, RecurringCostRuleInput, RemoteBackupFile,
+    RemoteDownloadResult, RemoteUploadResult, ReviewService, SnapshotService, SnapshotWindow,
+    cloud::CloudSyncTransport,
 };
 use rusqlite::params;
 use std::collections::BTreeMap;
@@ -194,6 +195,29 @@ fn create_full_domain_entities_and_links() {
         project_id: project.id.clone(),
         weight_ratio: 1.0,
     };
+
+    service
+        .save_dimension_option(
+            &user.id,
+            "time_category",
+            &DimensionOptionInput {
+                code: "deep_work".to_string(),
+                display_name: "Deep Work".to_string(),
+                is_active: true,
+            },
+        )
+        .expect("save time dimension");
+    service
+        .save_dimension_option(
+            &user.id,
+            "expense_category",
+            &DimensionOptionInput {
+                code: "software".to_string(),
+                display_name: "Software".to_string(),
+                is_active: true,
+            },
+        )
+        .expect("save expense dimension");
 
     let time_record = service
         .create_time_record(&CreateTimeRecordInput {

@@ -196,6 +196,20 @@ fn ffi_bridge_can_query_projects_tags_and_reviews() {
 
     bridge_call(
         &database_path,
+        "save_dimension_option",
+        json!({
+            "user_id": user_id,
+            "kind": "expense_category",
+            "input": {
+                "code": "software",
+                "display_name": "Software",
+                "is_active": true
+            }
+        }),
+    );
+
+    bridge_call(
+        &database_path,
         "create_time_record",
         json!({
             "user_id": user_id,

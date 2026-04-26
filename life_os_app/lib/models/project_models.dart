@@ -59,6 +59,7 @@ class ProjectDetail {
     required this.statusCode,
     required this.startedOn,
     required this.endedOn,
+    required this.aiEnableRatio,
     required this.score,
     required this.note,
     required this.tagIds,
@@ -100,6 +101,7 @@ class ProjectDetail {
   final String statusCode;
   final String startedOn;
   final String? endedOn;
+  final int? aiEnableRatio;
   final int? score;
   final String? note;
   final List<String> tagIds;
@@ -142,6 +144,7 @@ class ProjectDetail {
       statusCode: json['status_code'] as String? ?? '',
       startedOn: json['started_on'] as String? ?? '',
       endedOn: json['ended_on'] as String?,
+      aiEnableRatio: (json['ai_enable_ratio'] as num?)?.toInt(),
       score: (json['score'] as num?)?.toInt(),
       note: json['note'] as String?,
       tagIds: ((json['tag_ids'] as List?) ?? const [])

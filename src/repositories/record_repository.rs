@@ -6,12 +6,13 @@ use uuid::Uuid;
 
 use crate::error::{LifeOsError, Result};
 use crate::models::{
-    CreateExpenseRecordInput, CreateIncomeRecordInput, CreateLearningRecordInput,
-    CreateProjectInput, CreateTagInput, CreateTimeRecordInput, ExpenseRecord,
-    ExpenseRecordSnapshot, IncomeRecord, IncomeRecordSnapshot, LearningRecord,
-    LearningRecordSnapshot, Project, ProjectAllocation, RecentRecordItem, RecordKind, Tag,
-    TimeRecord, TimeRecordSnapshot, TodayAlert, TodayAlerts, TodayGoalProgress,
-    TodayGoalProgressItem, TodayOverview, TodaySummary, normalize_optional_string,
+    CaptureDefaults, CaptureMetadata, CreateExpenseRecordInput, CreateIncomeRecordInput,
+    CreateLearningRecordInput, CreateProjectInput, CreateTagInput, CreateTimeRecordInput,
+    DimensionOption, DimensionOptionInput, ExpenseRecord, ExpenseRecordSnapshot, IncomeRecord,
+    IncomeRecordSnapshot, LearningRecord, LearningRecordSnapshot, OperatingSettings, Project,
+    ProjectAllocation, ProjectOption, RecentRecordItem, RecordKind, Tag, TimeRecord,
+    TimeRecordSnapshot, TodayAlert, TodayAlerts, TodayGoalProgress, TodayGoalProgressItem,
+    TodayOverview, TodaySummary, UpdateOperatingSettingsInput, normalize_optional_string,
     parse_rfc3339_utc, to_utc_string,
 };
 
@@ -26,7 +27,7 @@ impl RecordRepository {
 
         let tx = connection.transaction()?;
         ensure_user_exists(&tx, &input.user_id)?;
-        upsert_dimension_code(
+        ensure_dimension_option_exists(
             &tx,
             DimensionKind::TimeCategory,
             &input.normalized_category_code(),
@@ -105,7 +106,7 @@ impl RecordRepository {
 
         let tx = connection.transaction()?;
         ensure_user_exists(&tx, &input.user_id)?;
-        upsert_dimension_code(
+        ensure_dimension_option_exists(
             &tx,
             DimensionKind::IncomeType,
             &input.normalized_type_code(),
@@ -175,7 +176,7 @@ impl RecordRepository {
 
         let tx = connection.transaction()?;
         ensure_user_exists(&tx, &input.user_id)?;
-        upsert_dimension_code(
+        ensure_dimension_option_exists(
             &tx,
             DimensionKind::ExpenseCategory,
             &input.normalized_category_code(),
@@ -239,7 +240,7 @@ impl RecordRepository {
 
         let tx = connection.transaction()?;
         ensure_user_exists(&tx, &input.user_id)?;
-        upsert_dimension_code(
+        ensure_dimension_option_exists(
             &tx,
             DimensionKind::LearningLevel,
             &input.normalized_application_level_code(),
@@ -316,7 +317,7 @@ impl RecordRepository {
 
         let tx = connection.transaction()?;
         ensure_user_exists(&tx, &input.user_id)?;
-        upsert_dimension_code(
+        ensure_dimension_option_exists(
             &tx,
             DimensionKind::ProjectStatus,
             &input.normalized_status_code(),
@@ -575,6 +576,191 @@ impl RecordRepository {
         )?;
         tx.commit()?;
         Ok(())
+    }
+
+    pub fn get_capture_metadata(connection: &Connection, user_id: &str) -> Result<CaptureMetadata> {
+        ensure_user_exists(connection, user_id)?;
+        Ok(CaptureMetadata {
+            project_options: load_project_options(connection, user_id)?,
+            tags: Self::list_tags(connection, user_id)?,
+            time_categories: list_dimension_options(connection, DimensionKind::TimeCategory, false)?,
+            income_types: list_dimension_options(connection, DimensionKind::IncomeType, false)?,
+            expense_categories: list_dimension_options(connection, DimensionKind::ExpenseCategory, false)?,
+            learning_levels: list_dimension_options(connection, DimensionKind::LearningLevel, false)?,
+            project_statuses: list_dimension_options(connection, DimensionKind::ProjectStatus, false)?,
+            income_source_suggestions: load_recent_income_sources(connection, user_id)?,
+            defaults: load_capture_defaults(connection, user_id)?,
+        })
+    }
+
+    pub fn list_dimension_options_for_kind(
+        connection: &Connection,
+        user_id: &str,
+        kind: &str,
+        include_inactive: bool,
+    ) -> Result<Vec<DimensionOption>> {
+        ensure_user_exists(connection, user_id)?;
+        list_dimension_options(
+            connection,
+            parse_dimension_kind(kind)?,
+            include_inactive,
+        )
+    }
+
+    pub fn save_dimension_option(
+        connection: &mut Connection,
+        user_id: &str,
+        kind: &str,
+        input: &DimensionOptionInput,
+    ) -> Result<DimensionOption> {
+        ensure_user_exists(connection, user_id)?;
+        input.validate()?;
+        let dimension_kind = parse_dimension_kind(kind)?;
+        let code = input.normalized_code();
+        let tx = connection.transaction()?;
+        let existing_system = tx
+            .query_row(
+                &format!(
+                    "SELECT is_system FROM {} WHERE code = ?1 LIMIT 1",
+                    dimension_kind.table_name()
+                ),
+                [code.as_str()],
+                |row| row.get::<_, i64>(0),
+            )
+            .optional()?;
+        if existing_system.is_some() {
+            tx.execute(
+                &format!(
+                    "UPDATE {}
+                     SET display_name = ?1,
+                         is_active = ?2,
+                         updated_at = CURRENT_TIMESTAMP
+                     WHERE code = ?3",
+                    dimension_kind.table_name()
+                ),
+                params![
+                    input.normalized_display_name(),
+                    input.is_active as i32,
+                    code,
+                ],
+            )?;
+        } else {
+            tx.execute(
+                &format!(
+                    "INSERT INTO {}(
+                        code, display_name, sort_order, is_active, is_system, created_at, updated_at
+                     ) VALUES (?1, ?2, 1000, ?3, 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                     ON CONFLICT(code) DO UPDATE SET
+                        display_name = excluded.display_name,
+                        is_active = excluded.is_active,
+                        updated_at = excluded.updated_at",
+                    dimension_kind.table_name()
+                ),
+                params![
+                    code,
+                    input.normalized_display_name(),
+                    input.is_active as i32,
+                ],
+            )?;
+        }
+        tx.commit()?;
+        get_dimension_option(connection, dimension_kind, &code)?.ok_or_else(|| {
+            LifeOsError::InvalidInput("dimension option missing after save".to_string())
+        })
+    }
+
+    pub fn get_operating_settings(
+        connection: &Connection,
+        user_id: &str,
+    ) -> Result<OperatingSettings> {
+        ensure_user_exists(connection, user_id)?;
+        let (timezone, currency_code, ideal_hourly_rate_cents) = connection.query_row(
+            "SELECT timezone, currency_code, COALESCE(ideal_hourly_rate_cents, 0)
+             FROM users
+             WHERE id = ?1
+             LIMIT 1",
+            [user_id],
+            |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, i64>(2)?,
+                ))
+            },
+        )?;
+        let current_month = current_month_for_timezone(&timezone)?;
+        let (current_month_basic_living_cents, current_month_fixed_subscription_cents) =
+            connection
+                .query_row(
+                    "SELECT COALESCE(basic_living_cents, 0), COALESCE(fixed_subscription_cents, 0)
+                     FROM expense_baseline_months
+                     WHERE user_id = ?1 AND month = ?2
+                     LIMIT 1",
+                    params![user_id, current_month],
+                    |row| Ok((row.get::<_, i64>(0)?, row.get::<_, i64>(1)?)),
+                )
+                .optional()?
+                .unwrap_or((0, 0));
+        Ok(OperatingSettings {
+            timezone,
+            currency_code,
+            ideal_hourly_rate_cents,
+            today_work_target_minutes: load_int_setting(
+                connection,
+                user_id,
+                "today_work_target_minutes",
+                180,
+            )?,
+            today_learning_target_minutes: load_int_setting(
+                connection,
+                user_id,
+                "today_learning_target_minutes",
+                60,
+            )?,
+            current_month,
+            current_month_basic_living_cents,
+            current_month_fixed_subscription_cents,
+        })
+    }
+
+    pub fn update_operating_settings(
+        connection: &mut Connection,
+        user_id: &str,
+        input: &UpdateOperatingSettingsInput,
+    ) -> Result<OperatingSettings> {
+        ensure_user_exists(connection, user_id)?;
+        input.validate()?;
+
+        let tx = connection.transaction()?;
+        tx.execute(
+            "UPDATE users
+             SET timezone = ?1,
+                 currency_code = ?2,
+                 ideal_hourly_rate_cents = ?3,
+                 updated_at = ?4
+             WHERE id = ?5",
+            params![
+                input.normalized_timezone(),
+                input.normalized_currency_code(),
+                input.ideal_hourly_rate_cents,
+                now_string(),
+                user_id,
+            ],
+        )?;
+        write_setting(
+            &tx,
+            user_id,
+            "today_work_target_minutes",
+            &input.today_work_target_minutes.to_string(),
+        )?;
+        write_setting(
+            &tx,
+            user_id,
+            "today_learning_target_minutes",
+            &input.today_learning_target_minutes.to_string(),
+        )?;
+        tx.commit()?;
+        Self::get_operating_settings(connection, user_id)
     }
 
     pub fn get_today_overview(
@@ -906,7 +1092,7 @@ impl RecordRepository {
         input.validate()?;
         let tx = connection.transaction()?;
         ensure_active_record_exists(&tx, RecordKind::Time, record_id, &input.user_id)?;
-        upsert_dimension_code(
+        ensure_dimension_option_exists(
             &tx,
             DimensionKind::TimeCategory,
             &input.normalized_category_code(),
@@ -1001,7 +1187,7 @@ impl RecordRepository {
         input.validate()?;
         let tx = connection.transaction()?;
         ensure_active_record_exists(&tx, RecordKind::Income, record_id, &input.user_id)?;
-        upsert_dimension_code(
+        ensure_dimension_option_exists(
             &tx,
             DimensionKind::IncomeType,
             &input.normalized_type_code(),
@@ -1085,7 +1271,7 @@ impl RecordRepository {
         input.validate()?;
         let tx = connection.transaction()?;
         ensure_active_record_exists(&tx, RecordKind::Expense, record_id, &input.user_id)?;
-        upsert_dimension_code(
+        ensure_dimension_option_exists(
             &tx,
             DimensionKind::ExpenseCategory,
             &input.normalized_category_code(),
@@ -1160,7 +1346,7 @@ impl RecordRepository {
         input.validate()?;
         let tx = connection.transaction()?;
         ensure_active_record_exists(&tx, RecordKind::Learning, record_id, &input.user_id)?;
-        upsert_dimension_code(
+        ensure_dimension_option_exists(
             &tx,
             DimensionKind::LearningLevel,
             &input.normalized_application_level_code(),
@@ -1893,30 +2079,179 @@ pub(crate) fn load_tag_ids(
         .map_err(Into::into)
 }
 
-pub(crate) fn upsert_dimension_code(
+pub(crate) fn ensure_dimension_option_exists(
     connection: &Connection,
     dimension_kind: DimensionKind,
     code: &str,
 ) -> Result<()> {
     let sql = format!(
-        "SELECT 1 FROM {} WHERE code = ?1 LIMIT 1",
+        "SELECT is_active FROM {} WHERE code = ?1 LIMIT 1",
         dimension_kind.table_name()
     );
     let exists = connection
         .query_row(&sql, [code], |row| row.get::<_, i64>(0))
         .optional()?;
-
-    if exists.is_some() {
-        return Ok(());
+    match exists {
+        Some(1) => Ok(()),
+        Some(_) => Err(LifeOsError::InvalidInput(format!(
+            "dimension option is inactive: {code}"
+        ))),
+        None => Err(LifeOsError::InvalidInput(format!(
+            "dimension option not found: {code}"
+        ))),
     }
+}
 
+fn list_dimension_options(
+    connection: &Connection,
+    dimension_kind: DimensionKind,
+    include_inactive: bool,
+) -> Result<Vec<DimensionOption>> {
     let sql = format!(
-        "INSERT INTO {}(
-            code, display_name, sort_order, is_active, is_system, created_at, updated_at
-         ) VALUES (?1, ?2, 1000, 1, 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)",
+        "SELECT code, display_name, is_active, is_system
+         FROM {}
+         WHERE (?1 = 1 OR is_active = 1)
+         ORDER BY sort_order ASC, display_name COLLATE NOCASE ASC",
         dimension_kind.table_name()
     );
-    connection.execute(&sql, params![code, humanize_code(code)])?;
+    let mut statement = connection.prepare(&sql)?;
+    let rows = statement.query_map(params![include_inactive as i32], |row| {
+        Ok(DimensionOption {
+            code: row.get(0)?,
+            display_name: row.get(1)?,
+            is_active: row.get::<_, i64>(2)? == 1,
+            is_system: row.get::<_, i64>(3)? == 1,
+        })
+    })?;
+    rows.collect::<std::result::Result<Vec<_>, _>>()
+        .map_err(Into::into)
+}
+
+fn get_dimension_option(
+    connection: &Connection,
+    dimension_kind: DimensionKind,
+    code: &str,
+) -> Result<Option<DimensionOption>> {
+    let sql = format!(
+        "SELECT code, display_name, is_active, is_system
+         FROM {}
+         WHERE code = ?1
+         LIMIT 1",
+        dimension_kind.table_name()
+    );
+    connection
+        .query_row(&sql, [code], |row| {
+            Ok(DimensionOption {
+                code: row.get(0)?,
+                display_name: row.get(1)?,
+                is_active: row.get::<_, i64>(2)? == 1,
+                is_system: row.get::<_, i64>(3)? == 1,
+            })
+        })
+        .optional()
+        .map_err(Into::into)
+}
+
+fn load_project_options(connection: &Connection, user_id: &str) -> Result<Vec<ProjectOption>> {
+    let mut statement = connection.prepare(
+        "SELECT id, name, status_code
+         FROM projects
+         WHERE user_id = ?1 AND is_deleted = 0
+         ORDER BY updated_at DESC, name COLLATE NOCASE ASC",
+    )?;
+    let rows = statement.query_map([user_id], |row| {
+        Ok(ProjectOption {
+            id: row.get(0)?,
+            name: row.get(1)?,
+            status_code: row.get(2)?,
+        })
+    })?;
+    rows.collect::<std::result::Result<Vec<_>, _>>()
+        .map_err(Into::into)
+}
+
+fn load_recent_income_sources(connection: &Connection, user_id: &str) -> Result<Vec<String>> {
+    let mut statement = connection.prepare(
+        "SELECT source_name, MAX(updated_at) AS latest
+         FROM income_records
+         WHERE user_id = ?1
+           AND is_deleted = 0
+           AND TRIM(source_name) != ''
+         GROUP BY source_name
+         ORDER BY latest DESC, source_name COLLATE NOCASE ASC
+         LIMIT 20",
+    )?;
+    let rows = statement.query_map([user_id], |row| row.get::<_, String>(0))?;
+    rows.collect::<std::result::Result<Vec<_>, _>>()
+        .map_err(Into::into)
+}
+
+fn load_capture_defaults(connection: &Connection, user_id: &str) -> Result<CaptureDefaults> {
+    Ok(CaptureDefaults {
+        time_category_code: load_latest_dimension_code(
+            connection,
+            "time_records",
+            "category_code",
+            user_id,
+            Some("started_at"),
+        )?,
+        income_type_code: load_latest_dimension_code(
+            connection,
+            "income_records",
+            "type_code",
+            user_id,
+            Some("occurred_on"),
+        )?,
+        expense_category_code: load_latest_dimension_code(
+            connection,
+            "expense_records",
+            "category_code",
+            user_id,
+            Some("occurred_on"),
+        )?,
+        learning_level_code: load_latest_dimension_code(
+            connection,
+            "learning_records",
+            "application_level_code",
+            user_id,
+            Some("occurred_on"),
+        )?,
+        project_status_code: Some("active".to_string()),
+    })
+}
+
+fn load_latest_dimension_code(
+    connection: &Connection,
+    table: &str,
+    column: &str,
+    user_id: &str,
+    ordering_column: Option<&str>,
+) -> Result<Option<String>> {
+    let ordering = ordering_column.unwrap_or("updated_at");
+    let sql = format!(
+        "SELECT {column}
+         FROM {table}
+         WHERE user_id = ?1
+           AND is_deleted = 0
+           AND TRIM({column}) != ''
+         ORDER BY {ordering} DESC, updated_at DESC
+         LIMIT 1"
+    );
+    connection
+        .query_row(&sql, [user_id], |row| row.get::<_, String>(0))
+        .optional()
+        .map_err(Into::into)
+}
+
+fn write_setting(connection: &Connection, user_id: &str, key: &str, value_json: &str) -> Result<()> {
+    connection.execute(
+        "INSERT INTO settings(user_id, key, value_json, updated_at)
+         VALUES (?1, ?2, ?3, CURRENT_TIMESTAMP)
+         ON CONFLICT(user_id, key) DO UPDATE SET
+           value_json = excluded.value_json,
+           updated_at = excluded.updated_at",
+        params![user_id, key, value_json],
+    )?;
     Ok(())
 }
 
@@ -2047,18 +2382,24 @@ fn build_today_headline(
     .join("，")
 }
 
-fn humanize_code(code: &str) -> String {
-    code.split('_')
-        .filter(|segment| !segment.is_empty())
-        .map(|segment| {
-            let mut chars = segment.chars();
-            match chars.next() {
-                Some(first) => format!("{}{}", first.to_uppercase(), chars.as_str()),
-                None => String::new(),
-            }
-        })
-        .collect::<Vec<_>>()
-        .join(" ")
+fn current_month_for_timezone(timezone: &str) -> Result<String> {
+    let tz: Tz = timezone
+        .parse()
+        .map_err(|_| LifeOsError::InvalidTimezone(timezone.to_string()))?;
+    Ok(Utc::now().with_timezone(&tz).format("%Y-%m").to_string())
+}
+
+fn parse_dimension_kind(value: &str) -> Result<DimensionKind> {
+    match value.trim().to_lowercase().as_str() {
+        "project_status" => Ok(DimensionKind::ProjectStatus),
+        "time_category" => Ok(DimensionKind::TimeCategory),
+        "income_type" => Ok(DimensionKind::IncomeType),
+        "expense_category" => Ok(DimensionKind::ExpenseCategory),
+        "learning_level" => Ok(DimensionKind::LearningLevel),
+        other => Err(LifeOsError::InvalidInput(format!(
+            "unsupported dimension kind: {other}"
+        ))),
+    }
 }
 
 fn parse_record_kind(value: &str) -> Result<RecordKind> {

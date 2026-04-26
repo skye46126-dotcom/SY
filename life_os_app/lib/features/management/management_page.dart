@@ -48,9 +48,20 @@ class ManagementPage extends StatelessWidget {
               onTap: () => Navigator.of(context).pushNamed('/cost-management'),
             ),
             ManagementEntry(
+              title: '经营参数',
+              description: '理想时薪、每日目标与长期配置。',
+              onTap: () => Navigator.of(context).pushNamed('/settings/operating'),
+            ),
+            ManagementEntry(
               title: '标签管理',
               description: '维护统一标签维度与层级关系。',
               onTap: () => Navigator.of(context).pushNamed('/settings/tags'),
+            ),
+            ManagementEntry(
+              title: '维度管理',
+              description: '维护类型选项，避免自由文本制造脏数据。',
+              onTap: () =>
+                  Navigator.of(context).pushNamed('/settings/dimensions'),
             ),
           ],
         ),

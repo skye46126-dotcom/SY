@@ -13,6 +13,8 @@ import '../features/review/review_page.dart';
 import '../features/settings/backup_page.dart';
 import '../features/settings/ai_service_configs_page.dart';
 import '../features/settings/cloud_sync_configs_page.dart';
+import '../features/settings/dimension_manage_page.dart';
+import '../features/settings/operating_settings_page.dart';
 import '../features/settings/settings_page.dart';
 import '../features/settings/tag_manage_page.dart';
 import '../features/today/today_page.dart';
@@ -106,6 +108,10 @@ class AppRouter {
       return _standalonePage(settings, const SettingsPage());
     }
 
+    if (name == '/settings/operating') {
+      return _standalonePage(settings, const OperatingSettingsPage());
+    }
+
     if (name == '/settings/ai-services') {
       return _standalonePage(settings, const AiServiceConfigsPage());
     }
@@ -116,6 +122,10 @@ class AppRouter {
 
     if (name == '/settings/tags') {
       return _standalonePage(settings, const TagManagePage());
+    }
+
+    if (name == '/settings/dimensions') {
+      return _standalonePage(settings, const DimensionManagePage());
     }
 
     if (name == '/settings/backup') {

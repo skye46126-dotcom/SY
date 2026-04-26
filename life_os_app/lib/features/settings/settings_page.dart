@@ -81,9 +81,22 @@ class _SettingsPageState extends State<SettingsPage> {
                   ),
                 ),
               _SettingsLink(
+                title: '经营参数',
+                description: '理想时薪、每日目标、时区和币种。',
+                onTap: () => Navigator.of(context).pushNamed('/settings/operating'),
+              ),
+              const SizedBox(height: 12),
+              _SettingsLink(
                 title: '标签管理',
                 description: '统一管理标签维度和层级。',
                 onTap: () => Navigator.of(context).pushNamed('/settings/tags'),
+              ),
+              const SizedBox(height: 12),
+              _SettingsLink(
+                title: '维度管理',
+                description: '维护时间、收入、支出、学习与项目状态类型。',
+                onTap: () =>
+                    Navigator.of(context).pushNamed('/settings/dimensions'),
               ),
             ],
           ),

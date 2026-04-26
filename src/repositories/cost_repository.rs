@@ -9,7 +9,7 @@ use crate::models::{
     RateComparisonSummary, RecurringCostRuleInput, RecurringCostRuleSummary, parse_month,
 };
 use crate::repositories::record_repository::{
-    DimensionKind, ensure_user_exists, now_string, upsert_dimension_code,
+    DimensionKind, ensure_dimension_option_exists, ensure_user_exists, now_string,
 };
 
 pub struct CostRepository;
@@ -185,7 +185,7 @@ impl CostRepository {
     ) -> Result<RecurringCostRuleSummary> {
         ensure_user_exists(connection, user_id)?;
         input.validate()?;
-        upsert_dimension_code(
+        ensure_dimension_option_exists(
             connection,
             DimensionKind::ExpenseCategory,
             &input.normalized_category_code(),
@@ -223,7 +223,7 @@ impl CostRepository {
         ensure_user_exists(connection, user_id)?;
         input.validate()?;
         ensure_recurring_rule_exists(connection, user_id, rule_id)?;
-        upsert_dimension_code(
+        ensure_dimension_option_exists(
             connection,
             DimensionKind::ExpenseCategory,
             &input.normalized_category_code(),

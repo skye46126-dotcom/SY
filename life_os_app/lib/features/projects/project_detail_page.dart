@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../app/app.dart';
+import '../../models/config_models.dart';
 import '../../models/project_models.dart';
 import '../../models/record_models.dart';
 import '../../models/snapshot_models.dart';
@@ -269,7 +270,15 @@ class _ProjectDetailPageState extends State<ProjectDetailPage> {
     if (detail == null) return;
     final runtime = LifeOsScope.runtimeOf(context);
     final service = LifeOsScope.of(context);
-    final status = TextEditingController(text: detail.statusCode);
+    final metadata = await service.invokeRaw(
+      method: 'get_capture_metadata',
+      payload: {'user_id': runtime.userId},
+    );
+    if (!mounted) return;
+    final statuses = CaptureMetadataModel.fromJson(
+      (metadata as Map).cast<String, dynamic>(),
+    ).projectStatuses;
+    String selectedStatus = detail.statusCode;
     final score = TextEditingController(text: '${detail.score ?? ''}');
     final note = TextEditingController(text: detail.note ?? '');
     final endedOn = TextEditingController(text: detail.endedOn ?? '');
@@ -281,8 +290,51 @@ class _ProjectDetailPageState extends State<ProjectDetailPage> {
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              TextField(controller: status, decoration: const InputDecoration(labelText: '状态')),
-              TextField(controller: score, decoration: const InputDecoration(labelText: '评分')),
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                title: const Text('状态'),
+                subtitle: Text(
+                  statuses
+                          .where((item) => item.code == selectedStatus)
+                          .map((item) => item.displayName)
+                          .cast<String?>()
+                          .firstWhere((item) => item != null, orElse: () => selectedStatus) ??
+                      selectedStatus,
+                ),
+                trailing: const Icon(Icons.arrow_drop_down_rounded),
+                onTap: () async {
+                  final selected = await showModalBottomSheet<String>(
+                    context: context,
+                    builder: (context) => SafeArea(
+                      child: ListView(
+                        shrinkWrap: true,
+                        children: [
+                          for (final item in statuses)
+                            ListTile(
+                              title: Text(item.displayName),
+                              subtitle: Text(item.code),
+                              trailing: item.code == selectedStatus
+                                  ? const Icon(Icons.check_rounded)
+                                  : null,
+                              onTap: () => Navigator.of(context).pop(item.code),
+                            ),
+                        ],
+                      ),
+                    ),
+                  );
+                  if (selected != null) {
+                    selectedStatus = selected;
+                    if (mounted) {
+                      setState(() {});
+                    }
+                  }
+                },
+              ),
+              TextField(
+                controller: score,
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(labelText: '评分 /10'),
+              ),
               TextField(controller: endedOn, decoration: const InputDecoration(labelText: '结束日期')),
               TextField(controller: note, decoration: const InputDecoration(labelText: '备注')),
             ],
@@ -299,7 +351,7 @@ class _ProjectDetailPageState extends State<ProjectDetailPage> {
         payload: {
           'project_id': detail.id,
           'user_id': runtime.userId,
-          'status_code': status.text,
+          'status_code': selectedStatus,
           'score': int.tryParse(score.text),
           'note': note.text.isEmpty ? null : note.text,
           'ended_on': endedOn.text.isEmpty ? null : endedOn.text,
@@ -312,7 +364,6 @@ class _ProjectDetailPageState extends State<ProjectDetailPage> {
         timezone: runtime.timezone,
       );
     } finally {
-      status.dispose();
       score.dispose();
       note.dispose();
       endedOn.dispose();
@@ -324,13 +375,21 @@ class _ProjectDetailPageState extends State<ProjectDetailPage> {
     final runtime = LifeOsScope.runtimeOf(context);
     final service = LifeOsScope.of(context);
     final tags = await service.getTags(userId: runtime.userId);
+    final metadata = await service.invokeRaw(
+      method: 'get_capture_metadata',
+      payload: {'user_id': runtime.userId},
+    );
     if (!mounted) return;
+    final statuses = CaptureMetadataModel.fromJson(
+      (metadata as Map).cast<String, dynamic>(),
+    ).projectStatuses;
     final name = TextEditingController(text: detail.name);
-    final statusCode = TextEditingController(text: detail.statusCode);
+    String selectedStatus = detail.statusCode;
     final startedOn = TextEditingController(text: detail.startedOn);
     final endedOn = TextEditingController(text: detail.endedOn ?? '');
     final score = TextEditingController(text: detail.score?.toString() ?? '');
-    final aiEnableRatio = TextEditingController();
+    final aiEnableRatio =
+        TextEditingController(text: detail.aiEnableRatio?.toString() ?? '');
     final note = TextEditingController(text: detail.note ?? '');
     final selectedTagIds = detail.tagIds.toSet();
     try {
@@ -347,11 +406,56 @@ class _ProjectDetailPageState extends State<ProjectDetailPage> {
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       TextField(controller: name, decoration: const InputDecoration(labelText: '项目名称')),
-                      TextField(controller: statusCode, decoration: const InputDecoration(labelText: '状态')),
+                      ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        title: const Text('状态'),
+                        subtitle: Text(
+                          statuses
+                                  .where((item) => item.code == selectedStatus)
+                                  .map((item) => item.displayName)
+                                  .cast<String?>()
+                                  .firstWhere((item) => item != null, orElse: () => selectedStatus) ??
+                              selectedStatus,
+                        ),
+                        trailing: const Icon(Icons.arrow_drop_down_rounded),
+                        onTap: () async {
+                          final selected = await showModalBottomSheet<String>(
+                            context: context,
+                            builder: (context) => SafeArea(
+                              child: ListView(
+                                shrinkWrap: true,
+                                children: [
+                                  for (final item in statuses)
+                                    ListTile(
+                                      title: Text(item.displayName),
+                                      subtitle: Text(item.code),
+                                      trailing: item.code == selectedStatus
+                                          ? const Icon(Icons.check_rounded)
+                                          : null,
+                                      onTap: () => Navigator.of(context).pop(item.code),
+                                    ),
+                                ],
+                              ),
+                            ),
+                          );
+                          if (selected != null) {
+                            selectedStatus = selected;
+                            setState(() {});
+                          }
+                        },
+                      ),
                       TextField(controller: startedOn, decoration: const InputDecoration(labelText: '开始日期')),
                       TextField(controller: endedOn, decoration: const InputDecoration(labelText: '结束日期')),
-                      TextField(controller: score, decoration: const InputDecoration(labelText: '评分')),
-                      TextField(controller: aiEnableRatio, decoration: const InputDecoration(labelText: 'AI 启用比例')),
+                      TextField(
+                        controller: score,
+                        keyboardType: TextInputType.number,
+                        decoration: const InputDecoration(labelText: '评分 /10'),
+                      ),
+                      TextField(
+                        controller: aiEnableRatio,
+                        keyboardType: TextInputType.number,
+                        decoration: const InputDecoration(labelText: 'AI 启用比例 %'),
+                      ),
                       TextField(controller: note, decoration: const InputDecoration(labelText: '备注'), maxLines: 3),
                       const SizedBox(height: 16),
                       Wrap(
@@ -391,13 +495,13 @@ class _ProjectDetailPageState extends State<ProjectDetailPage> {
         method: 'update_project_record',
         payload: {
           'project_id': detail.id,
-          'input': {
-            'user_id': runtime.userId,
-            'name': name.text,
-            'status_code': statusCode.text,
-            'started_on': startedOn.text,
-            'ended_on': endedOn.text.isEmpty ? null : endedOn.text,
-            'ai_enable_ratio': int.tryParse(aiEnableRatio.text),
+            'input': {
+              'user_id': runtime.userId,
+              'name': name.text,
+              'status_code': selectedStatus,
+              'started_on': startedOn.text,
+              'ended_on': endedOn.text.isEmpty ? null : endedOn.text,
+              'ai_enable_ratio': int.tryParse(aiEnableRatio.text),
             'score': int.tryParse(score.text),
             'note': note.text.isEmpty ? null : note.text,
             'tag_ids': selectedTagIds.toList(),
@@ -412,7 +516,6 @@ class _ProjectDetailPageState extends State<ProjectDetailPage> {
       );
     } finally {
       name.dispose();
-      statusCode.dispose();
       startedOn.dispose();
       endedOn.dispose();
       score.dispose();

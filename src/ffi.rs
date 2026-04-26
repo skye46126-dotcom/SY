@@ -9,7 +9,8 @@ use crate::models::{
     AiCommitInput, AiParseInput, CreateAiServiceConfigInput, CreateCloudSyncConfigInput,
     CreateExpenseRecordInput, CreateIncomeRecordInput, CreateLearningRecordInput,
     CreateProjectInput, CreateTagInput, CreateTimeRecordInput, MonthlyCostBaselineInput,
-    RecurringCostRuleInput, CapexCostInput, RecordKind,
+    RecurringCostRuleInput, CapexCostInput, DimensionOptionInput, RecordKind,
+    UpdateOperatingSettingsInput,
 };
 use crate::services::{AiService, BackupService, CostService, DemoDataService, ProjectService, RecordService, ReviewService, SnapshotService};
 
@@ -278,6 +279,26 @@ struct DeleteTagRequest {
 }
 
 #[derive(Debug, serde::Deserialize)]
+struct DimensionOptionsRequest {
+    user_id: String,
+    kind: String,
+    include_inactive: Option<bool>,
+}
+
+#[derive(Debug, serde::Deserialize)]
+struct SaveDimensionOptionRequest {
+    user_id: String,
+    kind: String,
+    input: DimensionOptionInput,
+}
+
+#[derive(Debug, serde::Deserialize)]
+struct UpdateOperatingSettingsRequest {
+    user_id: String,
+    input: UpdateOperatingSettingsInput,
+}
+
+#[derive(Debug, serde::Deserialize)]
 struct AiConfigMutationRequest {
     config_id: Option<String>,
     input: CreateAiServiceConfigInput,
@@ -538,6 +559,45 @@ fn invoke_inner(
             let request: UserScopedRequest = parse_payload(payload_json)?;
             let data = RecordService::new(database_path)
                 .list_tags(&request.user_id)
+                .map_err(BridgeInvokeError::from_core)?;
+            Ok(success_response(data))
+        }
+        "get_capture_metadata" => {
+            let request: UserScopedRequest = parse_payload(payload_json)?;
+            let data = RecordService::new(database_path)
+                .get_capture_metadata(&request.user_id)
+                .map_err(BridgeInvokeError::from_core)?;
+            Ok(success_response(data))
+        }
+        "list_dimension_options" => {
+            let request: DimensionOptionsRequest = parse_payload(payload_json)?;
+            let data = RecordService::new(database_path)
+                .list_dimension_options(
+                    &request.user_id,
+                    &request.kind,
+                    request.include_inactive.unwrap_or(false),
+                )
+                .map_err(BridgeInvokeError::from_core)?;
+            Ok(success_response(data))
+        }
+        "save_dimension_option" => {
+            let request: SaveDimensionOptionRequest = parse_payload(payload_json)?;
+            let data = RecordService::new(database_path)
+                .save_dimension_option(&request.user_id, &request.kind, &request.input)
+                .map_err(BridgeInvokeError::from_core)?;
+            Ok(success_response(data))
+        }
+        "get_operating_settings" => {
+            let request: UserScopedRequest = parse_payload(payload_json)?;
+            let data = RecordService::new(database_path)
+                .get_operating_settings(&request.user_id)
+                .map_err(BridgeInvokeError::from_core)?;
+            Ok(success_response(data))
+        }
+        "update_operating_settings" => {
+            let request: UpdateOperatingSettingsRequest = parse_payload(payload_json)?;
+            let data = RecordService::new(database_path)
+                .update_operating_settings(&request.user_id, &request.input)
                 .map_err(BridgeInvokeError::from_core)?;
             Ok(success_response(data))
         }

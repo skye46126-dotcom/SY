@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 
+import '../../models/config_models.dart';
 import '../../models/project_models.dart';
 import '../../models/tag_models.dart';
 import '../../services/app_service.dart';
@@ -17,6 +18,14 @@ enum CaptureType {
   final String label;
 }
 
+enum CaptureFieldOptions {
+  timeCategory,
+  incomeType,
+  expenseCategory,
+  learningLevel,
+  projectStatus,
+}
+
 class CaptureController extends ChangeNotifier {
   CaptureController(this._service);
 
@@ -25,8 +34,31 @@ class CaptureController extends ChangeNotifier {
   CaptureType selectedType = CaptureType.time;
   ViewState<Map<String, Object?>> aiState = ViewState.initial();
   ViewState<void> submitState = ViewState.initial();
-  ViewState<List<ProjectOption>> projectOptionsState = ViewState.initial();
-  ViewState<List<TagModel>> tagsState = ViewState.initial();
+  ViewState<CaptureMetadataModel> metadataState = ViewState.initial();
+
+  CaptureMetadataModel? get metadata => metadataState.data;
+
+  List<ProjectOption> get projectOptions =>
+      metadataState.data?.projectOptions ?? const [];
+
+  List<TagModel> get tags => metadataState.data?.tags ?? const [];
+
+  List<String> get incomeSourceSuggestions =>
+      metadataState.data?.incomeSourceSuggestions ?? const [];
+
+  List<DimensionOptionModel> optionsFor(CaptureFieldOptions key) {
+    final metadata = metadataState.data;
+    if (metadata == null) {
+      return const [];
+    }
+    return switch (key) {
+      CaptureFieldOptions.timeCategory => metadata.timeCategories,
+      CaptureFieldOptions.incomeType => metadata.incomeTypes,
+      CaptureFieldOptions.expenseCategory => metadata.expenseCategories,
+      CaptureFieldOptions.learningLevel => metadata.learningLevels,
+      CaptureFieldOptions.projectStatus => metadata.projectStatuses,
+    };
+  }
 
   void selectType(CaptureType type) {
     if (selectedType == type) {
@@ -39,20 +71,18 @@ class CaptureController extends ChangeNotifier {
   Future<void> loadMetadata({
     required String userId,
   }) async {
-    projectOptionsState = ViewState.loading();
-    tagsState = ViewState.loading();
+    metadataState = ViewState.loading();
     notifyListeners();
     try {
-      final projects = await _service.getProjectOptions(
-        userId: userId,
-        includeDone: true,
+      final response = await _service.invokeRaw(
+        method: 'get_capture_metadata',
+        payload: {'user_id': userId},
       );
-      final tags = await _service.getTags(userId: userId);
-      projectOptionsState = ViewState.ready(projects);
-      tagsState = ViewState.ready(tags);
+      metadataState = ViewState.ready(
+        CaptureMetadataModel.fromJson((response as Map).cast<String, dynamic>()),
+      );
     } catch (error) {
-      projectOptionsState = ViewState.error(error.toString());
-      tagsState = ViewState.error(error.toString());
+      metadataState = ViewState.error(error.toString());
     }
     notifyListeners();
   }
@@ -83,7 +113,7 @@ class CaptureController extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> submitManual({
+  Future<bool> submitManual({
     required String userId,
     required String anchorDate,
     required Map<String, String> fields,
@@ -169,10 +199,13 @@ class CaptureController extends ChangeNotifier {
           });
       }
       submitState = ViewState.ready(null);
+      notifyListeners();
+      return true;
     } catch (error) {
       submitState = ViewState.error(error.toString());
+      notifyListeners();
+      return false;
     }
-    notifyListeners();
   }
 
   Future<void> commitAiDrafts({

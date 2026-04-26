@@ -8,8 +8,8 @@ use crate::models::{
     RecordKind,
 };
 use crate::repositories::record_repository::{
-    DimensionKind, ensure_tags_exist, ensure_user_exists, normalize_occurred_at, now_string,
-    upsert_dimension_code,
+    DimensionKind, ensure_dimension_option_exists, ensure_tags_exist, ensure_user_exists,
+    normalize_occurred_at, now_string,
 };
 
 pub struct ProjectRepository;
@@ -62,7 +62,13 @@ impl ProjectRepository {
                 p.status_code,
                 p.score,
                 COALESCE((
-                    SELECT SUM(t.duration_minutes)
+                    SELECT CAST(SUM(
+                        t.duration_minutes * rpl.weight_ratio / (
+                            SELECT SUM(weight_ratio)
+                            FROM record_project_links
+                            WHERE record_kind = 'time' AND record_id = t.id
+                        )
+                    ) AS INTEGER)
                     FROM time_records t
                     JOIN record_project_links rpl
                       ON rpl.record_kind = 'time'
@@ -71,7 +77,13 @@ impl ProjectRepository {
                       AND t.is_deleted = 0
                 ), 0) AS total_time_minutes,
                 COALESCE((
-                    SELECT SUM(i.amount_cents)
+                    SELECT CAST(SUM(
+                        i.amount_cents * rpl.weight_ratio / (
+                            SELECT SUM(weight_ratio)
+                            FROM record_project_links
+                            WHERE record_kind = 'income' AND record_id = i.id
+                        )
+                    ) AS INTEGER)
                     FROM income_records i
                     JOIN record_project_links rpl
                       ON rpl.record_kind = 'income'
@@ -80,7 +92,13 @@ impl ProjectRepository {
                       AND i.is_deleted = 0
                 ), 0) AS total_income_cents,
                 COALESCE((
-                    SELECT SUM(e.amount_cents)
+                    SELECT CAST(SUM(
+                        e.amount_cents * rpl.weight_ratio / (
+                            SELECT SUM(weight_ratio)
+                            FROM record_project_links
+                            WHERE record_kind = 'expense' AND record_id = e.id
+                        )
+                    ) AS INTEGER)
                     FROM expense_records e
                     JOIN record_project_links rpl
                       ON rpl.record_kind = 'expense'
@@ -119,7 +137,7 @@ impl ProjectRepository {
         ensure_user_exists(connection, user_id)?;
         let base = connection
             .query_row(
-                "SELECT id, name, status_code, started_on, ended_on, score, note
+                "SELECT id, name, status_code, started_on, ended_on, ai_enable_ratio, score, note
                  FROM projects
                  WHERE id = ?1 AND user_id = ?2 AND is_deleted = 0
                  LIMIT 1",
@@ -132,18 +150,25 @@ impl ProjectRepository {
                         row.get::<_, String>(3)?,
                         row.get::<_, Option<String>>(4)?,
                         row.get::<_, Option<i32>>(5)?,
-                        row.get::<_, Option<String>>(6)?,
+                        row.get::<_, Option<i32>>(6)?,
+                        row.get::<_, Option<String>>(7)?,
                     ))
                 },
             )
             .optional()?;
-        let Some((id, name, status_code, started_on, ended_on, score, note)) = base else {
+        let Some((id, name, status_code, started_on, ended_on, ai_enable_ratio, score, note)) = base else {
             return Ok(None);
         };
 
         let total_time_minutes = scalar_long(
             connection,
-            "SELECT COALESCE(SUM(t.duration_minutes), 0)
+            "SELECT COALESCE(CAST(SUM(
+                t.duration_minutes * rpl.weight_ratio / (
+                    SELECT SUM(weight_ratio)
+                    FROM record_project_links
+                    WHERE record_kind = 'time' AND record_id = t.id
+                )
+            ) AS INTEGER), 0)
              FROM time_records t
              JOIN record_project_links rpl
                ON rpl.record_kind = 'time'
@@ -153,7 +178,13 @@ impl ProjectRepository {
         )?;
         let total_income_cents = scalar_long(
             connection,
-            "SELECT COALESCE(SUM(i.amount_cents), 0)
+            "SELECT COALESCE(CAST(SUM(
+                i.amount_cents * rpl.weight_ratio / (
+                    SELECT SUM(weight_ratio)
+                    FROM record_project_links
+                    WHERE record_kind = 'income' AND record_id = i.id
+                )
+            ) AS INTEGER), 0)
              FROM income_records i
              JOIN record_project_links rpl
                ON rpl.record_kind = 'income'
@@ -163,7 +194,13 @@ impl ProjectRepository {
         )?;
         let direct_expense_cents = scalar_long(
             connection,
-            "SELECT COALESCE(SUM(e.amount_cents), 0)
+            "SELECT COALESCE(CAST(SUM(
+                e.amount_cents * rpl.weight_ratio / (
+                    SELECT SUM(weight_ratio)
+                    FROM record_project_links
+                    WHERE record_kind = 'expense' AND record_id = e.id
+                )
+            ) AS INTEGER), 0)
              FROM expense_records e
              JOIN record_project_links rpl
                ON rpl.record_kind = 'expense'
@@ -173,7 +210,13 @@ impl ProjectRepository {
         )?;
         let total_learning_minutes = scalar_long(
             connection,
-            "SELECT COALESCE(SUM(l.duration_minutes), 0)
+            "SELECT COALESCE(CAST(SUM(
+                l.duration_minutes * rpl.weight_ratio / (
+                    SELECT SUM(weight_ratio)
+                    FROM record_project_links
+                    WHERE record_kind = 'learning' AND record_id = l.id
+                )
+            ) AS INTEGER), 0)
              FROM learning_records l
              JOIN record_project_links rpl
                ON rpl.record_kind = 'learning'
@@ -331,6 +374,7 @@ impl ProjectRepository {
             status_code,
             started_on,
             ended_on,
+            ai_enable_ratio,
             score,
             note,
             tag_ids: load_project_tag_ids(connection, project_id)?,
@@ -384,7 +428,7 @@ impl ProjectRepository {
         ensure_tags_exist(connection, &input.user_id, &input.tag_ids)?;
 
         let tx = connection.transaction()?;
-        upsert_dimension_code(
+        ensure_dimension_option_exists(
             &tx,
             DimensionKind::ProjectStatus,
             &input.normalized_status_code(),
@@ -466,7 +510,7 @@ impl ProjectRepository {
         }
 
         let tx = connection.transaction()?;
-        upsert_dimension_code(&tx, DimensionKind::ProjectStatus, &normalized_status)?;
+        ensure_dimension_option_exists(&tx, DimensionKind::ProjectStatus, &normalized_status)?;
         let now = now_string();
         let normalized_note = note
             .as_deref()

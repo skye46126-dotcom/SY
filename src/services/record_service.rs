@@ -3,11 +3,12 @@ use std::path::Path;
 use crate::db::Database;
 use crate::error::Result;
 use crate::models::{
-    CreateExpenseRecordInput, CreateIncomeRecordInput, CreateLearningRecordInput,
-    CreateProjectInput, CreateTagInput, CreateTimeRecordInput, ExpenseRecord,
-    ExpenseRecordSnapshot, IncomeRecord, IncomeRecordSnapshot, LearningRecord,
-    LearningRecordSnapshot, Project, RecentRecordItem, RecordKind, Tag, TimeRecord,
-    TimeRecordSnapshot, TodayAlerts, TodayGoalProgress, TodayOverview, TodaySummary, UserProfile,
+    CaptureMetadata, CreateExpenseRecordInput, CreateIncomeRecordInput, CreateLearningRecordInput,
+    CreateProjectInput, CreateTagInput, CreateTimeRecordInput, DimensionOption,
+    DimensionOptionInput, ExpenseRecord, ExpenseRecordSnapshot, IncomeRecord,
+    IncomeRecordSnapshot, LearningRecord, LearningRecordSnapshot, OperatingSettings, Project,
+    RecentRecordItem, RecordKind, Tag, TimeRecord, TimeRecordSnapshot, TodayAlerts,
+    TodayGoalProgress, TodayOverview, TodaySummary, UpdateOperatingSettingsInput, UserProfile,
 };
 use crate::repositories::record_repository::RecordRepository;
 
@@ -88,6 +89,55 @@ impl RecordService {
         self.database.initialize()?;
         let mut connection = self.database.connect()?;
         RecordRepository::delete_tag(&mut connection, user_id, tag_id)
+    }
+
+    pub fn get_capture_metadata(&self, user_id: &str) -> Result<CaptureMetadata> {
+        self.database.initialize()?;
+        let connection = self.database.connect()?;
+        RecordRepository::get_capture_metadata(&connection, user_id)
+    }
+
+    pub fn list_dimension_options(
+        &self,
+        user_id: &str,
+        kind: &str,
+        include_inactive: bool,
+    ) -> Result<Vec<DimensionOption>> {
+        self.database.initialize()?;
+        let connection = self.database.connect()?;
+        RecordRepository::list_dimension_options_for_kind(
+            &connection,
+            user_id,
+            kind,
+            include_inactive,
+        )
+    }
+
+    pub fn save_dimension_option(
+        &self,
+        user_id: &str,
+        kind: &str,
+        input: &DimensionOptionInput,
+    ) -> Result<DimensionOption> {
+        self.database.initialize()?;
+        let mut connection = self.database.connect()?;
+        RecordRepository::save_dimension_option(&mut connection, user_id, kind, input)
+    }
+
+    pub fn get_operating_settings(&self, user_id: &str) -> Result<OperatingSettings> {
+        self.database.initialize()?;
+        let connection = self.database.connect()?;
+        RecordRepository::get_operating_settings(&connection, user_id)
+    }
+
+    pub fn update_operating_settings(
+        &self,
+        user_id: &str,
+        input: &UpdateOperatingSettingsInput,
+    ) -> Result<OperatingSettings> {
+        self.database.initialize()?;
+        let mut connection = self.database.connect()?;
+        RecordRepository::update_operating_settings(&mut connection, user_id, input)
     }
 
     pub fn get_today_overview(

@@ -486,7 +486,13 @@ fn load_project_buckets(
     let mut statement = connection.prepare(
         "SELECT p.id, p.name,
                 COALESCE((
-                    SELECT SUM(t.duration_minutes)
+                    SELECT CAST(SUM(
+                        t.duration_minutes * rpl.weight_ratio / (
+                            SELECT SUM(weight_ratio)
+                            FROM record_project_links
+                            WHERE record_kind = 'time' AND record_id = t.id
+                        )
+                    ) AS INTEGER)
                     FROM time_records t
                     JOIN record_project_links rpl
                       ON rpl.record_kind = 'time'
@@ -497,7 +503,13 @@ fn load_project_buckets(
                       AND t.started_at < ?2
                 ), 0) AS project_time_minutes,
                 COALESCE((
-                    SELECT SUM(i.amount_cents)
+                    SELECT CAST(SUM(
+                        i.amount_cents * rpl.weight_ratio / (
+                            SELECT SUM(weight_ratio)
+                            FROM record_project_links
+                            WHERE record_kind = 'income' AND record_id = i.id
+                        )
+                    ) AS INTEGER)
                     FROM income_records i
                     JOIN record_project_links rpl
                       ON rpl.record_kind = 'income'
@@ -508,7 +520,13 @@ fn load_project_buckets(
                       AND i.occurred_on <= ?4
                 ), 0) AS project_income_cents,
                 COALESCE((
-                    SELECT SUM(e.amount_cents)
+                    SELECT CAST(SUM(
+                        e.amount_cents * rpl.weight_ratio / (
+                            SELECT SUM(weight_ratio)
+                            FROM record_project_links
+                            WHERE record_kind = 'expense' AND record_id = e.id
+                        )
+                    ) AS INTEGER)
                     FROM expense_records e
                     JOIN record_project_links rpl
                       ON rpl.record_kind = 'expense'

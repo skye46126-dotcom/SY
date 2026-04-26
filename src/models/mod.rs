@@ -4,6 +4,7 @@ mod cost;
 mod expense_record;
 mod income_record;
 mod learning_record;
+mod preferences;
 mod overview;
 mod project;
 mod project_query;
@@ -34,6 +35,10 @@ pub use income_record::{CreateIncomeRecordInput, IncomeRecord};
 pub use learning_record::{CreateLearningRecordInput, LearningRecord};
 pub use overview::{
     TodayAlert, TodayAlerts, TodayGoalProgress, TodayGoalProgressItem, TodayOverview, TodaySummary,
+};
+pub use preferences::{
+    CaptureDefaults, CaptureMetadata, DimensionOption, DimensionOptionInput, OperatingSettings,
+    UpdateOperatingSettingsInput,
 };
 pub use project::{CreateProjectInput, Project};
 pub use project_query::{ProjectDetail, ProjectOption, ProjectOverview};

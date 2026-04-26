@@ -1,8 +1,14 @@
 import 'package:flutter/material.dart';
 
+import '../../../app/app.dart';
+import '../../../models/config_models.dart';
 import '../../../models/project_models.dart';
 import '../../../models/record_models.dart';
 import '../../../models/tag_models.dart';
+import '../../../shared/view_state.dart';
+import '../../../shared/widgets/state_views.dart';
+import '../../capture/capture_controller.dart';
+import '../../capture/widgets/record_form_section.dart';
 
 class RecordEditorResult {
   const RecordEditorResult({
@@ -86,7 +92,7 @@ class _RecordEditorDialogState extends State<RecordEditorDialog> {
   late final Map<String, TextEditingController> _controllers;
   late final Set<String> _selectedProjectIds;
   late final Set<String> _selectedTagIds;
-  bool _isPassive = false;
+  ViewState<CaptureMetadataModel> _metadataState = ViewState.initial();
 
   @override
   void initState() {
@@ -94,7 +100,7 @@ class _RecordEditorDialogState extends State<RecordEditorDialog> {
     _controllers = _buildControllers();
     _selectedProjectIds = _initialProjectIds();
     _selectedTagIds = _initialTagIds();
-    _isPassive = widget.incomeSnapshot?.isPassive ?? false;
+    WidgetsBinding.instance.addPostFrameCallback((_) => _loadMetadata());
   }
 
   @override
@@ -107,6 +113,7 @@ class _RecordEditorDialogState extends State<RecordEditorDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final captureType = _captureTypeFor(widget.kind);
     return AlertDialog(
       title: Text('编辑${widget.kind.label}记录'),
       content: SizedBox(
@@ -116,7 +123,28 @@ class _RecordEditorDialogState extends State<RecordEditorDialog> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              ..._formFields(),
+              if (_metadataState.status == ViewStatus.loading)
+                const Padding(
+                  padding: EdgeInsets.only(bottom: 12),
+                  child: SectionLoadingView(label: '正在读取维度选项'),
+                ),
+              if (_metadataState.status == ViewStatus.error)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: SectionMessageView(
+                    icon: Icons.error_outline_rounded,
+                    title: '维度元数据读取失败',
+                    description: _metadataState.message ?? '请稍后重试。',
+                  ),
+                ),
+              AdaptiveRecordForm(
+                fields: captureFieldDefinitionsFor(captureType),
+                controllers: _controllers,
+                anchorDate: widget.anchorDate,
+                optionResolver: _optionsFor,
+                sourceSuggestions:
+                    _metadataState.data?.incomeSourceSuggestions ?? const [],
+              ),
               const SizedBox(height: 16),
               if (widget.projectOptions.isNotEmpty) ...[
                 Text('项目', style: Theme.of(context).textTheme.titleMedium),
@@ -184,65 +212,41 @@ class _RecordEditorDialogState extends State<RecordEditorDialog> {
     );
   }
 
-  List<Widget> _formFields() {
-    switch (widget.kind) {
-      case RecordKind.time:
-        return [
-          _field('started_at', '开始时间'),
-          _field('ended_at', '结束时间'),
-          _field('category_code', '类别'),
-          _field('efficiency_score', '效率'),
-          _field('value_score', '价值'),
-          _field('state_score', '状态'),
-          _field('ai_assist_ratio', 'AI 占比'),
-          _field('note', '备注', maxLines: 3),
-        ];
-      case RecordKind.income:
-        return [
-          _field('occurred_on', '发生日期'),
-          _field('source_name', '来源'),
-          _field('type_code', '类型'),
-          _field('amount_yuan', '金额(元)'),
-          SwitchListTile(
-            value: _isPassive,
-            onChanged: (value) => setState(() => _isPassive = value),
-            title: const Text('被动收入'),
-          ),
-          _field('ai_assist_ratio', 'AI 占比'),
-          _field('note', '备注', maxLines: 3),
-        ];
-      case RecordKind.expense:
-        return [
-          _field('occurred_on', '发生日期'),
-          _field('category_code', '类别'),
-          _field('amount_yuan', '金额(元)'),
-          _field('ai_assist_ratio', 'AI 占比'),
-          _field('note', '备注', maxLines: 3),
-        ];
-      case RecordKind.learning:
-        return [
-          _field('occurred_on', '发生日期'),
-          _field('started_at', '开始时间'),
-          _field('ended_at', '结束时间'),
-          _field('content', '内容'),
-          _field('duration_minutes', '时长(分钟)'),
-          _field('application_level_code', '应用等级'),
-          _field('efficiency_score', '效率'),
-          _field('ai_assist_ratio', 'AI 占比'),
-          _field('note', '备注', maxLines: 3),
-        ];
+  Future<void> _loadMetadata() async {
+    setState(() => _metadataState = ViewState.loading());
+    try {
+      final data = await LifeOsScope.of(context).invokeRaw(
+        method: 'get_capture_metadata',
+        payload: {'user_id': widget.userId},
+      );
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _metadataState = ViewState.ready(
+          CaptureMetadataModel.fromJson((data as Map).cast<String, dynamic>()),
+        );
+      });
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      setState(() => _metadataState = ViewState.error(error.toString()));
     }
   }
 
-  Widget _field(String key, String label, {int maxLines = 1}) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
-      child: TextField(
-        controller: _controllers[key],
-        maxLines: maxLines,
-        decoration: InputDecoration(labelText: label),
-      ),
-    );
+  List<DimensionOptionModel> _optionsFor(CaptureFieldOptions key) {
+    final metadata = _metadataState.data;
+    if (metadata == null) {
+      return const [];
+    }
+    return switch (key) {
+      CaptureFieldOptions.timeCategory => metadata.timeCategories,
+      CaptureFieldOptions.incomeType => metadata.incomeTypes,
+      CaptureFieldOptions.expenseCategory => metadata.expenseCategories,
+      CaptureFieldOptions.learningLevel => metadata.learningLevels,
+      CaptureFieldOptions.projectStatus => metadata.projectStatuses,
+    };
   }
 
   Map<String, TextEditingController> _buildControllers() {
@@ -250,13 +254,18 @@ class _RecordEditorDialogState extends State<RecordEditorDialog> {
       case RecordKind.time:
         final snapshot = widget.timeSnapshot!;
         return {
-          'started_at': TextEditingController(text: _utcToTime(snapshot.startedAt)),
+          'started_at':
+              TextEditingController(text: _utcToTime(snapshot.startedAt)),
           'ended_at': TextEditingController(text: _utcToTime(snapshot.endedAt)),
           'category_code': TextEditingController(text: snapshot.categoryCode),
-          'efficiency_score': TextEditingController(text: _text(snapshot.efficiencyScore)),
-          'value_score': TextEditingController(text: _text(snapshot.valueScore)),
-          'state_score': TextEditingController(text: _text(snapshot.stateScore)),
-          'ai_assist_ratio': TextEditingController(text: _text(snapshot.aiAssistRatio)),
+          'efficiency_score':
+              TextEditingController(text: _text(snapshot.efficiencyScore)),
+          'value_score':
+              TextEditingController(text: _text(snapshot.valueScore)),
+          'state_score':
+              TextEditingController(text: _text(snapshot.stateScore)),
+          'ai_assist_ratio':
+              TextEditingController(text: _text(snapshot.aiAssistRatio)),
           'note': TextEditingController(text: snapshot.note ?? ''),
         };
       case RecordKind.income:
@@ -266,7 +275,9 @@ class _RecordEditorDialogState extends State<RecordEditorDialog> {
           'source_name': TextEditingController(text: snapshot.sourceName),
           'type_code': TextEditingController(text: snapshot.typeCode),
           'amount_yuan': TextEditingController(text: _amount(snapshot.amountCents)),
-          'ai_assist_ratio': TextEditingController(text: _text(snapshot.aiAssistRatio)),
+          'is_passive': TextEditingController(text: snapshot.isPassive.toString()),
+          'ai_assist_ratio':
+              TextEditingController(text: _text(snapshot.aiAssistRatio)),
           'note': TextEditingController(text: snapshot.note ?? ''),
         };
       case RecordKind.expense:
@@ -275,20 +286,29 @@ class _RecordEditorDialogState extends State<RecordEditorDialog> {
           'occurred_on': TextEditingController(text: snapshot.occurredOn),
           'category_code': TextEditingController(text: snapshot.categoryCode),
           'amount_yuan': TextEditingController(text: _amount(snapshot.amountCents)),
-          'ai_assist_ratio': TextEditingController(text: _text(snapshot.aiAssistRatio)),
+          'ai_assist_ratio':
+              TextEditingController(text: _text(snapshot.aiAssistRatio)),
           'note': TextEditingController(text: snapshot.note ?? ''),
         };
       case RecordKind.learning:
         final snapshot = widget.learningSnapshot!;
         return {
           'occurred_on': TextEditingController(text: snapshot.occurredOn),
-          'started_at': TextEditingController(text: snapshot.startedAt == null ? '' : _utcToTime(snapshot.startedAt!)),
-          'ended_at': TextEditingController(text: snapshot.endedAt == null ? '' : _utcToTime(snapshot.endedAt!)),
+          'started_at': TextEditingController(
+            text: snapshot.startedAt == null ? '' : _utcToTime(snapshot.startedAt!),
+          ),
+          'ended_at': TextEditingController(
+            text: snapshot.endedAt == null ? '' : _utcToTime(snapshot.endedAt!),
+          ),
           'content': TextEditingController(text: snapshot.content),
-          'duration_minutes': TextEditingController(text: '${snapshot.durationMinutes}'),
-          'application_level_code': TextEditingController(text: snapshot.applicationLevelCode),
-          'efficiency_score': TextEditingController(text: _text(snapshot.efficiencyScore)),
-          'ai_assist_ratio': TextEditingController(text: _text(snapshot.aiAssistRatio)),
+          'duration_minutes':
+              TextEditingController(text: '${snapshot.durationMinutes}'),
+          'application_level_code':
+              TextEditingController(text: snapshot.applicationLevelCode),
+          'efficiency_score':
+              TextEditingController(text: _text(snapshot.efficiencyScore)),
+          'ai_assist_ratio':
+              TextEditingController(text: _text(snapshot.aiAssistRatio)),
           'note': TextEditingController(text: snapshot.note ?? ''),
         };
     }
@@ -297,13 +317,21 @@ class _RecordEditorDialogState extends State<RecordEditorDialog> {
   Set<String> _initialProjectIds() {
     switch (widget.kind) {
       case RecordKind.time:
-        return widget.timeSnapshot!.projectAllocations.map((item) => item.projectId).toSet();
+        return widget.timeSnapshot!.projectAllocations
+            .map((item) => item.projectId)
+            .toSet();
       case RecordKind.income:
-        return widget.incomeSnapshot!.projectAllocations.map((item) => item.projectId).toSet();
+        return widget.incomeSnapshot!.projectAllocations
+            .map((item) => item.projectId)
+            .toSet();
       case RecordKind.expense:
-        return widget.expenseSnapshot!.projectAllocations.map((item) => item.projectId).toSet();
+        return widget.expenseSnapshot!.projectAllocations
+            .map((item) => item.projectId)
+            .toSet();
       case RecordKind.learning:
-        return widget.learningSnapshot!.projectAllocations.map((item) => item.projectId).toSet();
+        return widget.learningSnapshot!.projectAllocations
+            .map((item) => item.projectId)
+            .toSet();
     }
   }
 
@@ -359,7 +387,8 @@ class _RecordEditorDialogState extends State<RecordEditorDialog> {
               'source_name': _controllers['source_name']!.text,
               'type_code': _controllers['type_code']!.text,
               'amount_cents': _amountToCents(_controllers['amount_yuan']!.text),
-              'is_passive': _isPassive,
+              'is_passive':
+                  _controllers['is_passive']!.text.trim().toLowerCase() == 'true',
               'ai_assist_ratio': _intValue('ai_assist_ratio'),
               'note': _nullable('note'),
               'source': 'manual',
@@ -395,11 +424,17 @@ class _RecordEditorDialogState extends State<RecordEditorDialog> {
             'input': {
               'user_id': widget.userId,
               'occurred_on': _controllers['occurred_on']!.text,
-              'started_at': _controllers['started_at']!.text.isEmpty ? null : _toUtcTimestamp(_controllers['started_at']!.text),
-              'ended_at': _controllers['ended_at']!.text.isEmpty ? null : _toUtcTimestamp(_controllers['ended_at']!.text),
+              'started_at': _controllers['started_at']!.text.isEmpty
+                  ? null
+                  : _toUtcTimestamp(_controllers['started_at']!.text),
+              'ended_at': _controllers['ended_at']!.text.isEmpty
+                  ? null
+                  : _toUtcTimestamp(_controllers['ended_at']!.text),
               'content': _controllers['content']!.text,
-              'duration_minutes': int.parse(_controllers['duration_minutes']!.text),
-              'application_level_code': _controllers['application_level_code']!.text,
+              'duration_minutes':
+                  int.parse(_controllers['duration_minutes']!.text),
+              'application_level_code':
+                  _controllers['application_level_code']!.text,
               'efficiency_score': _intValue('efficiency_score'),
               'ai_assist_ratio': _intValue('ai_assist_ratio'),
               'note': _nullable('note'),
@@ -419,7 +454,9 @@ class _RecordEditorDialogState extends State<RecordEditorDialog> {
 
   int? _intValue(String key) {
     final raw = _controllers[key]!.text.trim();
-    if (raw.isEmpty) return null;
+    if (raw.isEmpty) {
+      return null;
+    }
     return int.tryParse(raw);
   }
 
@@ -438,8 +475,22 @@ class _RecordEditorDialogState extends State<RecordEditorDialog> {
   }
 
   String _toUtcTimestamp(String time) {
-    final normalized = time.length == 5 ? '${time.trim()}:00' : time.trim();
+    final normalized =
+        time.length == 5 ? '${time.trim()}:00' : time.trim();
     final local = DateTime.parse('${widget.anchorDate} $normalized');
     return local.toUtc().toIso8601String();
+  }
+
+  CaptureType _captureTypeFor(RecordKind kind) {
+    switch (kind) {
+      case RecordKind.time:
+        return CaptureType.time;
+      case RecordKind.income:
+        return CaptureType.income;
+      case RecordKind.expense:
+        return CaptureType.expense;
+      case RecordKind.learning:
+        return CaptureType.learning;
+    }
   }
 }

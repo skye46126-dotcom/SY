@@ -315,21 +315,39 @@ fn collect_project_snapshots(
     let mut statement = connection.prepare(
         "SELECT p.id,
                 COALESCE((
-                    SELECT SUM(t.duration_minutes)
+                    SELECT CAST(SUM(
+                        t.duration_minutes * rpl.weight_ratio / (
+                            SELECT SUM(weight_ratio)
+                            FROM record_project_links
+                            WHERE record_kind = 'time' AND record_id = t.id
+                        )
+                    ) AS INTEGER)
                     FROM time_records t
                     JOIN record_project_links rpl
                       ON rpl.record_kind = 'time' AND rpl.record_id = t.id
                     WHERE rpl.project_id = p.id AND t.is_deleted = 0 AND t.started_at >= ?1 AND t.started_at < ?2
                 ), 0) AS invested_minutes,
                 COALESCE((
-                    SELECT SUM(i.amount_cents)
+                    SELECT CAST(SUM(
+                        i.amount_cents * rpl.weight_ratio / (
+                            SELECT SUM(weight_ratio)
+                            FROM record_project_links
+                            WHERE record_kind = 'income' AND record_id = i.id
+                        )
+                    ) AS INTEGER)
                     FROM income_records i
                     JOIN record_project_links rpl
                       ON rpl.record_kind = 'income' AND rpl.record_id = i.id
                     WHERE rpl.project_id = p.id AND i.is_deleted = 0 AND i.occurred_on >= ?3 AND i.occurred_on <= ?4
                 ), 0) AS income_cents,
                 COALESCE((
-                    SELECT SUM(e.amount_cents)
+                    SELECT CAST(SUM(
+                        e.amount_cents * rpl.weight_ratio / (
+                            SELECT SUM(weight_ratio)
+                            FROM record_project_links
+                            WHERE record_kind = 'expense' AND record_id = e.id
+                        )
+                    ) AS INTEGER)
                     FROM expense_records e
                     JOIN record_project_links rpl
                       ON rpl.record_kind = 'expense' AND rpl.record_id = e.id

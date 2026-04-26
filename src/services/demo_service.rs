@@ -9,8 +9,8 @@ use crate::error::Result;
 use crate::models::{
     CreateAiServiceConfigInput, CreateCloudSyncConfigInput, CreateExpenseRecordInput,
     CreateIncomeRecordInput, CreateLearningRecordInput, CreateProjectInput, CreateTagInput,
-    CreateTimeRecordInput, MonthlyCostBaselineInput, ParserMode, ProjectAllocation,
-    RecurringCostRuleInput, CapexCostInput,
+    CreateTimeRecordInput, DimensionOptionInput, MonthlyCostBaselineInput, ParserMode,
+    ProjectAllocation, RecurringCostRuleInput, CapexCostInput,
 };
 use crate::services::{
     AiService, BackupService, CostService, ProjectService, RecordService, SnapshotService,
@@ -86,6 +86,24 @@ impl DemoDataService {
         self.write_setting(user_id, "today_work_target_minutes", "240")?;
         self.write_setting(user_id, "today_learning_target_minutes", "90")?;
         cost_service.set_ideal_hourly_rate_cents(user_id, 35_000)?;
+        record_service.save_dimension_option(
+            user_id,
+            "income_type",
+            &DimensionOptionInput {
+                code: "passive".to_string(),
+                display_name: "Passive".to_string(),
+                is_active: true,
+            },
+        )?;
+        record_service.save_dimension_option(
+            user_id,
+            "expense_category",
+            &DimensionOptionInput {
+                code: "software".to_string(),
+                display_name: "Software".to_string(),
+                is_active: true,
+            },
+        )?;
 
         let work_tag = record_service.create_tag(&CreateTagInput {
             user_id: user_id.to_string(),
@@ -184,7 +202,7 @@ impl DemoDataService {
             user_id,
             &RecurringCostRuleInput {
                 name: "软件订阅".to_string(),
-                category_code: "software".to_string(),
+                category_code: "subscription".to_string(),
                 monthly_amount_cents: 79_00,
                 is_necessary: false,
                 start_month: this_month.clone(),

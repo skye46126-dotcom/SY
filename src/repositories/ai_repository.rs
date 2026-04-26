@@ -12,8 +12,9 @@ use crate::models::{
     ProjectAllocation, normalize_optional_string,
 };
 use crate::repositories::record_repository::{
-    DimensionKind, ensure_project_allocations_exist, ensure_tags_exist, ensure_user_exists,
-    insert_project_links, insert_tag_links, new_id, now_string, upsert_dimension_code,
+    DimensionKind, ensure_dimension_option_exists, ensure_project_allocations_exist,
+    ensure_tags_exist, ensure_user_exists, insert_project_links, insert_tag_links, new_id,
+    now_string,
 };
 
 pub struct AiRepository;
@@ -327,7 +328,7 @@ fn commit_time_draft(
 
     let tx = connection.transaction()?;
     ensure_user_exists(&tx, user_id)?;
-    upsert_dimension_code(
+    ensure_dimension_option_exists(
         &tx,
         DimensionKind::TimeCategory,
         &input.normalized_category_code(),
@@ -405,7 +406,7 @@ fn commit_income_draft(
 
     let tx = connection.transaction()?;
     ensure_user_exists(&tx, user_id)?;
-    upsert_dimension_code(
+    ensure_dimension_option_exists(
         &tx,
         DimensionKind::IncomeType,
         &input.normalized_type_code(),
@@ -475,7 +476,7 @@ fn commit_expense_draft(
 
     let tx = connection.transaction()?;
     ensure_user_exists(&tx, user_id)?;
-    upsert_dimension_code(
+    ensure_dimension_option_exists(
         &tx,
         DimensionKind::ExpenseCategory,
         &input.normalized_category_code(),
@@ -553,7 +554,7 @@ fn commit_learning_draft(
 
     let tx = connection.transaction()?;
     ensure_user_exists(&tx, user_id)?;
-    upsert_dimension_code(
+    ensure_dimension_option_exists(
         &tx,
         DimensionKind::LearningLevel,
         &input.normalized_application_level_code(),

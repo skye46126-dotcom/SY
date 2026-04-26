@@ -16,6 +16,10 @@ class AppRuntimeController extends ChangeNotifier {
       return;
     }
     _initialized = true;
+    await refreshProfile();
+  }
+
+  Future<void> refreshProfile() async {
     state = ViewState.loading();
     notifyListeners();
     try {

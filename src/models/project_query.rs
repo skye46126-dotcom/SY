@@ -27,6 +27,7 @@ pub struct ProjectDetail {
     pub status_code: String,
     pub started_on: String,
     pub ended_on: Option<String>,
+    pub ai_enable_ratio: Option<i32>,
     pub score: Option<i32>,
     pub note: Option<String>,
     pub tag_ids: Vec<String>,

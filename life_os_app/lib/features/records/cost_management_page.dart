@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../app/app.dart';
+import '../../models/config_models.dart';
 import '../../models/cost_models.dart';
 import '../../shared/view_state.dart';
 import '../../shared/widgets/module_page.dart';
@@ -19,6 +20,7 @@ class _CostManagementPageState extends State<CostManagementPage> {
   ViewState<List<RecurringCostRuleModel>> _recurringState = ViewState.initial();
   ViewState<List<CapexCostModel>> _capexState = ViewState.initial();
   ViewState<RateComparisonSummaryModel> _rateState = ViewState.initial();
+  List<DimensionOptionModel> _expenseCategoryOptions = const [];
   String? _selectedMonth;
   String _rateWindowType = 'month';
   bool _loaded = false;
@@ -40,6 +42,14 @@ class _CostManagementPageState extends State<CostManagementPage> {
       );
       final recurring = await service.listRecurringCostRules(userId: runtime.userId);
       final capex = await service.listCapexCosts(userId: runtime.userId);
+      final expenseCategories = await service.invokeRaw(
+        method: 'list_dimension_options',
+        payload: {
+          'user_id': runtime.userId,
+          'kind': 'expense_category',
+          'include_inactive': false,
+        },
+      );
       final rate = await service.getRateComparison(
         userId: runtime.userId,
         anchorDate: runtime.todayDate,
@@ -50,6 +60,10 @@ class _CostManagementPageState extends State<CostManagementPage> {
         _recurringState = ViewState.ready(recurring);
         _capexState = ViewState.ready(capex);
         _rateState = ViewState.ready(rate);
+        _expenseCategoryOptions = ((expenseCategories as List?) ?? const [])
+            .whereType<Map>()
+            .map((item) => DimensionOptionModel.fromJson(item.cast<String, dynamic>()))
+            .toList();
       });
     } catch (error) {
       setState(() {
@@ -334,7 +348,7 @@ class _CostManagementPageState extends State<CostManagementPage> {
         payload: {
           'user_id': runtime.userId,
           'input': {
-            'month': runtime.todayDate.substring(0, 7),
+            'month': _selectedMonth ?? runtime.todayDate.substring(0, 7),
             'basic_living_cents': (double.parse(basic.text) * 100).round(),
             'fixed_subscription_cents': (double.parse(fixed.text) * 100).round(),
             'note': null,
@@ -358,7 +372,7 @@ class _CostManagementPageState extends State<CostManagementPage> {
     final runtime = LifeOsScope.runtimeOf(context);
     final service = LifeOsScope.of(context);
     final name = TextEditingController(text: existing?.name ?? '');
-    final category = TextEditingController(text: existing?.categoryCode ?? 'necessary');
+    String selectedCategory = existing?.categoryCode ?? 'necessary';
     final amount = TextEditingController(
       text: existing == null ? '' : (existing.monthlyAmountCents / 100).toStringAsFixed(2),
     );
@@ -377,7 +391,44 @@ class _CostManagementPageState extends State<CostManagementPage> {
               mainAxisSize: MainAxisSize.min,
               children: [
                 TextField(controller: name, decoration: const InputDecoration(labelText: '名称')),
-                TextField(controller: category, decoration: const InputDecoration(labelText: '类别')),
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('类别'),
+                  subtitle: Text(
+                    _expenseCategoryOptions
+                            .where((item) => item.code == selectedCategory)
+                            .map((item) => item.displayName)
+                            .cast<String?>()
+                            .firstWhere((item) => item != null, orElse: () => '请选择') ??
+                        '请选择',
+                  ),
+                  trailing: const Icon(Icons.arrow_drop_down_rounded),
+                  onTap: () async {
+                    final selected = await showModalBottomSheet<String>(
+                      context: context,
+                      builder: (context) => SafeArea(
+                        child: ListView(
+                          shrinkWrap: true,
+                          children: [
+                            for (final item in _expenseCategoryOptions)
+                              ListTile(
+                                title: Text(item.displayName),
+                                subtitle: Text(item.code),
+                                trailing: item.code == selectedCategory
+                                    ? const Icon(Icons.check_rounded)
+                                    : null,
+                                onTap: () => Navigator.of(context).pop(item.code),
+                              ),
+                          ],
+                        ),
+                      ),
+                    );
+                    if (selected != null) {
+                      selectedCategory = selected;
+                      setState(() {});
+                    }
+                  },
+                ),
                 TextField(controller: amount, decoration: const InputDecoration(labelText: '金额(元)')),
                 TextField(controller: startMonth, decoration: const InputDecoration(labelText: '开始月份 YYYY-MM')),
                 TextField(controller: endMonth, decoration: const InputDecoration(labelText: '结束月份 YYYY-MM')),
@@ -406,7 +457,7 @@ class _CostManagementPageState extends State<CostManagementPage> {
           if (existing != null) 'rule_id': existing.id,
           'input': {
             'name': name.text,
-            'category_code': category.text,
+            'category_code': selectedCategory,
             'monthly_amount_cents': (double.parse(amount.text) * 100).round(),
             'is_necessary': necessary.value,
             'start_month': startMonth.text,
@@ -419,7 +470,6 @@ class _CostManagementPageState extends State<CostManagementPage> {
       await _load();
     } finally {
       name.dispose();
-      category.dispose();
       amount.dispose();
       startMonth.dispose();
       endMonth.dispose();
@@ -451,7 +501,9 @@ class _CostManagementPageState extends State<CostManagementPage> {
       text: existing == null ? '' : (existing.purchaseAmountCents / 100).toStringAsFixed(2),
     );
     final usefulMonths = TextEditingController(text: '${existing?.usefulMonths ?? 12}');
-    final residual = TextEditingController(text: '${existing?.residualRateBps ?? 0}');
+    final residual = TextEditingController(
+      text: ((existing?.residualRateBps ?? 0) / 100).toStringAsFixed(2),
+    );
     try {
       final confirmed = await showDialog<bool>(
         context: context,
@@ -464,7 +516,13 @@ class _CostManagementPageState extends State<CostManagementPage> {
               TextField(controller: date, decoration: const InputDecoration(labelText: '购买日期 YYYY-MM-DD')),
               TextField(controller: amount, decoration: const InputDecoration(labelText: '金额(元)')),
               TextField(controller: usefulMonths, decoration: const InputDecoration(labelText: '使用月数')),
-              TextField(controller: residual, decoration: const InputDecoration(labelText: '残值 bps')),
+              TextField(
+                controller: residual,
+                decoration: const InputDecoration(
+                  labelText: '残值率(%)',
+                  helperText: '例如 20 表示残值率为 20%。',
+                ),
+              ),
             ],
           ),
           actions: [
@@ -484,7 +542,7 @@ class _CostManagementPageState extends State<CostManagementPage> {
             'purchase_date': date.text,
             'purchase_amount_cents': (double.parse(amount.text) * 100).round(),
             'useful_months': int.parse(usefulMonths.text),
-            'residual_rate_bps': int.parse(residual.text),
+            'residual_rate_bps': (double.parse(residual.text) * 100).round(),
             'note': null,
           },
         },
