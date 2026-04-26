@@ -27,6 +27,6 @@ pub use crate::models::{
     UserProfile,
 };
 pub use crate::services::{
-    AiService, BackupService, CostService, ProjectService, RecordService, ReviewService,
-    SnapshotService,
+    AiService, BackupService, CostService, DemoDataResult, DemoDataService, ProjectService,
+    RecordService, ReviewService, SnapshotService,
 };

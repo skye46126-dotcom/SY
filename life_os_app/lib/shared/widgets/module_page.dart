@@ -19,6 +19,15 @@ class ModulePage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final textTheme = Theme.of(context).textTheme;
+    final titleBlock = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(subtitle, style: textTheme.labelSmall),
+        const SizedBox(height: 8),
+        Text(title, style: textTheme.headlineMedium),
+      ],
+    );
+
     return Stack(
       children: [
         Positioned(
@@ -55,21 +64,44 @@ class ModulePage extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Wrap(
-                  spacing: 12,
-                  runSpacing: 12,
-                  crossAxisAlignment: WrapCrossAlignment.center,
-                  children: [
-                    Column(
+                LayoutBuilder(
+                  builder: (context, constraints) {
+                    if (actions.isEmpty) {
+                      return titleBlock;
+                    }
+
+                    final actionWrap = Wrap(
+                      spacing: 12,
+                      runSpacing: 12,
+                      alignment: WrapAlignment.end,
+                      children: actions,
+                    );
+
+                    if (constraints.maxWidth >= 720) {
+                      return Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Expanded(child: titleBlock),
+                          const SizedBox(width: 16),
+                          Flexible(
+                            child: Align(
+                              alignment: Alignment.topRight,
+                              child: actionWrap,
+                            ),
+                          ),
+                        ],
+                      );
+                    }
+
+                    return Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(subtitle, style: textTheme.labelSmall),
-                        const SizedBox(height: 8),
-                        Text(title, style: textTheme.headlineMedium),
+                        titleBlock,
+                        const SizedBox(height: 16),
+                        actionWrap,
                       ],
-                    ),
-                    ...actions,
-                  ],
+                    );
+                  },
                 ),
                 const SizedBox(height: 24),
                 ..._withSpacing(children),

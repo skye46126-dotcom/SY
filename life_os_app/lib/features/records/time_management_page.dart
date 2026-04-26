@@ -29,12 +29,14 @@ class _TimeManagementPageState extends State<TimeManagementPage> {
       );
       final timeRecords =
           records.where((item) => item.kind == RecordKind.time).toList();
+      if (!mounted) return;
       setState(() {
         _state = timeRecords.isEmpty
             ? ViewState.empty('今天还没有时间记录。')
             : ViewState.ready(timeRecords);
       });
     } catch (error) {
+      if (!mounted) return;
       setState(() => _state = ViewState.error(error.toString()));
     }
   }
@@ -44,7 +46,10 @@ class _TimeManagementPageState extends State<TimeManagementPage> {
     super.didChangeDependencies();
     if (_loaded) return;
     _loaded = true;
-    WidgetsBinding.instance.addPostFrameCallback((_) => _load());
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _load();
+    });
   }
 
   @override

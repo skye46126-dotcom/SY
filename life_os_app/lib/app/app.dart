@@ -83,17 +83,12 @@ class _LifeOsAppState extends State<LifeOsApp> {
     return LifeOsScope(
       service: _service,
       runtime: _runtime,
-      child: AnimatedBuilder(
-        animation: _runtime,
-        builder: (context, _) {
-          return MaterialApp(
-            debugShowCheckedModeBanner: false,
-            title: 'SkyeOS',
-            theme: AppTheme.light(),
-            home: _RootGate(runtime: _runtime),
-            onGenerateRoute: AppRouter.onGenerateRoute,
-          );
-        },
+      child: MaterialApp(
+        debugShowCheckedModeBanner: false,
+        title: 'SkyeOS',
+        theme: AppTheme.light(),
+        home: _RootGate(runtime: _runtime),
+        onGenerateRoute: AppRouter.onGenerateRoute,
       ),
     );
   }
@@ -108,35 +103,40 @@ class _RootGate extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    switch (runtime.state.status) {
-      case ViewStatus.loading:
-      case ViewStatus.initial:
-        return const Scaffold(
-          body: Center(
-            child: SectionLoadingView(label: '正在初始化数据库与用户会话'),
-          ),
-        );
-      case ViewStatus.error:
-      case ViewStatus.unavailable:
-      case ViewStatus.empty:
-        return Scaffold(
-          body: ModulePage(
-            title: '初始化失败',
-            subtitle: 'Startup',
-            children: [
-              SectionMessageView(
-                icon: Icons.error_outline_rounded,
-                title: '应用启动未完成',
-                description: runtime.state.message ?? '请检查数据库与原生桥接状态。',
+    return AnimatedBuilder(
+      animation: runtime,
+      builder: (context, _) {
+        switch (runtime.state.status) {
+          case ViewStatus.loading:
+          case ViewStatus.initial:
+            return const Scaffold(
+              body: Center(
+                child: SectionLoadingView(label: '正在初始化数据库与用户会话'),
               ),
-            ],
-          ),
-        );
-      case ViewStatus.data:
-        return const ShellScaffold(
-          destination: AppDestination.today,
-          child: TodayPage(),
-        );
-    }
+            );
+          case ViewStatus.error:
+          case ViewStatus.unavailable:
+          case ViewStatus.empty:
+            return Scaffold(
+              body: ModulePage(
+                title: '初始化失败',
+                subtitle: 'Startup',
+                children: [
+                  SectionMessageView(
+                    icon: Icons.error_outline_rounded,
+                    title: '应用启动未完成',
+                    description: runtime.state.message ?? '请检查数据库与原生桥接状态。',
+                  ),
+                ],
+              ),
+            );
+          case ViewStatus.data:
+            return const ShellScaffold(
+              destination: AppDestination.today,
+              child: TodayPage(),
+            );
+        }
+      },
+    );
   }
 }

@@ -4,7 +4,10 @@ import '../../app/app.dart';
 import '../../models/record_models.dart';
 import '../../models/review_models.dart';
 import '../../shared/view_state.dart';
+import '../../shared/widgets/more_action_menu.dart';
 import '../../shared/widgets/module_page.dart';
+import '../../shared/widgets/period_navigator.dart';
+import '../../shared/widgets/segmented_control.dart';
 import '../../shared/widgets/section_card.dart';
 import '../../shared/widgets/state_views.dart';
 import 'review_controller.dart';
@@ -32,6 +35,7 @@ class _ReviewPageState extends State<ReviewPage> {
     }
     _loaded = true;
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
       final runtime = LifeOsScope.runtimeOf(context);
       _controller!.load(
         userId: runtime.userId,
@@ -53,67 +57,85 @@ class _ReviewPageState extends State<ReviewPage> {
       return const SizedBox.shrink();
     }
 
-    final pageData = controller.state.data;
-    final report = pageData?.report;
-    final snapshot = pageData?.snapshot;
-    final activeWindow = pageData?.report.window;
     final runtime = LifeOsScope.runtimeOf(context);
 
     return AnimatedBuilder(
       animation: controller,
       builder: (context, _) {
+        final pageData = controller.state.data;
+        final report = pageData?.report;
+        final snapshot = pageData?.snapshot;
+        final activeWindow = pageData?.report.window;
+
         return ModulePage(
           title: '周期复盘',
           subtitle: 'Review',
           actions: [
-            for (final kind in ReviewWindowKind.values.take(4))
-              ChoiceChip(
-                label: Text(_windowLabel(kind)),
-                selected: controller.selectedKind == kind,
-                onSelected: (_) => controller.changeWindow(
-                  kind,
-                  LifeOsScope.runtimeOf(context).userId,
-                  LifeOsScope.runtimeOf(context).timezone,
+            MoreActionMenu(
+              items: [
+                MoreActionMenuItem(
+                  label: '自定义区间',
+                  icon: Icons.date_range_rounded,
+                  onPressed: () => _pickCustomRange(
+                    context,
+                    controller,
+                    runtime.userId,
+                    runtime.timezone,
+                  ),
                 ),
+                MoreActionMenuItem(
+                  label: 'AI Chat',
+                  icon: Icons.auto_awesome_rounded,
+                  onPressed: () => Navigator.of(context).pushNamed('/ai-chat'),
+                ),
+                const MoreActionMenuItem(
+                  label: '重新生成报告',
+                  icon: Icons.refresh_rounded,
+                  enabled: false,
+                ),
+                const MoreActionMenuItem(
+                  label: '导出报告',
+                  icon: Icons.ios_share_rounded,
+                  enabled: false,
+                ),
+              ],
+            ),
+          ],
+          children: [
+            SegmentedControl<ReviewWindowKind>(
+              value: controller.selectedKind == ReviewWindowKind.range
+                  ? null
+                  : controller.selectedKind,
+              onChanged: (kind) => controller.changeWindow(
+                kind,
+                runtime.userId,
+                runtime.timezone,
               ),
-            OutlinedButton(
-              onPressed: () => controller.shiftPeriod(
+              options: [
+                for (final kind in ReviewWindowKind.values.take(4))
+                  SegmentedControlOption(
+                    value: kind,
+                    label: _windowLabel(kind),
+                  ),
+              ],
+            ),
+            PeriodNavigator(
+              currentLabel: activeWindow?.periodName ?? '当前周期',
+              onPrevious: () => controller.shiftPeriod(
                 -1,
                 runtime.userId,
                 runtime.timezone,
               ),
-              child: const Text('上一周期'),
-            ),
-            OutlinedButton(
-              onPressed: () => controller.shiftPeriod(
+              onToday: () => controller.jumpToToday(
+                runtime.userId,
+                runtime.timezone,
+              ),
+              onNext: () => controller.shiftPeriod(
                 1,
                 runtime.userId,
                 runtime.timezone,
               ),
-              child: const Text('下一周期'),
             ),
-            OutlinedButton(
-              onPressed: () => controller.jumpToToday(
-                runtime.userId,
-                runtime.timezone,
-              ),
-              child: const Text('今天'),
-            ),
-            OutlinedButton(
-              onPressed: () => _pickCustomRange(
-                context,
-                controller,
-                runtime.userId,
-                runtime.timezone,
-              ),
-              child: const Text('自定义区间'),
-            ),
-            OutlinedButton(
-              onPressed: () => Navigator.of(context).pushNamed('/ai-chat'),
-              child: const Text('AI Chat'),
-            ),
-          ],
-          children: [
             if (controller.state.status == ViewStatus.loading)
               const SectionLoadingView(label: '正在读取复盘报告'),
             if (activeWindow != null)
@@ -156,7 +178,8 @@ class _ReviewPageState extends State<ReviewPage> {
                             for (final item in report.topProjects)
                               '${item.projectName} · ROI ${(item.operatingRoiPerc).toStringAsFixed(2)}%',
                           ],
-                          onItemTap: (index) => _openProject(report.topProjects[index].projectId),
+                          onItemTap: (index) =>
+                              _openProject(report.topProjects[index].projectId),
                         ),
                         const SizedBox(height: 16),
                         _MetricGroup(
@@ -165,8 +188,8 @@ class _ReviewPageState extends State<ReviewPage> {
                             for (final item in report.sinkholeProjects)
                               '${item.projectName} · ROI ${(item.operatingRoiPerc).toStringAsFixed(2)}%',
                           ],
-                          onItemTap: (index) =>
-                              _openProject(report.sinkholeProjects[index].projectId),
+                          onItemTap: (index) => _openProject(
+                              report.sinkholeProjects[index].projectId),
                         ),
                         const SizedBox(height: 16),
                         _MetricGroup(
@@ -196,11 +219,17 @@ class _ReviewPageState extends State<ReviewPage> {
                         Wrap(
                           spacing: 8,
                           children: [
-                            for (final item in const ['all', 'events', 'income', 'history'])
+                            for (final item in const [
+                              'all',
+                              'events',
+                              'income',
+                              'history'
+                            ])
                               ChoiceChip(
                                 label: Text(_historyLabel(item)),
                                 selected: _historyFilter == item,
-                                onSelected: (_) => setState(() => _historyFilter = item),
+                                onSelected: (_) =>
+                                    setState(() => _historyFilter = item),
                               ),
                           ],
                         ),
@@ -384,7 +413,8 @@ class _MetricGroup extends StatelessWidget {
               padding: const EdgeInsets.only(bottom: 6),
               child: InkWell(
                 onTap: onItemTap == null ? null : () => onItemTap!(index),
-                child: Text(items[index], style: Theme.of(context).textTheme.bodyMedium),
+                child: Text(items[index],
+                    style: Theme.of(context).textTheme.bodyMedium),
               ),
             ),
       ],

@@ -32,7 +32,10 @@ class _AiChatPageState extends State<AiChatPage> {
     _loaded = true;
     final runtime = LifeOsScope.runtimeOf(context);
     _contextDateController.text = runtime.todayDate;
-    WidgetsBinding.instance.addPostFrameCallback((_) => _loadConfig());
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _loadConfig();
+    });
   }
 
   @override

@@ -36,6 +36,7 @@ class _TodayPageState extends State<TodayPage> {
     }
     _hasLoaded = true;
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
       final runtime = LifeOsScope.runtimeOf(context);
       _controller!.load(
         userId: runtime.userId,

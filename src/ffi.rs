@@ -11,7 +11,7 @@ use crate::models::{
     CreateProjectInput, CreateTagInput, CreateTimeRecordInput, MonthlyCostBaselineInput,
     RecurringCostRuleInput, CapexCostInput, RecordKind,
 };
-use crate::services::{AiService, BackupService, CostService, ProjectService, RecordService, ReviewService, SnapshotService};
+use crate::services::{AiService, BackupService, CostService, DemoDataService, ProjectService, RecordService, ReviewService, SnapshotService};
 
 #[derive(Debug, Serialize)]
 struct BridgeError {
@@ -410,6 +410,20 @@ fn invoke_inner(
             let _: EmptyPayload = parse_payload(payload_json)?;
             let data = RecordService::new(database_path)
                 .init_database()
+                .map_err(BridgeInvokeError::from_core)?;
+            Ok(success_response(data))
+        }
+        "seed_demo_data" => {
+            let request: UserScopedRequest = parse_payload(payload_json)?;
+            let data = DemoDataService::new(database_path)
+                .seed_demo_data(&request.user_id)
+                .map_err(BridgeInvokeError::from_core)?;
+            Ok(success_response(data))
+        }
+        "clear_demo_data" => {
+            let request: UserScopedRequest = parse_payload(payload_json)?;
+            let data = DemoDataService::new(database_path)
+                .clear_demo_data(&request.user_id)
                 .map_err(BridgeInvokeError::from_core)?;
             Ok(success_response(data))
         }

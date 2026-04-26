@@ -8,7 +8,9 @@ use crate::models::{
     CapexCostInput, CapexCostSummary, MonthlyCostBaseline, MonthlyCostBaselineInput,
     RateComparisonSummary, RecurringCostRuleInput, RecurringCostRuleSummary, parse_month,
 };
-use crate::repositories::record_repository::{ensure_user_exists, now_string};
+use crate::repositories::record_repository::{
+    DimensionKind, ensure_user_exists, now_string, upsert_dimension_code,
+};
 
 pub struct CostRepository;
 
@@ -183,6 +185,11 @@ impl CostRepository {
     ) -> Result<RecurringCostRuleSummary> {
         ensure_user_exists(connection, user_id)?;
         input.validate()?;
+        upsert_dimension_code(
+            connection,
+            DimensionKind::ExpenseCategory,
+            &input.normalized_category_code(),
+        )?;
         let id = Uuid::now_v7().to_string();
         let now = now_string();
         connection.execute(
@@ -216,6 +223,11 @@ impl CostRepository {
         ensure_user_exists(connection, user_id)?;
         input.validate()?;
         ensure_recurring_rule_exists(connection, user_id, rule_id)?;
+        upsert_dimension_code(
+            connection,
+            DimensionKind::ExpenseCategory,
+            &input.normalized_category_code(),
+        )?;
         connection.execute(
             "UPDATE expense_recurring_rules
              SET name = ?1,

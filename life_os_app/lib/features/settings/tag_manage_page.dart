@@ -23,10 +23,12 @@ class _TagManagePageState extends State<TagManagePage> {
     try {
       final runtime = LifeOsScope.runtimeOf(context);
       final tags = await LifeOsScope.of(context).getTags(userId: runtime.userId);
+      if (!mounted) return;
       setState(() {
         _state = tags.isEmpty ? ViewState.empty('当前还没有标签。') : ViewState.ready(tags);
       });
     } catch (error) {
+      if (!mounted) return;
       setState(() => _state = ViewState.error(error.toString()));
     }
   }
@@ -36,7 +38,10 @@ class _TagManagePageState extends State<TagManagePage> {
     super.didChangeDependencies();
     if (_loaded) return;
     _loaded = true;
-    WidgetsBinding.instance.addPostFrameCallback((_) => _load());
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _load();
+    });
   }
 
   @override

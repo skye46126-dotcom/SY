@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../capture_controller.dart';
+import '../../../shared/widgets/segmented_control.dart';
 
 class CaptureTypeSelector extends StatelessWidget {
   const CaptureTypeSelector({
@@ -14,15 +15,14 @@ class CaptureTypeSelector extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Wrap(
-      spacing: 10,
-      runSpacing: 10,
-      children: [
+    return SegmentedControl<CaptureType>(
+      value: selectedType,
+      onChanged: onChanged,
+      options: [
         for (final type in CaptureType.values)
-          ChoiceChip(
-            label: Text(type.label),
-            selected: selectedType == type,
-            onSelected: (_) => onChanged(type),
+          SegmentedControlOption(
+            value: type,
+            label: type.label,
           ),
       ],
     );

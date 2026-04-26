@@ -5,6 +5,7 @@ import '../../../models/tag_models.dart';
 import '../../../shared/view_state.dart';
 import '../../../shared/widgets/section_card.dart';
 import '../../../shared/widgets/state_views.dart';
+import '../../../shared/widgets/tag_selector.dart';
 import '../capture_controller.dart';
 
 class CaptureFieldDefinition {
@@ -27,52 +28,71 @@ List<CaptureFieldDefinition> captureFieldDefinitionsFor(CaptureType type) {
   switch (type) {
     case CaptureType.time:
       return const [
-        CaptureFieldDefinition(key: 'started_at', label: '开始时间', hintText: '09:30'),
-        CaptureFieldDefinition(key: 'ended_at', label: '结束时间', hintText: '11:00'),
-        CaptureFieldDefinition(key: 'category_code', label: '类别', hintText: 'work'),
+        CaptureFieldDefinition(
+            key: 'started_at', label: '开始时间', hintText: '09:30'),
+        CaptureFieldDefinition(
+            key: 'ended_at', label: '结束时间', hintText: '11:00'),
+        CaptureFieldDefinition(
+            key: 'category_code', label: '类别', hintText: 'work'),
         CaptureFieldDefinition(key: 'ai_assist_ratio', label: 'AI 占比'),
         CaptureFieldDefinition(key: 'efficiency_score', label: '效率'),
-        CaptureFieldDefinition(key: 'note', label: '备注', maxLines: 4, fullWidth: true),
+        CaptureFieldDefinition(
+            key: 'note', label: '备注', maxLines: 4, fullWidth: true),
       ];
     case CaptureType.income:
       return const [
         CaptureFieldDefinition(key: 'amount_yuan', label: '金额(元)'),
         CaptureFieldDefinition(key: 'source_name', label: '来源'),
-        CaptureFieldDefinition(key: 'occurred_on', label: '发生日期', hintText: '2026-04-26'),
-        CaptureFieldDefinition(key: 'type_code', label: '类型', hintText: 'project'),
-        CaptureFieldDefinition(key: 'is_passive', label: '是否被动收入', hintText: 'true / false'),
+        CaptureFieldDefinition(
+            key: 'occurred_on', label: '发生日期', hintText: '2026-04-26'),
+        CaptureFieldDefinition(
+            key: 'type_code', label: '类型', hintText: 'project'),
+        CaptureFieldDefinition(
+            key: 'is_passive', label: '是否被动收入', hintText: 'true / false'),
         CaptureFieldDefinition(key: 'ai_assist_ratio', label: 'AI 占比'),
-        CaptureFieldDefinition(key: 'note', label: '备注', maxLines: 4, fullWidth: true),
+        CaptureFieldDefinition(
+            key: 'note', label: '备注', maxLines: 4, fullWidth: true),
       ];
     case CaptureType.expense:
       return const [
         CaptureFieldDefinition(key: 'amount_yuan', label: '金额(元)'),
-        CaptureFieldDefinition(key: 'category_code', label: '类别', hintText: 'necessary'),
-        CaptureFieldDefinition(key: 'occurred_on', label: '发生日期', hintText: '2026-04-26'),
+        CaptureFieldDefinition(
+            key: 'category_code', label: '类别', hintText: 'necessary'),
+        CaptureFieldDefinition(
+            key: 'occurred_on', label: '发生日期', hintText: '2026-04-26'),
         CaptureFieldDefinition(key: 'ai_assist_ratio', label: 'AI 占比'),
-        CaptureFieldDefinition(key: 'note', label: '备注', maxLines: 4, fullWidth: true),
+        CaptureFieldDefinition(
+            key: 'note', label: '备注', maxLines: 4, fullWidth: true),
       ];
     case CaptureType.learning:
       return const [
         CaptureFieldDefinition(key: 'content', label: '内容'),
         CaptureFieldDefinition(key: 'duration_minutes', label: '时长(分钟)'),
-        CaptureFieldDefinition(key: 'occurred_on', label: '发生日期', hintText: '2026-04-26'),
-        CaptureFieldDefinition(key: 'application_level_code', label: '应用等级', hintText: 'input'),
-        CaptureFieldDefinition(key: 'started_at', label: '开始时间', hintText: '20:00'),
-        CaptureFieldDefinition(key: 'ended_at', label: '结束时间', hintText: '21:00'),
+        CaptureFieldDefinition(
+            key: 'occurred_on', label: '发生日期', hintText: '2026-04-26'),
+        CaptureFieldDefinition(
+            key: 'application_level_code', label: '应用等级', hintText: 'input'),
+        CaptureFieldDefinition(
+            key: 'started_at', label: '开始时间', hintText: '20:00'),
+        CaptureFieldDefinition(
+            key: 'ended_at', label: '结束时间', hintText: '21:00'),
         CaptureFieldDefinition(key: 'efficiency_score', label: '效率'),
         CaptureFieldDefinition(key: 'ai_assist_ratio', label: 'AI 占比'),
-        CaptureFieldDefinition(key: 'note', label: '备注', maxLines: 4, fullWidth: true),
+        CaptureFieldDefinition(
+            key: 'note', label: '备注', maxLines: 4, fullWidth: true),
       ];
     case CaptureType.project:
       return const [
         CaptureFieldDefinition(key: 'name', label: '项目名称'),
-        CaptureFieldDefinition(key: 'status_code', label: '项目状态', hintText: 'active'),
-        CaptureFieldDefinition(key: 'started_on', label: '开始日期', hintText: '2026-04-26'),
+        CaptureFieldDefinition(
+            key: 'status_code', label: '项目状态', hintText: 'active'),
+        CaptureFieldDefinition(
+            key: 'started_on', label: '开始日期', hintText: '2026-04-26'),
         CaptureFieldDefinition(key: 'ended_on', label: '结束日期'),
         CaptureFieldDefinition(key: 'score', label: '评分'),
         CaptureFieldDefinition(key: 'ai_enable_ratio', label: 'AI 启用比例'),
-        CaptureFieldDefinition(key: 'note', label: '备注', maxLines: 4, fullWidth: true),
+        CaptureFieldDefinition(
+            key: 'note', label: '备注', maxLines: 4, fullWidth: true),
       ];
   }
 }
@@ -113,7 +133,8 @@ class RecordFormSection extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           _AdaptiveForm(fields: fields, controllers: controllers),
-          if (selectedType != CaptureType.project && projectOptions.isNotEmpty) ...[
+          if (selectedType != CaptureType.project &&
+              projectOptions.isNotEmpty) ...[
             const SizedBox(height: 16),
             _ChoiceSection(
               title: '关联项目',
@@ -126,11 +147,12 @@ class RecordFormSection extends StatelessWidget {
           ],
           if (tags.isNotEmpty) ...[
             const SizedBox(height: 16),
-            _ChoiceSection(
+            TagSelector(
               title: '标签',
               selectedIds: selectedTagIds,
               labels: {
-                for (final item in tags) item.id: '${item.emoji ?? ''} ${item.name}',
+                for (final item in tags)
+                  item.id: '${item.emoji ?? ''} ${item.name}',
               },
               onToggle: onTagToggle,
             ),

@@ -27,6 +27,7 @@ class _ProjectsPageState extends State<ProjectsPage> {
     }
     _loaded = true;
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
       _controller!.load(userId: LifeOsScope.runtimeOf(context).userId);
     });
   }

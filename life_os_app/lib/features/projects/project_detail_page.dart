@@ -71,6 +71,7 @@ class _ProjectDetailPageState extends State<ProjectDetailPage> {
     }
     _loaded = true;
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
       _controller!.load(
         userId: LifeOsScope.runtimeOf(context).userId,
         projectId: widget.projectId,

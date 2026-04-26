@@ -37,16 +37,19 @@ class _DayDetailPageState extends State<DayDetailPage> {
         date: widget.anchorDate,
         timezone: runtime.timezone,
       );
+      if (!mounted) return;
       setState(() {
         _state = records.isEmpty
             ? ViewState.empty('当天没有记录。')
             : ViewState.ready(records);
       });
     } on UnimplementedError {
+      if (!mounted) return;
       setState(() {
         _state = ViewState.unavailable('按日明细接口尚未接入 Rust。');
       });
     } catch (error) {
+      if (!mounted) return;
       setState(() {
         _state = ViewState.error(error.toString());
       });
@@ -60,7 +63,10 @@ class _DayDetailPageState extends State<DayDetailPage> {
       return;
     }
     _loaded = true;
-    WidgetsBinding.instance.addPostFrameCallback((_) => _load());
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _load();
+    });
   }
 
   @override

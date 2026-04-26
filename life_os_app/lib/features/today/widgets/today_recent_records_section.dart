@@ -61,47 +61,88 @@ class TodayRecentRecordsSection extends StatelessWidget {
                 borderRadius: BorderRadius.circular(20),
                 border: Border.all(color: Colors.white.withValues(alpha: 0.58)),
               ),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Chip(label: Text(record.kind.label)),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  final compact = constraints.maxWidth < 560;
+                  if (compact) {
+                    return Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
+                        Row(
+                          children: [
+                            Chip(label: Text(record.kind.label)),
+                            const Spacer(),
+                            PopupMenuButton<String>(
+                              onSelected: (value) {
+                                switch (value) {
+                                  case 'edit':
+                                    onEdit(record);
+                                  case 'copy':
+                                    onCopy(record);
+                                  case 'delete':
+                                    onDelete(record);
+                                }
+                              },
+                              itemBuilder: (context) => const [
+                                PopupMenuItem(value: 'edit', child: Text('编辑')),
+                                PopupMenuItem(value: 'copy', child: Text('复制一条')),
+                                PopupMenuItem(value: 'delete', child: Text('删除')),
+                              ],
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
                         Text(record.title, style: Theme.of(context).textTheme.titleMedium),
                         const SizedBox(height: 4),
                         Text(record.detail, style: Theme.of(context).textTheme.bodyMedium),
+                        const SizedBox(height: 8),
+                        Text(record.occurredAt, style: Theme.of(context).textTheme.bodyMedium),
                       ],
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  PopupMenuButton<String>(
-                    onSelected: (value) {
-                      switch (value) {
-                        case 'edit':
-                          onEdit(record);
-                        case 'copy':
-                          onCopy(record);
-                        case 'delete':
-                          onDelete(record);
-                      }
-                    },
-                    itemBuilder: (context) => const [
-                      PopupMenuItem(value: 'edit', child: Text('编辑')),
-                      PopupMenuItem(value: 'copy', child: Text('复制一条')),
-                      PopupMenuItem(value: 'delete', child: Text('删除')),
-                    ],
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 8),
-                      child: Text(
-                        record.occurredAt,
-                        style: Theme.of(context).textTheme.bodyMedium,
+                    );
+                  }
+                  return Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Chip(label: Text(record.kind.label)),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(record.title, style: Theme.of(context).textTheme.titleMedium),
+                            const SizedBox(height: 4),
+                            Text(record.detail, style: Theme.of(context).textTheme.bodyMedium),
+                          ],
+                        ),
                       ),
-                    ),
-                  ),
-                ],
+                      const SizedBox(width: 12),
+                      PopupMenuButton<String>(
+                        onSelected: (value) {
+                          switch (value) {
+                            case 'edit':
+                              onEdit(record);
+                            case 'copy':
+                              onCopy(record);
+                            case 'delete':
+                              onDelete(record);
+                          }
+                        },
+                        itemBuilder: (context) => const [
+                          PopupMenuItem(value: 'edit', child: Text('编辑')),
+                          PopupMenuItem(value: 'copy', child: Text('复制一条')),
+                          PopupMenuItem(value: 'delete', child: Text('删除')),
+                        ],
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 8),
+                          child: Text(
+                            record.occurredAt,
+                            style: Theme.of(context).textTheme.bodyMedium,
+                          ),
+                        ),
+                      ),
+                    ],
+                  );
+                },
               ),
             ),
           ],

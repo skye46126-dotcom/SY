@@ -35,6 +35,7 @@ class _CapturePageState extends State<CapturePage> {
     if (!_metadataLoaded) {
       _metadataLoaded = true;
       WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
         _controller!.loadMetadata(
           userId: LifeOsScope.runtimeOf(context).userId,
         );

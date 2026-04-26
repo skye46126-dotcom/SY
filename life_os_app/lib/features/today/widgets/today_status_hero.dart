@@ -24,37 +24,32 @@ class TodayStatusHero extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final textTheme = Theme.of(context).textTheme;
+    final isCompact = MediaQuery.sizeOf(context).width < 760;
     return GlassPanel(
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          final isCompact = constraints.maxWidth < 760;
-          if (isCompact) {
-            return Column(
+      child: isCompact
+          ? Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                _primaryContent(textTheme),
+                _primaryContent(textTheme, compact: true),
                 const SizedBox(height: 20),
                 _summaryCard(textTheme),
               ],
-            );
-          }
-          return Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(child: _primaryContent(textTheme)),
-              const SizedBox(width: 20),
-              SizedBox(
-                width: 260,
-                child: _summaryCard(textTheme),
-              ),
-            ],
-          );
-        },
-      ),
+            )
+          : Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(child: _primaryContent(textTheme, compact: false)),
+                const SizedBox(width: 20),
+                SizedBox(
+                  width: 260,
+                  child: _summaryCard(textTheme),
+                ),
+              ],
+            ),
     );
   }
 
-  Widget _primaryContent(TextTheme textTheme) {
+  Widget _primaryContent(TextTheme textTheme, {required bool compact}) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -62,7 +57,9 @@ class TodayStatusHero extends StatelessWidget {
         const SizedBox(height: 10),
         Text(
           '今日经营状态',
-          style: textTheme.headlineMedium?.copyWith(fontSize: 30),
+          maxLines: compact ? 2 : 1,
+          overflow: TextOverflow.visible,
+          style: textTheme.headlineMedium?.copyWith(fontSize: compact ? 24 : 30),
         ),
         const SizedBox(height: 12),
         if (overview != null)

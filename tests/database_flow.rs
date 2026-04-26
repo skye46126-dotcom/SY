@@ -4,9 +4,9 @@ use life_os_core::{
     BackupService, BackupType, CapexCostInput, CostService, CreateAiServiceConfigInput,
     CreateCloudSyncConfigInput, CreateExpenseRecordInput, CreateIncomeRecordInput,
     CreateLearningRecordInput, CreateProjectInput, CreateTagInput, CreateTimeRecordInput, Database,
-    MonthlyCostBaselineInput, ProjectAllocation, ProjectService, RecordKind, RecordService,
-    RecurringCostRuleInput, RemoteBackupFile, RemoteDownloadResult, RemoteUploadResult,
-    ReviewService, SnapshotService, SnapshotWindow, cloud::CloudSyncTransport,
+    DemoDataService, MonthlyCostBaselineInput, ProjectAllocation, ProjectService, RecordKind,
+    RecordService, RecurringCostRuleInput, RemoteBackupFile, RemoteDownloadResult,
+    RemoteUploadResult, ReviewService, SnapshotService, SnapshotWindow, cloud::CloudSyncTransport,
 };
 use rusqlite::params;
 use std::collections::BTreeMap;
@@ -54,6 +54,19 @@ fn migrations_seed_dimensions_and_default_user() {
             .expect("check table exists");
         assert_eq!(exists, 1, "missing table {table_name}");
     }
+}
+
+#[test]
+fn seed_demo_data_succeeds() {
+    let directory = tempdir().expect("tempdir");
+    let database_path = directory.path().join("life_os.db");
+    let record_service = RecordService::new(&database_path);
+    let user = record_service.init_database().expect("init database");
+
+    let service = DemoDataService::new(&database_path);
+    let result = service.seed_demo_data(&user.id).expect("seed demo data");
+
+    assert_eq!(result.user_id, user.id);
 }
 
 #[test]

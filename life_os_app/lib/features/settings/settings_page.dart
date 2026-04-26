@@ -6,6 +6,7 @@ import '../../models/sync_models.dart';
 import '../../shared/view_state.dart';
 import '../../shared/widgets/module_page.dart';
 import '../../shared/widgets/section_card.dart';
+import '../../shared/widgets/state_views.dart';
 
 class SettingsPage extends StatefulWidget {
   const SettingsPage({super.key});
@@ -17,6 +18,7 @@ class SettingsPage extends StatefulWidget {
 class _SettingsPageState extends State<SettingsPage> {
   ViewState<AiServiceConfigModel?> _aiState = ViewState.initial();
   ViewState<CloudSyncConfigModel?> _cloudState = ViewState.initial();
+  ViewState<String> _demoState = ViewState.initial();
   bool _loaded = false;
 
   Future<void> _load() async {
@@ -51,7 +53,10 @@ class _SettingsPageState extends State<SettingsPage> {
     super.didChangeDependencies();
     if (_loaded) return;
     _loaded = true;
-    WidgetsBinding.instance.addPostFrameCallback((_) => _load());
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _load();
+    });
   }
 
   @override
@@ -118,8 +123,96 @@ class _SettingsPageState extends State<SettingsPage> {
             ],
           ),
         ),
+        SectionCard(
+          eyebrow: 'Demo',
+          title: '演示数据',
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (_demoState.status == ViewStatus.loading)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: SectionLoadingView(label: '正在处理演示数据'),
+                ),
+              if (_demoState.status == ViewStatus.data)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: Text(_demoState.data!, style: Theme.of(context).textTheme.bodyMedium),
+                ),
+              if (_demoState.status == ViewStatus.error)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: Text(
+                    _demoState.message ?? '演示数据操作失败',
+                    style: Theme.of(context).textTheme.bodyMedium,
+                  ),
+                ),
+              Row(
+                children: [
+                  Expanded(
+                    child: ElevatedButton(
+                      onPressed: _seedDemoData,
+                      child: const Text('注入演示数据'),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: _clearDemoData,
+                      child: const Text('清空演示数据'),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
       ],
     );
+  }
+
+  Future<void> _seedDemoData() async {
+    final runtime = LifeOsScope.runtimeOf(context);
+    final service = LifeOsScope.of(context);
+    setState(() => _demoState = ViewState.loading());
+    try {
+      final result = await service.invokeRaw(
+        method: 'seed_demo_data',
+        payload: {'user_id': runtime.userId},
+      );
+      if (!mounted) return;
+      setState(() {
+        _demoState = ViewState.ready(
+          (result as Map?)?['message']?.toString() ?? 'demo data seeded',
+        );
+      });
+      await _load();
+    } catch (error) {
+      if (!mounted) return;
+      setState(() => _demoState = ViewState.error(error.toString()));
+    }
+  }
+
+  Future<void> _clearDemoData() async {
+    final runtime = LifeOsScope.runtimeOf(context);
+    final service = LifeOsScope.of(context);
+    setState(() => _demoState = ViewState.loading());
+    try {
+      final result = await service.invokeRaw(
+        method: 'clear_demo_data',
+        payload: {'user_id': runtime.userId},
+      );
+      if (!mounted) return;
+      setState(() {
+        _demoState = ViewState.ready(
+          (result as Map?)?['message']?.toString() ?? 'demo data cleared',
+        );
+      });
+      await _load();
+    } catch (error) {
+      if (!mounted) return;
+      setState(() => _demoState = ViewState.error(error.toString()));
+    }
   }
 }
 

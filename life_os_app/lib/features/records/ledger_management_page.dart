@@ -34,12 +34,14 @@ class _LedgerManagementPageState extends State<LedgerManagementPage> {
       );
       final kind = widget.recordType == 'income' ? RecordKind.income : RecordKind.expense;
       final filtered = records.where((item) => item.kind == kind).toList();
+      if (!mounted) return;
       setState(() {
         _state = filtered.isEmpty
             ? ViewState.empty('今天还没有${widget.recordType == 'income' ? '收入' : '支出'}记录。')
             : ViewState.ready(filtered);
       });
     } catch (error) {
+      if (!mounted) return;
       setState(() => _state = ViewState.error(error.toString()));
     }
   }
@@ -49,7 +51,10 @@ class _LedgerManagementPageState extends State<LedgerManagementPage> {
     super.didChangeDependencies();
     if (_loaded) return;
     _loaded = true;
-    WidgetsBinding.instance.addPostFrameCallback((_) => _load());
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _load();
+    });
   }
 
   @override
