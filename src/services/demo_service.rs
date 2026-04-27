@@ -7,10 +7,10 @@ use serde::Serialize;
 use crate::db::Database;
 use crate::error::Result;
 use crate::models::{
-    CreateAiServiceConfigInput, CreateCloudSyncConfigInput, CreateExpenseRecordInput,
-    CreateIncomeRecordInput, CreateLearningRecordInput, CreateProjectInput, CreateTagInput,
-    CreateTimeRecordInput, DimensionOptionInput, MonthlyCostBaselineInput, ParserMode,
-    ProjectAllocation, RecurringCostRuleInput, CapexCostInput,
+    CapexCostInput, CreateAiServiceConfigInput, CreateCloudSyncConfigInput,
+    CreateExpenseRecordInput, CreateIncomeRecordInput, CreateLearningRecordInput,
+    CreateProjectInput, CreateTagInput, CreateTimeRecordInput, DimensionOptionInput,
+    MonthlyCostBaselineInput, ParserMode, ProjectAllocation, RecurringCostRuleInput,
 };
 use crate::services::{
     AiService, BackupService, CostService, ProjectService, RecordService, SnapshotService,
@@ -45,15 +45,33 @@ impl DemoDataService {
         connection.execute("DELETE FROM metric_snapshots WHERE user_id = ?1", [user_id])?;
         connection.execute("DELETE FROM restore_records WHERE user_id = ?1", [user_id])?;
         connection.execute("DELETE FROM backup_records WHERE user_id = ?1", [user_id])?;
-        connection.execute("DELETE FROM cloud_sync_configs WHERE user_id = ?1", [user_id])?;
-        connection.execute("DELETE FROM ai_service_configs WHERE user_id = ?1", [user_id])?;
-        connection.execute("DELETE FROM expense_capex_items WHERE user_id = ?1", [user_id])?;
-        connection.execute("DELETE FROM expense_recurring_rules WHERE user_id = ?1", [user_id])?;
-        connection.execute("DELETE FROM expense_baseline_months WHERE user_id = ?1", [user_id])?;
+        connection.execute(
+            "DELETE FROM cloud_sync_configs WHERE user_id = ?1",
+            [user_id],
+        )?;
+        connection.execute(
+            "DELETE FROM ai_service_configs WHERE user_id = ?1",
+            [user_id],
+        )?;
+        connection.execute(
+            "DELETE FROM expense_capex_items WHERE user_id = ?1",
+            [user_id],
+        )?;
+        connection.execute(
+            "DELETE FROM expense_recurring_rules WHERE user_id = ?1",
+            [user_id],
+        )?;
+        connection.execute(
+            "DELETE FROM expense_baseline_months WHERE user_id = ?1",
+            [user_id],
+        )?;
         connection.execute("DELETE FROM daily_reviews WHERE user_id = ?1", [user_id])?;
         connection.execute("DELETE FROM audit_logs WHERE user_id = ?1", [user_id])?;
         connection.execute("DELETE FROM record_tag_links WHERE user_id = ?1", [user_id])?;
-        connection.execute("DELETE FROM record_project_links WHERE user_id = ?1", [user_id])?;
+        connection.execute(
+            "DELETE FROM record_project_links WHERE user_id = ?1",
+            [user_id],
+        )?;
         connection.execute("DELETE FROM learning_records WHERE user_id = ?1", [user_id])?;
         connection.execute("DELETE FROM expense_records WHERE user_id = ?1", [user_id])?;
         connection.execute("DELETE FROM income_records WHERE user_id = ?1", [user_id])?;

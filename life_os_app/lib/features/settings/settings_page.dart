@@ -83,7 +83,8 @@ class _SettingsPageState extends State<SettingsPage> {
               _SettingsLink(
                 title: '经营参数',
                 description: '理想时薪、每日目标、时区和币种。',
-                onTap: () => Navigator.of(context).pushNamed('/settings/operating'),
+                onTap: () =>
+                    Navigator.of(context).pushNamed('/settings/operating'),
               ),
               const SizedBox(height: 12),
               _SettingsLink(
@@ -114,13 +115,22 @@ class _SettingsPageState extends State<SettingsPage> {
                   ViewStatus.loading => '正在读取 AI 配置',
                   _ => _aiState.message ?? '当前没有激活的 AI 配置',
                 },
-                onTap: () => Navigator.of(context).pushNamed('/settings/ai-services'),
+                onTap: () =>
+                    Navigator.of(context).pushNamed('/settings/ai-services'),
+              ),
+              const SizedBox(height: 12),
+              _SettingsLink(
+                title: '导出中心',
+                description: '状态图片文档、归档规则与数据库备份入口。',
+                onTap: () =>
+                    Navigator.of(context).pushNamed('/settings/export-center'),
               ),
               const SizedBox(height: 12),
               _SettingsLink(
                 title: '备份与恢复',
                 description: '本地与远程备份入口。',
-                onTap: () => Navigator.of(context).pushNamed('/settings/backup'),
+                onTap: () =>
+                    Navigator.of(context).pushNamed('/settings/backup'),
               ),
               const SizedBox(height: 12),
               _SettingsLink(
@@ -131,7 +141,8 @@ class _SettingsPageState extends State<SettingsPage> {
                   ViewStatus.loading => '正在读取云同步配置',
                   _ => _cloudState.message ?? '当前没有激活的云同步配置',
                 },
-                onTap: () => Navigator.of(context).pushNamed('/settings/cloud-sync'),
+                onTap: () =>
+                    Navigator.of(context).pushNamed('/settings/cloud-sync'),
               ),
             ],
           ),
@@ -150,7 +161,8 @@ class _SettingsPageState extends State<SettingsPage> {
               if (_demoState.status == ViewStatus.data)
                 Padding(
                   padding: const EdgeInsets.only(bottom: 12),
-                  child: Text(_demoState.data!, style: Theme.of(context).textTheme.bodyMedium),
+                  child: Text(_demoState.data!,
+                      style: Theme.of(context).textTheme.bodyMedium),
                 ),
               if (_demoState.status == ViewStatus.error)
                 Padding(

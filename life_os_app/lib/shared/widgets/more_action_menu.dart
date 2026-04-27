@@ -48,10 +48,12 @@ class MoreActionMenu extends StatelessWidget {
   }
 
   Future<void> _openSheet(BuildContext context) {
+    final rootContext = Navigator.of(context, rootNavigator: true).context;
     final availableItems =
         items.where((item) => item.enabled || item.onPressed != null).toList();
     return showModalBottomSheet<void>(
-      context: context,
+      context: rootContext,
+      useRootNavigator: true,
       showDragHandle: true,
       backgroundColor: const Color(0xFFF7F9FD),
       builder: (context) {

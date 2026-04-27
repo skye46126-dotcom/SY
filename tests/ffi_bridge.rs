@@ -17,12 +17,9 @@ struct BridgeResponse<T> {
 }
 
 fn bridge_call(database_path: &str, method: &str, payload: Value) -> Value {
-    let response: BridgeResponse<Value> = serde_json::from_str(&invoke_json(
-        database_path,
-        method,
-        &payload.to_string(),
-    ))
-    .expect("bridge response should be valid JSON");
+    let response: BridgeResponse<Value> =
+        serde_json::from_str(&invoke_json(database_path, method, &payload.to_string()))
+            .expect("bridge response should be valid JSON");
 
     if !response.ok {
         let error = response.error.expect("error response should include error");
@@ -32,7 +29,9 @@ fn bridge_call(database_path: &str, method: &str, payload: Value) -> Value {
         );
     }
 
-    response.data.expect("bridge success response should include data")
+    response
+        .data
+        .expect("bridge success response should include data")
 }
 
 #[test]

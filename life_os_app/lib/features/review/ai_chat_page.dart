@@ -80,7 +80,8 @@ class _AiChatPageState extends State<AiChatPage> {
         return;
       }
       setState(() {
-        final parsed = AiParseResultModel.fromJson(result.cast<String, dynamic>());
+        final parsed =
+            AiParseResultModel.fromJson(result.cast<String, dynamic>());
         _editableDrafts = parsed.items;
         _parseState = ViewState.ready(parsed);
         _commitState = ViewState.initial();
@@ -132,7 +133,8 @@ class _AiChatPageState extends State<AiChatPage> {
       subtitle: 'Review Assistant',
       actions: [
         OutlinedButton(
-          onPressed: () => Navigator.of(context).pushNamed('/settings/ai-services'),
+          onPressed: () =>
+              Navigator.of(context).pushNamed('/settings/ai-services'),
           child: const Text('管理配置'),
         ),
         ElevatedButton(
@@ -163,7 +165,8 @@ class _AiChatPageState extends State<AiChatPage> {
             children: [
               TextField(
                 controller: _contextDateController,
-                decoration: const InputDecoration(labelText: '上下文日期 YYYY-MM-DD'),
+                decoration:
+                    const InputDecoration(labelText: '上下文日期 YYYY-MM-DD'),
               ),
               const SizedBox(height: 12),
               Wrap(
@@ -200,7 +203,9 @@ class _AiChatPageState extends State<AiChatPage> {
           eyebrow: 'Parsed Drafts',
           title: '解析结果',
           trailing: ElevatedButton(
-            onPressed: _parseState.hasData && _parseState.data!.items.isNotEmpty ? _commit : null,
+            onPressed: _parseState.hasData && _parseState.data!.items.isNotEmpty
+                ? _commit
+                : null,
             child: const Text('确认入库'),
           ),
           child: switch (_parseState.status) {
@@ -223,12 +228,14 @@ class _AiChatPageState extends State<AiChatPage> {
                       decoration: BoxDecoration(
                         color: Colors.white.withValues(alpha: 0.42),
                         borderRadius: BorderRadius.circular(20),
-                        border: Border.all(color: Colors.white.withValues(alpha: 0.58)),
+                        border: Border.all(
+                            color: Colors.white.withValues(alpha: 0.58)),
                       ),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text('${item.kind} · confidence ${(item.confidence * 100).toStringAsFixed(1)}%'),
+                          Text(
+                              '${item.kind} · confidence ${(item.confidence * 100).toStringAsFixed(1)}%'),
                           const SizedBox(height: 8),
                           for (final entry in item.payload.entries)
                             Padding(
@@ -287,7 +294,8 @@ class _AiChatPageState extends State<AiChatPage> {
                     Text('成功提交 ${_commitState.data!.committed.length} 条'),
                     const SizedBox(height: 8),
                     for (final item in _commitState.data!.committed)
-                      Text('${item.kind} · ${item.recordId} · ${item.occurredAt}'),
+                      Text(
+                          '${item.kind} · ${item.recordId} · ${item.occurredAt}'),
                   ],
                   if (_commitState.data!.failures.isNotEmpty) ...[
                     const SizedBox(height: 12),
@@ -332,6 +340,7 @@ class _AiChatPageState extends State<AiChatPage> {
   }
 
   Future<void> _editDraft(AiParseDraftModel draft) async {
+    final rootContext = Navigator.of(context, rootNavigator: true).context;
     final kind = TextEditingController(text: draft.kind);
     final confidence = TextEditingController(
       text: (draft.confidence * 100).toStringAsFixed(1),
@@ -343,17 +352,24 @@ class _AiChatPageState extends State<AiChatPage> {
     };
     try {
       final confirmed = await showDialog<bool>(
-        context: context,
-        builder: (context) => AlertDialog(
+        context: rootContext,
+        builder: (dialogContext) => AlertDialog(
           title: const Text('修改 AI 草稿'),
           content: SizedBox(
             width: 720,
             child: SingleChildScrollView(
               child: Column(
                 children: [
-                  TextField(controller: kind, decoration: const InputDecoration(labelText: 'Kind')),
-                  TextField(controller: confidence, decoration: const InputDecoration(labelText: 'Confidence %')),
-                  TextField(controller: warning, decoration: const InputDecoration(labelText: 'Warning')),
+                  TextField(
+                      controller: kind,
+                      decoration: const InputDecoration(labelText: 'Kind')),
+                  TextField(
+                      controller: confidence,
+                      decoration:
+                          const InputDecoration(labelText: 'Confidence %')),
+                  TextField(
+                      controller: warning,
+                      decoration: const InputDecoration(labelText: 'Warning')),
                   const SizedBox(height: 12),
                   for (final entry in payloadControllers.entries)
                     Padding(
@@ -369,11 +385,11 @@ class _AiChatPageState extends State<AiChatPage> {
           ),
           actions: [
             TextButton(
-              onPressed: () => Navigator.pop(context, false),
+              onPressed: () => Navigator.of(dialogContext).pop(false),
               child: const Text('取消'),
             ),
             ElevatedButton(
-              onPressed: () => Navigator.pop(context, true),
+              onPressed: () => Navigator.of(dialogContext).pop(true),
               child: const Text('保存'),
             ),
           ],
@@ -382,7 +398,8 @@ class _AiChatPageState extends State<AiChatPage> {
       if (confirmed != true) return;
       final updated = draft.copyWith(
         kind: kind.text.trim(),
-        confidence: ((double.tryParse(confidence.text.trim()) ?? 0) / 100).clamp(0, 1),
+        confidence:
+            ((double.tryParse(confidence.text.trim()) ?? 0) / 100).clamp(0, 1),
         warning: warning.text.trim().isEmpty ? null : warning.text.trim(),
         payload: {
           for (final entry in payloadControllers.entries)
@@ -416,7 +433,8 @@ class _AiChatPageState extends State<AiChatPage> {
 
   void _removeDraft(String draftId) {
     setState(() {
-      _editableDrafts = _editableDrafts.where((item) => item.draftId != draftId).toList();
+      _editableDrafts =
+          _editableDrafts.where((item) => item.draftId != draftId).toList();
       if (_parseState.hasData) {
         _parseState = ViewState.ready(
           AiParseResultModel(

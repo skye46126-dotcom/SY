@@ -156,7 +156,9 @@ impl ProjectRepository {
                 },
             )
             .optional()?;
-        let Some((id, name, status_code, started_on, ended_on, ai_enable_ratio, score, note)) = base else {
+        let Some((id, name, status_code, started_on, ended_on, ai_enable_ratio, score, note)) =
+            base
+        else {
             return Ok(None);
         };
 

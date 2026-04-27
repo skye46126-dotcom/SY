@@ -105,6 +105,7 @@ class ProjectProgressItem {
     required this.timeSpentMinutes,
     required this.incomeEarnedCents,
     required this.directExpenseCents,
+    required this.timeCostCents,
     required this.allocatedStructuralCostCents,
     required this.operatingCostCents,
     required this.fullyLoadedCostCents,
@@ -119,6 +120,7 @@ class ProjectProgressItem {
   final int timeSpentMinutes;
   final int incomeEarnedCents;
   final int directExpenseCents;
+  final int timeCostCents;
   final int allocatedStructuralCostCents;
   final int operatingCostCents;
   final int fullyLoadedCostCents;
@@ -134,6 +136,7 @@ class ProjectProgressItem {
       timeSpentMinutes: (json['time_spent_minutes'] as num?)?.toInt() ?? 0,
       incomeEarnedCents: (json['income_earned_cents'] as num?)?.toInt() ?? 0,
       directExpenseCents: (json['direct_expense_cents'] as num?)?.toInt() ?? 0,
+      timeCostCents: (json['time_cost_cents'] as num?)?.toInt() ?? 0,
       allocatedStructuralCostCents:
           (json['allocated_structural_cost_cents'] as num?)?.toInt() ?? 0,
       operatingCostCents: (json['operating_cost_cents'] as num?)?.toInt() ?? 0,

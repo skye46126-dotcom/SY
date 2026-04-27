@@ -1,4 +1,4 @@
-use chrono::{Datelike, Duration, NaiveDate, TimeZone};
+use chrono::{Datelike, Duration, NaiveDate, TimeZone, Utc};
 use chrono_tz::Tz;
 use rusqlite::{Connection, params};
 
@@ -196,6 +196,7 @@ impl ReviewRepository {
             &start_at_utc,
             &end_at_utc_exclusive,
             total_work_minutes,
+            timezone,
         )?;
         let key_events = load_key_events(
             connection,
@@ -475,6 +476,7 @@ fn load_project_buckets(
     start_at_utc: &str,
     end_at_utc_exclusive: &str,
     total_work_minutes: i64,
+    timezone: &str,
 ) -> Result<(Vec<ProjectProgressItem>, Vec<ProjectProgressItem>)> {
     let structural_cost_total = structural_expense_for_window(
         connection,
@@ -483,6 +485,7 @@ fn load_project_buckets(
         NaiveDate::parse_from_str(end_date, "%Y-%m-%d").expect("validated end date"),
         false,
     )?;
+    let benchmark_hourly_rate_cents = benchmark_hourly_rate_cents(connection, user_id, timezone)?;
     let mut statement = connection.prepare(
         "SELECT p.id, p.name,
                 COALESCE((
@@ -573,8 +576,14 @@ fn load_project_buckets(
         } else {
             0
         };
-        let operating_cost_cents = direct_expense_cents;
-        let fully_loaded_cost_cents = direct_expense_cents + allocated_structural_cost_cents;
+        let time_cost_cents = if benchmark_hourly_rate_cents > 0 && time_spent_minutes > 0 {
+            benchmark_hourly_rate_cents * time_spent_minutes / 60
+        } else {
+            0
+        };
+        let operating_cost_cents = direct_expense_cents + time_cost_cents;
+        let fully_loaded_cost_cents =
+            direct_expense_cents + time_cost_cents + allocated_structural_cost_cents;
         let hourly_rate_yuan = if time_spent_minutes > 0 {
             (income_earned_cents as f64 / 100.0) / (time_spent_minutes as f64 / 60.0)
         } else {
@@ -595,6 +604,7 @@ fn load_project_buckets(
             time_spent_minutes,
             income_earned_cents,
             direct_expense_cents,
+            time_cost_cents,
             allocated_structural_cost_cents,
             operating_cost_cents,
             fully_loaded_cost_cents,
@@ -1231,6 +1241,95 @@ fn roi(income_cents: i64, cost_cents: i64) -> f64 {
     } else {
         (income_cents - cost_cents) as f64 / cost_cents as f64 * 100.0
     }
+}
+
+fn benchmark_hourly_rate_cents(
+    connection: &Connection,
+    user_id: &str,
+    timezone: &str,
+) -> Result<i64> {
+    let last_year_rate = last_year_hourly_rate_cents(connection, user_id, timezone)?;
+    if last_year_rate > 0 {
+        return Ok(last_year_rate);
+    }
+    let ideal = scalar_long(
+        connection,
+        "SELECT COALESCE(ideal_hourly_rate_cents, 0)
+         FROM users
+         WHERE id = ?1
+         LIMIT 1",
+        params![user_id],
+    )?;
+    if ideal > 0 {
+        return Ok(ideal);
+    }
+    let total_income = scalar_long(
+        connection,
+        "SELECT COALESCE(SUM(amount_cents), 0)
+         FROM income_records
+         WHERE user_id = ?1 AND is_deleted = 0",
+        params![user_id],
+    )?;
+    let total_work_minutes = total_user_work_minutes(
+        connection,
+        user_id,
+        "1970-01-01T00:00:00+00:00",
+        "2100-01-01T00:00:00+00:00",
+    )?;
+    Ok(if total_work_minutes > 0 {
+        total_income * 60 / total_work_minutes
+    } else {
+        0
+    })
+}
+
+fn last_year_hourly_rate_cents(
+    connection: &Connection,
+    user_id: &str,
+    timezone: &str,
+) -> Result<i64> {
+    let year = Utc::now().with_timezone(&parse_timezone(timezone)?).year() - 1;
+    let start = NaiveDate::from_ymd_opt(year, 1, 1).expect("valid last year start");
+    let end = NaiveDate::from_ymd_opt(year, 12, 31).expect("valid last year end");
+    let income = scalar_long(
+        connection,
+        "SELECT COALESCE(SUM(amount_cents), 0)
+         FROM income_records
+         WHERE user_id = ?1 AND is_deleted = 0 AND occurred_on >= ?2 AND occurred_on <= ?3",
+        params![user_id, start.to_string(), end.to_string()],
+    )?;
+    let work = total_user_work_minutes(
+        connection,
+        user_id,
+        &to_utc_start(start, timezone)?,
+        &to_utc_end_exclusive(end, timezone)?,
+    )?;
+    Ok(if work > 0 { income * 60 / work } else { 0 })
+}
+
+fn total_user_work_minutes(
+    connection: &Connection,
+    user_id: &str,
+    start_at_utc: &str,
+    end_at_utc_exclusive: &str,
+) -> Result<i64> {
+    scalar_long(
+        connection,
+        "SELECT COALESCE(SUM(duration_minutes), 0)
+         FROM time_records
+         WHERE user_id = ?1
+           AND is_deleted = 0
+           AND category_code = 'work'
+           AND started_at >= ?2
+           AND started_at < ?3",
+        params![user_id, start_at_utc, end_at_utc_exclusive],
+    )
+}
+
+fn parse_timezone(timezone: &str) -> Result<Tz> {
+    timezone
+        .parse()
+        .map_err(|_| LifeOsError::InvalidTimezone(timezone.to_string()))
 }
 
 fn build_summary(

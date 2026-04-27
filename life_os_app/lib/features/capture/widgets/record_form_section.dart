@@ -601,6 +601,7 @@ class _AdaptiveRecordFormState extends State<AdaptiveRecordForm> {
   }
 
   Future<void> _pickDate(String key) async {
+    final rootContext = Navigator.of(context, rootNavigator: true).context;
     final currentText = widget.controllers[key]!.text.trim();
     final initial = currentText.isEmpty
         ? DateTime.tryParse(widget.anchorDate) ?? DateTime.now()
@@ -608,7 +609,7 @@ class _AdaptiveRecordFormState extends State<AdaptiveRecordForm> {
             DateTime.tryParse(widget.anchorDate) ??
             DateTime.now();
     final result = await showDatePicker(
-      context: context,
+      context: rootContext,
       initialDate: initial,
       firstDate: DateTime(2020),
       lastDate: DateTime(2100),
@@ -616,6 +617,7 @@ class _AdaptiveRecordFormState extends State<AdaptiveRecordForm> {
     if (result == null) {
       return;
     }
+    if (!mounted) return;
     setState(() {
       widget.controllers[key]!.text =
           result.toIso8601String().split('T').first;
@@ -623,12 +625,14 @@ class _AdaptiveRecordFormState extends State<AdaptiveRecordForm> {
   }
 
   Future<void> _pickTime(String key) async {
+    final rootContext = Navigator.of(context, rootNavigator: true).context;
     final initial =
         _parseTime(widget.controllers[key]!.text) ??
             const TimeOfDay(hour: 9, minute: 0);
     var selected = initial;
     final result = await showModalBottomSheet<TimeOfDay>(
-      context: context,
+      context: rootContext,
+      useRootNavigator: true,
       builder: (context) => SizedBox(
         height: 320,
         child: Column(
@@ -682,6 +686,7 @@ class _AdaptiveRecordFormState extends State<AdaptiveRecordForm> {
     if (result == null) {
       return;
     }
+    if (!mounted) return;
     setState(() {
       widget.controllers[key]!.text = _timeText(result);
     });
@@ -841,8 +846,11 @@ class _OptionPickerField extends StatelessWidget {
       onTap: options.isEmpty
           ? null
           : () async {
+              final rootContext =
+                  Navigator.of(context, rootNavigator: true).context;
               final selectedCode = await showModalBottomSheet<String>(
-                context: context,
+                context: rootContext,
+                useRootNavigator: true,
                 builder: (context) => SafeArea(
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
@@ -883,6 +891,7 @@ class _OptionPickerField extends StatelessWidget {
                   ),
                 ),
               );
+              if (!context.mounted) return;
               if (selectedCode != null) {
                 onSelected(selectedCode);
               }

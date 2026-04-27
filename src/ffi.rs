@@ -6,13 +6,16 @@ use serde_json::Value;
 
 use crate::error::LifeOsError;
 use crate::models::{
-    AiCommitInput, AiParseInput, CreateAiServiceConfigInput, CreateCloudSyncConfigInput,
-    CreateExpenseRecordInput, CreateIncomeRecordInput, CreateLearningRecordInput,
-    CreateProjectInput, CreateTagInput, CreateTimeRecordInput, MonthlyCostBaselineInput,
-    RecurringCostRuleInput, CapexCostInput, DimensionOptionInput, RecordKind,
+    AiCommitInput, AiParseInput, CapexCostInput, CreateAiServiceConfigInput,
+    CreateCloudSyncConfigInput, CreateExpenseRecordInput, CreateIncomeRecordInput,
+    CreateLearningRecordInput, CreateProjectInput, CreateTagInput, CreateTimeRecordInput,
+    DimensionOptionInput, MonthlyCostBaselineInput, RecordKind, RecurringCostRuleInput,
     UpdateOperatingSettingsInput,
 };
-use crate::services::{AiService, BackupService, CostService, DemoDataService, ProjectService, RecordService, ReviewService, SnapshotService};
+use crate::services::{
+    AiService, BackupService, CostService, DemoDataService, ProjectService, RecordService,
+    ReviewService, SnapshotService,
+};
 
 #[derive(Debug, Serialize)]
 struct BridgeError {
@@ -388,7 +391,10 @@ fn success_response<T: Serialize>(data: T) -> String {
         error: None::<BridgeError>,
     })
     .unwrap_or_else(|error| {
-        fallback_error_json("serialize_error", format!("failed to serialize response: {error}"))
+        fallback_error_json(
+            "serialize_error",
+            format!("failed to serialize response: {error}"),
+        )
     })
 }
 
@@ -839,11 +845,7 @@ fn invoke_inner(
         "get_rate_comparison" => {
             let request: RateComparisonRequest = parse_payload(payload_json)?;
             let data = CostService::new(database_path)
-                .get_rate_comparison(
-                    &request.user_id,
-                    &request.anchor_date,
-                    &request.window_type,
-                )
+                .get_rate_comparison(&request.user_id, &request.anchor_date, &request.window_type)
                 .map_err(BridgeInvokeError::from_core)?;
             Ok(success_response(data))
         }
@@ -983,9 +985,7 @@ fn invoke_inner(
                         )
                     })?,
                     request.end_date.as_deref().ok_or_else(|| {
-                        BridgeInvokeError::invalid_argument(
-                            "end_date is required for range review",
-                        )
+                        BridgeInvokeError::invalid_argument("end_date is required for range review")
                     })?,
                     &request.timezone,
                 ),
@@ -1089,7 +1089,7 @@ fn invoke_inner(
                 other => {
                     return Err(BridgeInvokeError::invalid_argument(format!(
                         "unsupported record kind: {other}"
-                    )))
+                    )));
                 }
             };
             RecordService::new(database_path)
@@ -1137,7 +1137,10 @@ unsafe fn required_ptr_to_str(
     Ok(value.to_string())
 }
 
-unsafe fn optional_ptr_to_str(ptr: *const c_char, default: &str) -> Result<String, BridgeInvokeError> {
+unsafe fn optional_ptr_to_str(
+    ptr: *const c_char,
+    default: &str,
+) -> Result<String, BridgeInvokeError> {
     if ptr.is_null() {
         return Ok(default.to_string());
     }
