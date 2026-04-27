@@ -15,6 +15,7 @@ import 'widgets/today_metrics_section.dart';
 import 'widgets/today_recent_records_section.dart';
 import 'widgets/today_snapshot_section.dart';
 import 'widgets/today_status_hero.dart';
+import 'widgets/today_time_mix_section.dart';
 
 class TodayPage extends StatefulWidget {
   const TodayPage({super.key});
@@ -98,7 +99,12 @@ class _TodayPageState extends State<TodayPage> {
               summary: data?.summary,
               message: state.message,
             ),
+            TodayTimeMixSection(overview: data?.overview),
             TodayGoalProgressSection(goalProgress: data?.goalProgress),
+            TodaySnapshotSection(
+              snapshot: data?.snapshot,
+              summary: data?.summary,
+            ),
             TodayAlertsSection(alerts: data?.alerts),
             TodayRecentRecordsSection(
               records: data?.recentRecords,
@@ -107,7 +113,6 @@ class _TodayPageState extends State<TodayPage> {
               onCopy: _copyRecord,
               onDelete: _deleteRecord,
             ),
-            TodaySnapshotSection(snapshot: data?.snapshot),
           ],
         );
       },

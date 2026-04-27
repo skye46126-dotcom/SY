@@ -11,7 +11,12 @@ import '../../shared/widgets/segmented_control.dart';
 import '../../shared/widgets/section_card.dart';
 import '../../shared/widgets/state_views.dart';
 import 'review_controller.dart';
+import 'widgets/review_history_section.dart';
+import 'widgets/review_project_performance_section.dart';
+import 'widgets/review_quality_section.dart';
 import 'widgets/review_summary_section.dart';
+import 'widgets/review_tag_analysis_section.dart';
+import 'widgets/review_time_allocation_section.dart';
 import 'widgets/review_trend_section.dart';
 
 class ReviewPage extends StatefulWidget {
@@ -159,112 +164,57 @@ class _ReviewPageState extends State<ReviewPage> {
               message: controller.state.message,
             ),
             ReviewTrendSection(report: report, snapshot: snapshot),
+            ReviewTimeAllocationSection(report: report),
+            ReviewQualitySection(report: report),
+            ReviewProjectPerformanceSection(
+              title: '值得继续投入的项目',
+              projects: report?.topProjects ?? const [],
+              onProjectTap: _openProject,
+            ),
+            ReviewProjectPerformanceSection(
+              title: '需要警惕的项目',
+              projects: report?.sinkholeProjects ?? const [],
+              onProjectTap: _openProject,
+            ),
+            ReviewTagAnalysisSection(
+              title: '时间标签分析',
+              metrics: report?.timeTagMetrics ?? const [],
+              onTap: (metric) => _openTagDetail(
+                context,
+                scope: 'time',
+                tagName: metric.tagName,
+                report: report!,
+              ),
+            ),
+            ReviewTagAnalysisSection(
+              title: '支出标签分析',
+              metrics: report?.expenseTagMetrics ?? const [],
+              onTap: (metric) => _openTagDetail(
+                context,
+                scope: 'expense',
+                tagName: metric.tagName,
+                report: report!,
+              ),
+            ),
             SectionCard(
-              eyebrow: 'Deep Dive',
-              title: '项目 ROI / 下沉项目 / 历史流水',
-              child: report == null
-                  ? SectionMessageView(
-                      icon: Icons.analytics_outlined,
-                      title: '下钻区已建立',
-                      description: controller.state.message ??
-                          '这里承接 top projects、sinkhole projects、关键事件和历史流水。',
-                    )
-                  : Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        _MetricGroup(
-                          title: 'Top Projects',
-                          items: [
-                            for (final item in report.topProjects)
-                              '${item.projectName} · ROI ${(item.operatingRoiPerc).toStringAsFixed(2)}%',
-                          ],
-                          onItemTap: (index) =>
-                              _openProject(report.topProjects[index].projectId),
-                        ),
-                        const SizedBox(height: 16),
-                        _MetricGroup(
-                          title: 'Sinkhole Projects',
-                          items: [
-                            for (final item in report.sinkholeProjects)
-                              '${item.projectName} · ROI ${(item.operatingRoiPerc).toStringAsFixed(2)}%',
-                          ],
-                          onItemTap: (index) => _openProject(
-                              report.sinkholeProjects[index].projectId),
-                        ),
-                        const SizedBox(height: 16),
-                        _MetricGroup(
-                          title: '时间分配',
-                          items: [
-                            for (final item in report.timeAllocations)
-                              '${item.categoryName} · ${item.minutes} 分钟 · ${item.percentage.toStringAsFixed(1)}%',
-                          ],
-                        ),
-                        const SizedBox(height: 16),
-                        _MetricGroup(
-                          title: '关键事件',
-                          items: [
-                            for (final item in report.keyEvents)
-                              '${item.title} · ${item.occurredAt}',
-                          ],
-                        ),
-                        const SizedBox(height: 16),
-                        _MetricGroup(
-                          title: '收入历史',
-                          items: [
-                            for (final item in report.incomeHistory)
-                              '${item.title} · ${item.occurredAt}',
-                          ],
-                        ),
-                        const SizedBox(height: 16),
-                        Wrap(
-                          spacing: 8,
-                          children: [
-                            for (final item in const [
-                              'all',
-                              'events',
-                              'income',
-                              'history'
-                            ])
-                              ChoiceChip(
-                                label: Text(_historyLabel(item)),
-                                selected: _historyFilter == item,
-                                onSelected: (_) =>
-                                    setState(() => _historyFilter = item),
-                              ),
-                          ],
-                        ),
-                        const SizedBox(height: 12),
-                        _MetricGroup(
-                          title: '历史流水',
-                          items: [
-                            for (final item in _historyItems(report))
-                              '${item.title} · ${item.occurredAt}',
-                          ],
-                        ),
-                        const SizedBox(height: 16),
-                        _TagMetricSection(
-                          title: '时间标签分析',
-                          metrics: report.timeTagMetrics,
-                          onTap: (metric) => _openTagDetail(
-                            context,
-                            scope: 'time',
-                            tagName: metric.tagName,
-                            report: report,
-                          ),
-                        ),
-                        const SizedBox(height: 16),
-                        _TagMetricSection(
-                          title: '支出标签分析',
-                          metrics: report.expenseTagMetrics,
-                          onTap: (metric) => _openTagDetail(
-                            context,
-                            scope: 'expense',
-                            tagName: metric.tagName,
-                            report: report,
-                          ),
-                        ),
-                      ],
+              eyebrow: 'History Filter',
+              title: '历史筛选',
+              child: Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  for (final item in const ['all', 'events', 'income', 'history'])
+                    ChoiceChip(
+                      label: Text(_historyLabel(item)),
+                      selected: _historyFilter == item,
+                      onSelected: (_) => setState(() => _historyFilter = item),
                     ),
+                ],
+              ),
+            ),
+            ReviewHistorySection(
+              title: '历史流水',
+              items: report == null ? const [] : _historyItems(report),
             ),
           ],
         );
@@ -384,76 +334,5 @@ class _ReviewPageState extends State<ReviewPage> {
           ...report.historyRecords,
         ];
     }
-  }
-}
-
-class _MetricGroup extends StatelessWidget {
-  const _MetricGroup({
-    required this.title,
-    required this.items,
-    this.onItemTap,
-  });
-
-  final String title;
-  final List<String> items;
-  final ValueChanged<int>? onItemTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(title, style: Theme.of(context).textTheme.titleMedium),
-        const SizedBox(height: 8),
-        if (items.isEmpty)
-          const Text('暂无数据')
-        else
-          for (var index = 0; index < items.length; index++)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 6),
-              child: InkWell(
-                onTap: onItemTap == null ? null : () => onItemTap!(index),
-                child: Text(items[index],
-                    style: Theme.of(context).textTheme.bodyMedium),
-              ),
-            ),
-      ],
-    );
-  }
-}
-
-class _TagMetricSection extends StatelessWidget {
-  const _TagMetricSection({
-    required this.title,
-    required this.metrics,
-    required this.onTap,
-  });
-
-  final String title;
-  final List<ReviewTagMetric> metrics;
-  final ValueChanged<ReviewTagMetric> onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(title, style: Theme.of(context).textTheme.titleMedium),
-        const SizedBox(height: 8),
-        Wrap(
-          spacing: 10,
-          runSpacing: 10,
-          children: [
-            for (final metric in metrics)
-              ActionChip(
-                label: Text(
-                  '${metric.emoji ?? ''} ${metric.tagName} ${(metric.percentage).toStringAsFixed(1)}%',
-                ),
-                onPressed: () => onTap(metric),
-              ),
-          ],
-        ),
-      ],
-    );
   }
 }

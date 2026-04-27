@@ -329,12 +329,14 @@ class _CostManagementPageState extends State<CostManagementPage> {
         context: context,
         builder: (context) => AlertDialog(
           title: const Text('编辑月基线'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(controller: basic, decoration: const InputDecoration(labelText: '基础生活(元)')),
-              TextField(controller: fixed, decoration: const InputDecoration(labelText: '固定订阅(元)')),
-            ],
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(controller: basic, decoration: const InputDecoration(labelText: '基础生活(元)')),
+                TextField(controller: fixed, decoration: const InputDecoration(labelText: '固定订阅(元)')),
+              ],
+            ),
           ),
           actions: [
             TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('取消')),
@@ -387,60 +389,62 @@ class _CostManagementPageState extends State<CostManagementPage> {
         builder: (context) => AlertDialog(
           title: Text(existing == null ? '新增周期规则' : '编辑周期规则'),
           content: StatefulBuilder(
-            builder: (context, setState) => Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TextField(controller: name, decoration: const InputDecoration(labelText: '名称')),
-                ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  title: const Text('类别'),
-                  subtitle: Text(
-                    _expenseCategoryOptions
-                            .where((item) => item.code == selectedCategory)
-                            .map((item) => item.displayName)
-                            .cast<String?>()
-                            .firstWhere((item) => item != null, orElse: () => '请选择') ??
-                        '请选择',
-                  ),
-                  trailing: const Icon(Icons.arrow_drop_down_rounded),
-                  onTap: () async {
-                    final selected = await showModalBottomSheet<String>(
-                      context: context,
-                      builder: (context) => SafeArea(
-                        child: ListView(
-                          shrinkWrap: true,
-                          children: [
-                            for (final item in _expenseCategoryOptions)
-                              ListTile(
-                                title: Text(item.displayName),
-                                subtitle: Text(item.code),
-                                trailing: item.code == selectedCategory
-                                    ? const Icon(Icons.check_rounded)
-                                    : null,
-                                onTap: () => Navigator.of(context).pop(item.code),
-                              ),
-                          ],
+            builder: (context, setState) => SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextField(controller: name, decoration: const InputDecoration(labelText: '名称')),
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: const Text('类别'),
+                    subtitle: Text(
+                      _expenseCategoryOptions
+                              .where((item) => item.code == selectedCategory)
+                              .map((item) => item.displayName)
+                              .cast<String?>()
+                              .firstWhere((item) => item != null, orElse: () => '请选择') ??
+                          '请选择',
+                    ),
+                    trailing: const Icon(Icons.arrow_drop_down_rounded),
+                    onTap: () async {
+                      final selected = await showModalBottomSheet<String>(
+                        context: context,
+                        builder: (context) => SafeArea(
+                          child: ListView(
+                            shrinkWrap: true,
+                            children: [
+                              for (final item in _expenseCategoryOptions)
+                                ListTile(
+                                  title: Text(item.displayName),
+                                  subtitle: Text(item.code),
+                                  trailing: item.code == selectedCategory
+                                      ? const Icon(Icons.check_rounded)
+                                      : null,
+                                  onTap: () => Navigator.of(context).pop(item.code),
+                                ),
+                            ],
+                          ),
                         ),
-                      ),
-                    );
-                    if (selected != null) {
-                      selectedCategory = selected;
+                      );
+                      if (selected != null) {
+                        selectedCategory = selected;
+                        setState(() {});
+                      }
+                    },
+                  ),
+                  TextField(controller: amount, decoration: const InputDecoration(labelText: '金额(元)')),
+                  TextField(controller: startMonth, decoration: const InputDecoration(labelText: '开始月份 YYYY-MM')),
+                  TextField(controller: endMonth, decoration: const InputDecoration(labelText: '结束月份 YYYY-MM')),
+                  SwitchListTile(
+                    value: necessary.value,
+                    onChanged: (value) {
+                      necessary.value = value;
                       setState(() {});
-                    }
-                  },
-                ),
-                TextField(controller: amount, decoration: const InputDecoration(labelText: '金额(元)')),
-                TextField(controller: startMonth, decoration: const InputDecoration(labelText: '开始月份 YYYY-MM')),
-                TextField(controller: endMonth, decoration: const InputDecoration(labelText: '结束月份 YYYY-MM')),
-                SwitchListTile(
-                  value: necessary.value,
-                  onChanged: (value) {
-                    necessary.value = value;
-                    setState(() {});
-                  },
-                  title: const Text('必要支出'),
-                ),
-              ],
+                    },
+                    title: const Text('必要支出'),
+                  ),
+                ],
+              ),
             ),
           ),
           actions: [
@@ -509,21 +513,23 @@ class _CostManagementPageState extends State<CostManagementPage> {
         context: context,
         builder: (context) => AlertDialog(
           title: Text(existing == null ? '新增 CAPEX' : '编辑 CAPEX'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(controller: name, decoration: const InputDecoration(labelText: '名称')),
-              TextField(controller: date, decoration: const InputDecoration(labelText: '购买日期 YYYY-MM-DD')),
-              TextField(controller: amount, decoration: const InputDecoration(labelText: '金额(元)')),
-              TextField(controller: usefulMonths, decoration: const InputDecoration(labelText: '使用月数')),
-              TextField(
-                controller: residual,
-                decoration: const InputDecoration(
-                  labelText: '残值率(%)',
-                  helperText: '例如 20 表示残值率为 20%。',
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(controller: name, decoration: const InputDecoration(labelText: '名称')),
+                TextField(controller: date, decoration: const InputDecoration(labelText: '购买日期 YYYY-MM-DD')),
+                TextField(controller: amount, decoration: const InputDecoration(labelText: '金额(元)')),
+                TextField(controller: usefulMonths, decoration: const InputDecoration(labelText: '使用月数')),
+                TextField(
+                  controller: residual,
+                  decoration: const InputDecoration(
+                    labelText: '残值率(%)',
+                    helperText: '例如 20 表示残值率为 20%。',
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
           actions: [
             TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('取消')),

@@ -890,12 +890,13 @@ class _OptionPickerField extends StatelessWidget {
       child: InputDecorator(
         decoration: InputDecoration(
           labelText: label,
+          hintText: options.isEmpty ? '暂无可选项' : '请选择',
           helperText: helperText,
           suffixIcon: const Icon(Icons.arrow_drop_down_rounded),
         ),
         isEmpty: displayText.isEmpty,
         child: Text(
-          displayText.isEmpty ? '请选择' : displayText,
+          displayText,
           style: displayText.isEmpty
               ? Theme.of(context)
                   .textTheme
