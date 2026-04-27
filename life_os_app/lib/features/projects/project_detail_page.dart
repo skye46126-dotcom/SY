@@ -12,6 +12,7 @@ import '../../services/image_export_service.dart';
 import '../../shared/view_state.dart';
 import '../../shared/widgets/export_document_dialog.dart';
 import '../../shared/widgets/module_page.dart';
+import '../../shared/widgets/safe_pop.dart';
 import '../../shared/widgets/section_card.dart';
 import '../../shared/widgets/state_views.dart';
 import '../review/widgets/record_editor_dialog.dart';
@@ -65,7 +66,8 @@ class _ProjectDetailPageState extends State<ProjectDetailPage> {
   final GlobalKey _exportBoundaryKey = GlobalKey();
   final ImageExportService _imageExportService = const ImageExportService();
   ProjectDetailController? _controller;
-  ViewState<ProjectMetricSnapshotSummaryModel?> _snapshotState = ViewState.initial();
+  ViewState<ProjectMetricSnapshotSummaryModel?> _snapshotState =
+      ViewState.initial();
   bool _loaded = false;
   bool _isExporting = false;
 
@@ -155,7 +157,8 @@ class _ProjectDetailPageState extends State<ProjectDetailPage> {
                         Text('状态: ${detail.statusCode}'),
                         Text('评估: ${detail.evaluationStatus}'),
                         Text('ROI: ${detail.roiPerc.toStringAsFixed(2)}%'),
-                        Text('经营 ROI: ${detail.operatingRoiPerc.toStringAsFixed(2)}%'),
+                        Text(
+                            '经营 ROI: ${detail.operatingRoiPerc.toStringAsFixed(2)}%'),
                       ],
                     ),
             ),
@@ -166,16 +169,21 @@ class _ProjectDetailPageState extends State<ProjectDetailPage> {
                   ? const SectionMessageView(
                       icon: Icons.calculate_rounded,
                       title: '指标区域已建立',
-                      description: '等待 ProjectDetail 返回收入、成本、利润和 break-even 指标。',
+                      description:
+                          '等待 ProjectDetail 返回收入、成本、利润和 break-even 指标。',
                     )
                   : Wrap(
                       spacing: 18,
                       runSpacing: 12,
                       children: [
-                        Text('收入: ¥${(detail.totalIncomeCents / 100).toStringAsFixed(2)}'),
-                        Text('直接支出: ¥${(detail.totalExpenseCents / 100).toStringAsFixed(2)}'),
-                        Text('全成本: ¥${(detail.totalCostCents / 100).toStringAsFixed(2)}'),
-                        Text('全成本利润: ¥${(detail.profitCents / 100).toStringAsFixed(2)}'),
+                        Text(
+                            '收入: ¥${(detail.totalIncomeCents / 100).toStringAsFixed(2)}'),
+                        Text(
+                            '直接支出: ¥${(detail.totalExpenseCents / 100).toStringAsFixed(2)}'),
+                        Text(
+                            '全成本: ¥${(detail.totalCostCents / 100).toStringAsFixed(2)}'),
+                        Text(
+                            '全成本利润: ¥${(detail.profitCents / 100).toStringAsFixed(2)}'),
                         Text('时长: ${detail.totalTimeMinutes} 分钟'),
                         Text('学习: ${detail.totalLearningMinutes} 分钟'),
                       ],
@@ -185,16 +193,21 @@ class _ProjectDetailPageState extends State<ProjectDetailPage> {
               eyebrow: 'Snapshot',
               title: '最近月度项目快照',
               child: switch (_snapshotState.status) {
-                ViewStatus.loading => const SectionLoadingView(label: '正在读取项目快照'),
+                ViewStatus.loading =>
+                  const SectionLoadingView(label: '正在读取项目快照'),
                 ViewStatus.data when _snapshotState.data != null => Wrap(
                     spacing: 18,
                     runSpacing: 12,
                     children: [
-                      Text('快照收入: ¥${(_snapshotState.data!.incomeCents / 100).toStringAsFixed(2)}'),
-                      Text('快照总成本: ¥${(_snapshotState.data!.totalCostCents / 100).toStringAsFixed(2)}'),
-                      Text('快照利润: ¥${(_snapshotState.data!.profitCents / 100).toStringAsFixed(2)}'),
+                      Text(
+                          '快照收入: ¥${(_snapshotState.data!.incomeCents / 100).toStringAsFixed(2)}'),
+                      Text(
+                          '快照总成本: ¥${(_snapshotState.data!.totalCostCents / 100).toStringAsFixed(2)}'),
+                      Text(
+                          '快照利润: ¥${(_snapshotState.data!.profitCents / 100).toStringAsFixed(2)}'),
                       Text('快照投入: ${_snapshotState.data!.investedMinutes} 分钟'),
-                      Text('快照 ROI: ${(_snapshotState.data!.roiRatio * 100).toStringAsFixed(2)}%'),
+                      Text(
+                          '快照 ROI: ${(_snapshotState.data!.roiRatio * 100).toStringAsFixed(2)}%'),
                     ],
                   ),
                 _ => SectionMessageView(
@@ -230,10 +243,12 @@ class _ProjectDetailPageState extends State<ProjectDetailPage> {
                               },
                               itemBuilder: (context) => const [
                                 PopupMenuItem(value: 'edit', child: Text('编辑')),
-                                PopupMenuItem(value: 'delete', child: Text('删除')),
+                                PopupMenuItem(
+                                    value: 'delete', child: Text('删除')),
                               ],
                               child: Padding(
-                                padding: const EdgeInsets.symmetric(vertical: 8),
+                                padding:
+                                    const EdgeInsets.symmetric(vertical: 8),
                                 child: Text(record.occurredAt),
                               ),
                             ),
@@ -265,7 +280,10 @@ class _ProjectDetailPageState extends State<ProjectDetailPage> {
         userId: runtime.userId,
         metricSnapshotId: latest.id,
       );
-      final item = projectSnapshots.where((entry) => entry.projectId == widget.projectId).cast<ProjectMetricSnapshotSummaryModel?>().firstWhere(
+      final item = projectSnapshots
+          .where((entry) => entry.projectId == widget.projectId)
+          .cast<ProjectMetricSnapshotSummaryModel?>()
+          .firstWhere(
             (entry) => entry != null,
             orElse: () => null,
           );
@@ -368,7 +386,8 @@ class _ProjectDetailPageState extends State<ProjectDetailPage> {
                                 trailing: item.code == selectedStatus
                                     ? const Icon(Icons.check_rounded)
                                     : null,
-                                onTap: () => Navigator.of(context).pop(item.code),
+                                onTap: () =>
+                                    Navigator.of(context).pop(item.code),
                               ),
                           ],
                         ),
@@ -398,11 +417,11 @@ class _ProjectDetailPageState extends State<ProjectDetailPage> {
             ),
             actions: [
               TextButton(
-                onPressed: () => Navigator.of(dialogContext).pop(false),
+                onPressed: () => safePop(dialogContext, false),
                 child: const Text('取消'),
               ),
               ElevatedButton(
-                onPressed: () => Navigator.of(dialogContext).pop(true),
+                onPressed: () => safePop(dialogContext, true),
                 child: const Text('保存'),
               ),
             ],
@@ -472,7 +491,9 @@ class _ProjectDetailPageState extends State<ProjectDetailPage> {
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      TextField(controller: name, decoration: const InputDecoration(labelText: '项目名称')),
+                      TextField(
+                          controller: name,
+                          decoration: const InputDecoration(labelText: '项目名称')),
                       ListTile(
                         contentPadding: EdgeInsets.zero,
                         title: const Text('状态'),
@@ -481,7 +502,8 @@ class _ProjectDetailPageState extends State<ProjectDetailPage> {
                                   .where((item) => item.code == selectedStatus)
                                   .map((item) => item.displayName)
                                   .cast<String?>()
-                                  .firstWhere((item) => item != null, orElse: () => selectedStatus) ??
+                                  .firstWhere((item) => item != null,
+                                      orElse: () => selectedStatus) ??
                               selectedStatus,
                         ),
                         trailing: const Icon(Icons.arrow_drop_down_rounded),
@@ -500,7 +522,8 @@ class _ProjectDetailPageState extends State<ProjectDetailPage> {
                                       trailing: item.code == selectedStatus
                                           ? const Icon(Icons.check_rounded)
                                           : null,
-                                      onTap: () => Navigator.of(context).pop(item.code),
+                                      onTap: () =>
+                                          Navigator.of(context).pop(item.code),
                                     ),
                                 ],
                               ),
@@ -513,8 +536,12 @@ class _ProjectDetailPageState extends State<ProjectDetailPage> {
                           }
                         },
                       ),
-                      TextField(controller: startedOn, decoration: const InputDecoration(labelText: '开始日期')),
-                      TextField(controller: endedOn, decoration: const InputDecoration(labelText: '结束日期')),
+                      TextField(
+                          controller: startedOn,
+                          decoration: const InputDecoration(labelText: '开始日期')),
+                      TextField(
+                          controller: endedOn,
+                          decoration: const InputDecoration(labelText: '结束日期')),
                       TextField(
                         controller: score,
                         keyboardType: TextInputType.number,
@@ -523,9 +550,13 @@ class _ProjectDetailPageState extends State<ProjectDetailPage> {
                       TextField(
                         controller: aiEnableRatio,
                         keyboardType: TextInputType.number,
-                        decoration: const InputDecoration(labelText: 'AI 启用比例 %'),
+                        decoration:
+                            const InputDecoration(labelText: 'AI 启用比例 %'),
                       ),
-                      TextField(controller: note, decoration: const InputDecoration(labelText: '备注'), maxLines: 3),
+                      TextField(
+                          controller: note,
+                          decoration: const InputDecoration(labelText: '备注'),
+                          maxLines: 3),
                       const SizedBox(height: 16),
                       Wrap(
                         spacing: 8,
@@ -552,8 +583,14 @@ class _ProjectDetailPageState extends State<ProjectDetailPage> {
                 ),
               ),
               actions: [
-                TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('取消')),
-                ElevatedButton(onPressed: () => Navigator.pop(context, true), child: const Text('保存')),
+                TextButton(
+                  onPressed: () => safePop(context, false),
+                  child: const Text('取消'),
+                ),
+                ElevatedButton(
+                  onPressed: () => safePop(context, true),
+                  child: const Text('保存'),
+                ),
               ],
             ),
           );
@@ -564,13 +601,13 @@ class _ProjectDetailPageState extends State<ProjectDetailPage> {
         method: 'update_project_record',
         payload: {
           'project_id': detail.id,
-            'input': {
-              'user_id': runtime.userId,
-              'name': name.text,
-              'status_code': selectedStatus,
-              'started_on': startedOn.text,
-              'ended_on': endedOn.text.isEmpty ? null : endedOn.text,
-              'ai_enable_ratio': int.tryParse(aiEnableRatio.text),
+          'input': {
+            'user_id': runtime.userId,
+            'name': name.text,
+            'status_code': selectedStatus,
+            'started_on': startedOn.text,
+            'ended_on': endedOn.text.isEmpty ? null : endedOn.text,
+            'ai_enable_ratio': int.tryParse(aiEnableRatio.text),
             'score': int.tryParse(score.text),
             'note': note.text.isEmpty ? null : note.text,
             'tag_ids': selectedTagIds.toList(),
@@ -660,7 +697,8 @@ class _ProjectDetailPageState extends State<ProjectDetailPage> {
               recordId: record.recordId,
               userId: runtime.userId,
               anchorDate: detailAnchorDate(),
-              timeSnapshot: TimeRecordSnapshotModel.fromJson(snapshot.cast<String, dynamic>()),
+              timeSnapshot: TimeRecordSnapshotModel.fromJson(
+                  snapshot.cast<String, dynamic>()),
               projectOptions: typedProjectOptions,
               tags: typedTags,
             );
@@ -669,7 +707,8 @@ class _ProjectDetailPageState extends State<ProjectDetailPage> {
               recordId: record.recordId,
               userId: runtime.userId,
               anchorDate: detailAnchorDate(),
-              incomeSnapshot: IncomeRecordSnapshotModel.fromJson(snapshot.cast<String, dynamic>()),
+              incomeSnapshot: IncomeRecordSnapshotModel.fromJson(
+                  snapshot.cast<String, dynamic>()),
               projectOptions: typedProjectOptions,
               tags: typedTags,
             );
@@ -678,7 +717,8 @@ class _ProjectDetailPageState extends State<ProjectDetailPage> {
               recordId: record.recordId,
               userId: runtime.userId,
               anchorDate: detailAnchorDate(),
-              expenseSnapshot: ExpenseRecordSnapshotModel.fromJson(snapshot.cast<String, dynamic>()),
+              expenseSnapshot: ExpenseRecordSnapshotModel.fromJson(
+                  snapshot.cast<String, dynamic>()),
               projectOptions: typedProjectOptions,
               tags: typedTags,
             );
@@ -687,7 +727,8 @@ class _ProjectDetailPageState extends State<ProjectDetailPage> {
               recordId: record.recordId,
               userId: runtime.userId,
               anchorDate: detailAnchorDate(),
-              learningSnapshot: LearningRecordSnapshotModel.fromJson(snapshot.cast<String, dynamic>()),
+              learningSnapshot: LearningRecordSnapshotModel.fromJson(
+                  snapshot.cast<String, dynamic>()),
               projectOptions: typedProjectOptions,
               tags: typedTags,
             );

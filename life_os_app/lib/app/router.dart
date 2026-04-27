@@ -17,6 +17,7 @@ import '../features/settings/cloud_sync_configs_page.dart';
 import '../features/settings/dimension_manage_page.dart';
 import '../features/settings/export_center_page.dart';
 import '../features/settings/operating_settings_page.dart';
+import '../features/settings/poster_export_page.dart';
 import '../features/settings/settings_page.dart';
 import '../features/settings/tag_manage_page.dart';
 import '../features/today/today_page.dart';
@@ -143,6 +144,10 @@ class AppRouter {
 
     if (name == '/settings/export-center') {
       return _standalonePage(settings, const ExportCenterPage());
+    }
+
+    if (name == '/settings/poster-export') {
+      return _standalonePage(settings, const PosterExportPage());
     }
 
     if (uri.pathSegments.length == 2 && uri.pathSegments.first == 'day') {

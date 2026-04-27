@@ -719,6 +719,7 @@ CAPEX 摊销计算：
   - `CostManagementPage`
   - `ExportCenterPage`
   - `DayDetailPage`
+  - `PosterExportPage`
 - 当前 controller 已加载的数据
   - `TodayPageData`
   - `ReviewPageData`
@@ -732,6 +733,8 @@ CAPEX 摊销计算：
   - 提供导出历史列表与删除能力
 - `export_metadata_builders.dart`
   统一生成 Today / Review / Project / Cost / Day Detail 的 JSON 元数据
+- `PosterExportService`
+  独立构建海报源数据、隐私策略与模板数据
 - 本地文件系统
   - 桌面端优先写到 `Downloads/SkyeOS/exports`
   - 移动端回退到应用文档目录
@@ -854,7 +857,8 @@ UI 上如果都叫“支出”或“结余”，用户容易误解。
 4. 把图片导出做成独立模块
    - 统一使用 dashboard 导出边界
    - 输出 `png + json metadata`
-   - 再逐步扩到 Project / Cost / Day Detail
+   - 页面级图片文档链路已经完成
+   - 下一阶段只做状态海报模板化与 `SVG` 输出
 5. 视查询性能情况决定是否把 `review_snapshots` 真正用起来
    - 避免大窗口实时聚合过重
 

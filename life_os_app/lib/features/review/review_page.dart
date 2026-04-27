@@ -99,6 +99,12 @@ class _ReviewPageState extends State<ReviewPage> {
                 onPressed: () => Navigator.of(context).pushNamed('/projects'),
               ),
               MoreActionMenuItem(
+                label: '状态海报',
+                icon: Icons.style_outlined,
+                onPressed: () =>
+                    Navigator.of(context).pushNamed('/settings/poster-export'),
+              ),
+              MoreActionMenuItem(
                 label: '导出中心',
                 icon: Icons.inventory_2_outlined,
                 onPressed: () =>

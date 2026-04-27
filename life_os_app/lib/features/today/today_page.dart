@@ -83,6 +83,12 @@ class _TodayPageState extends State<TodayPage> {
             mainAxisSize: MainAxisSize.min,
             children: [
               AppleCircleButton(
+                icon: Icons.style_outlined,
+                onPressed: () =>
+                    Navigator.of(context).pushNamed('/settings/poster-export'),
+              ),
+              const SizedBox(width: 12),
+              AppleCircleButton(
                 icon: _isExporting
                     ? Icons.downloading_rounded
                     : Icons.image_outlined,

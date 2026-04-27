@@ -126,6 +126,81 @@ class _ExportCenterPageState extends State<ExportCenterPage> {
                       style: Theme.of(context).textTheme.bodyLarge,
                     ),
                     const SizedBox(height: 16),
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(18),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.46),
+                        borderRadius: BorderRadius.circular(22),
+                        border: Border.all(
+                          color: Colors.white.withValues(alpha: 0.60),
+                        ),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Container(
+                                width: 42,
+                                height: 42,
+                                decoration: BoxDecoration(
+                                  borderRadius: BorderRadius.circular(14),
+                                  gradient: const LinearGradient(
+                                    colors: [
+                                      Color(0xFF5F89FF),
+                                      Color(0xFF1D49C6),
+                                    ],
+                                  ),
+                                ),
+                                child: const Icon(
+                                  Icons.style_outlined,
+                                  color: Colors.white,
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      '状态海报导出',
+                                      style: Theme.of(context)
+                                          .textTheme
+                                          .titleMedium,
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      '走独立模板链，不复用业务页面截图。支持今日 / 本周 / 本月、两套模板和三档隐私模式。',
+                                      style: Theme.of(context)
+                                          .textTheme
+                                          .bodyMedium,
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 16),
+                          Wrap(
+                            spacing: 10,
+                            runSpacing: 10,
+                            children: const [
+                              _Badge(label: '1080×1350 PNG'),
+                              _Badge(label: '公开/半公开/私人复盘'),
+                              _Badge(label: '海报型 / 极简卡片'),
+                            ],
+                          ),
+                          const SizedBox(height: 16),
+                          ElevatedButton(
+                            onPressed: () => Navigator.of(context)
+                                .pushNamed('/settings/poster-export'),
+                            child: const Text('打开海报导出'),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 16),
                     LayoutBuilder(
                       builder: (context, constraints) {
                         final compact = constraints.maxWidth < 900;
@@ -195,6 +270,15 @@ class _ExportCenterPageState extends State<ExportCenterPage> {
                           builder: (context, constraints) {
                             final compact = constraints.maxWidth < 920;
                             final cards = [
+                              _ExportModuleCard(
+                                title: '状态海报',
+                                icon: Icons.style_outlined,
+                                description: '独立模板渲染，不复用页面截图，用于社交分享和博客展示。',
+                                note: '使用海报数据层、隐私策略和固定海报尺寸。',
+                                primaryLabel: '打开海报导出',
+                                onPrimaryTap: () => Navigator.of(context)
+                                    .pushNamed('/settings/poster-export'),
+                              ),
                               _ExportModuleCard(
                                 title: '今日经营状态',
                                 icon: Icons.today_rounded,
@@ -561,6 +645,8 @@ class _ExportCenterPageState extends State<ExportCenterPage> {
         return 'Cost';
       case 'day_detail':
         return 'Day Detail';
+      case 'poster':
+        return 'Poster';
       default:
         return module;
     }
@@ -707,6 +793,27 @@ class _FormatLine extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+class _Badge extends StatelessWidget {
+  const _Badge({
+    required this.label,
+  });
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF3F6FF),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: const Color(0xFFD9E3FF)),
+      ),
+      child: Text(label),
     );
   }
 }

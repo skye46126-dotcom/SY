@@ -8,6 +8,7 @@ import '../../services/image_export_service.dart';
 import '../../shared/view_state.dart';
 import '../../shared/widgets/export_document_dialog.dart';
 import '../../shared/widgets/module_page.dart';
+import '../../shared/widgets/safe_pop.dart';
 import '../../shared/widgets/section_card.dart';
 import '../../shared/widgets/state_views.dart';
 
@@ -410,11 +411,11 @@ class _CostManagementPageState extends State<CostManagementPage> {
           ),
           actions: [
             TextButton(
-              onPressed: () => Navigator.of(dialogContext).pop(false),
+              onPressed: () => safePop(dialogContext, false),
               child: const Text('取消'),
             ),
             ElevatedButton(
-              onPressed: () => Navigator.of(dialogContext).pop(true),
+              onPressed: () => safePop(dialogContext, true),
               child: const Text('保存'),
             ),
           ],
@@ -545,11 +546,11 @@ class _CostManagementPageState extends State<CostManagementPage> {
           ),
           actions: [
             TextButton(
-              onPressed: () => Navigator.of(dialogContext).pop(false),
+              onPressed: () => safePop(dialogContext, false),
               child: const Text('取消'),
             ),
             ElevatedButton(
-              onPressed: () => Navigator.of(dialogContext).pop(true),
+              onPressed: () => safePop(dialogContext, true),
               child: const Text('保存'),
             ),
           ],
@@ -652,11 +653,11 @@ class _CostManagementPageState extends State<CostManagementPage> {
           ),
           actions: [
             TextButton(
-              onPressed: () => Navigator.of(dialogContext).pop(false),
+              onPressed: () => safePop(dialogContext, false),
               child: const Text('取消'),
             ),
             ElevatedButton(
-              onPressed: () => Navigator.of(dialogContext).pop(true),
+              onPressed: () => safePop(dialogContext, true),
               child: const Text('保存'),
             ),
           ],

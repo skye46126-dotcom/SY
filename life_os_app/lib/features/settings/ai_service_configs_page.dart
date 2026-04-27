@@ -4,6 +4,7 @@ import '../../app/app.dart';
 import '../../models/ai_models.dart';
 import '../../shared/view_state.dart';
 import '../../shared/widgets/module_page.dart';
+import '../../shared/widgets/safe_pop.dart';
 import '../../shared/widgets/section_card.dart';
 import '../../shared/widgets/state_views.dart';
 
@@ -218,11 +219,11 @@ class _AiServiceConfigsPageState extends State<AiServiceConfigsPage> {
               ),
               actions: [
                 TextButton(
-                  onPressed: () => Navigator.of(dialogContext).pop(false),
+                  onPressed: () => safePop(dialogContext, false),
                   child: const Text('取消'),
                 ),
                 ElevatedButton(
-                  onPressed: () => Navigator.of(dialogContext).pop(true),
+                  onPressed: () => safePop(dialogContext, true),
                   child: const Text('保存'),
                 ),
               ],

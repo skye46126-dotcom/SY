@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 
 import '../../services/image_export_service.dart';
+import 'safe_pop.dart';
 
 Future<void> showExportDocumentDialog(
   BuildContext context,
@@ -84,12 +85,12 @@ Future<void> showExportDocumentDialog(
             onPressed: () async {
               await onDelete();
               if (!dialogContext.mounted) return;
-              Navigator.of(dialogContext).pop();
+              safePop<void>(dialogContext);
             },
             child: const Text('删除导出'),
           ),
         TextButton(
-          onPressed: () => Navigator.of(dialogContext).pop(),
+          onPressed: () => safePop<void>(dialogContext),
           child: const Text('关闭'),
         ),
       ],
