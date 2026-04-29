@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:ffi';
 import 'dart:io';
+import 'dart:isolate';
 
 import 'package:ffi/ffi.dart';
 
@@ -34,13 +35,13 @@ class NativeRustApi implements RustApi {
   NativeRustApi._({
     required this.databasePath,
     required DynamicLibrary library,
-  })  : _invoke = library.lookupFunction<_NativeInvoke, _DartInvoke>('life_os_invoke'),
-        _stringFree = library
-            .lookupFunction<_NativeStringFree, _DartStringFree>('life_os_string_free');
+  }) {
+    library.lookupFunction<_NativeInvoke, _DartInvoke>('life_os_invoke');
+    library.lookupFunction<_NativeStringFree, _DartStringFree>(
+        'life_os_string_free');
+  }
 
   final String databasePath;
-  final _DartInvoke _invoke;
-  final _DartStringFree _stringFree;
 
   static RustApi createOrFallback({
     required String databasePath,
@@ -71,27 +72,47 @@ class NativeRustApi implements RustApi {
     throw UnsupportedError('Unsupported platform for native Rust bridge.');
   }
 
-  dynamic _call(String method, Map<String, Object?> payload) {
+  static dynamic _callWithLibrary({
+    required String databasePath,
+    required String method,
+    required Map<String, Object?> payload,
+  }) {
+    final library = _openLibrary();
+    final invoke =
+        library.lookupFunction<_NativeInvoke, _DartInvoke>('life_os_invoke');
+    final stringFree =
+        library.lookupFunction<_NativeStringFree, _DartStringFree>(
+            'life_os_string_free');
+
     final databasePathPtr = databasePath.toNativeUtf8();
     final methodPtr = method.toNativeUtf8();
     final payloadPtr = jsonEncode(payload).toNativeUtf8();
 
-    final resultPtr = _invoke(databasePathPtr, methodPtr, payloadPtr);
+    final resultPtr = invoke(databasePathPtr, methodPtr, payloadPtr);
     malloc.free(databasePathPtr);
     malloc.free(methodPtr);
     malloc.free(payloadPtr);
 
     final resultJson = resultPtr.toDartString();
-    _stringFree(resultPtr);
+    stringFree(resultPtr);
 
     final envelope = (jsonDecode(resultJson) as Map).cast<String, dynamic>();
     final ok = envelope['ok'] == true;
     if (!ok) {
       final error =
           ((envelope['error'] as Map?) ?? const {}).cast<String, dynamic>();
-      throw StateError(error['message'] as String? ?? 'Rust bridge call failed.');
+      throw StateError(
+          error['message'] as String? ?? 'Rust bridge call failed.');
     }
     return envelope['data'];
+  }
+
+  dynamic _call(String method, Map<String, Object?> payload) {
+    return _callWithLibrary(
+      databasePath: databasePath,
+      method: method,
+      payload: payload,
+    );
   }
 
   @override
@@ -99,7 +120,13 @@ class NativeRustApi implements RustApi {
     required String method,
     required Map<String, Object?> payload,
   }) async {
-    final data = _call(method, payload);
+    final data = await Isolate.run(
+      () => _callWithLibrary(
+        databasePath: databasePath,
+        method: method,
+        payload: payload,
+      ),
+    );
     if (data == null) {
       return null;
     }
@@ -245,7 +272,8 @@ class NativeRustApi implements RustApi {
       'window_type': windowType,
     });
     if (data == null) return null;
-    return MetricSnapshotSummaryModel.fromJson((data as Map).cast<String, dynamic>());
+    return MetricSnapshotSummaryModel.fromJson(
+        (data as Map).cast<String, dynamic>());
   }
 
   @override
@@ -258,7 +286,8 @@ class NativeRustApi implements RustApi {
       'window_type': windowType,
     });
     if (data == null) return null;
-    return MetricSnapshotSummaryModel.fromJson((data as Map).cast<String, dynamic>());
+    return MetricSnapshotSummaryModel.fromJson(
+        (data as Map).cast<String, dynamic>());
   }
 
   @override
@@ -272,7 +301,8 @@ class NativeRustApi implements RustApi {
       'snapshot_date': snapshotDate,
       'window_type': windowType,
     });
-    return MetricSnapshotSummaryModel.fromJson((data as Map).cast<String, dynamic>());
+    return MetricSnapshotSummaryModel.fromJson(
+        (data as Map).cast<String, dynamic>());
   }
 
   @override
@@ -379,7 +409,8 @@ class NativeRustApi implements RustApi {
       'user_id': userId,
       'backup_record_id': backupRecordId,
     });
-    return RemoteUploadResultModel.fromJson((data as Map).cast<String, dynamic>());
+    return RemoteUploadResultModel.fromJson(
+        (data as Map).cast<String, dynamic>());
   }
 
   @override
@@ -391,7 +422,8 @@ class NativeRustApi implements RustApi {
       'user_id': userId,
       'backup_type': backupType,
     });
-    return RemoteUploadResultModel.fromJson((data as Map).cast<String, dynamic>());
+    return RemoteUploadResultModel.fromJson(
+        (data as Map).cast<String, dynamic>());
   }
 
   @override
@@ -569,7 +601,8 @@ class NativeRustApi implements RustApi {
       'anchor_date': anchorDate,
       'timezone': timezone,
     });
-    return TodayGoalProgressModel.fromJson((data as Map).cast<String, dynamic>());
+    return TodayGoalProgressModel.fromJson(
+        (data as Map).cast<String, dynamic>());
   }
 
   @override
@@ -627,10 +660,56 @@ class NativeRustApi implements RustApi {
     required String rawInput,
     required String parserMode,
   }) async {
-    final data = _call('parse_ai_input', {
+    final data = _call('parse_ai_input_v2', {
       'user_id': userId,
       'raw_text': rawInput,
-      'parser_mode_override': parserMode == 'balanced' ? null : _toRustParserMode(parserMode),
+    });
+    if (data == null) {
+      return null;
+    }
+    return (data as Map).cast<String, Object?>();
+  }
+
+  @override
+  Future<Map<String, Object?>?> exportSeedData({
+    required String userId,
+  }) async {
+    final data = _call('export_seed_data', {
+      'user_id': userId,
+    });
+    if (data == null) {
+      return null;
+    }
+    return (data as Map).cast<String, Object?>();
+  }
+
+  @override
+  Future<Map<String, Object?>?> exportDataPackage({
+    required String userId,
+    required String format,
+    required String outputDirectoryPath,
+    required String title,
+    required String module,
+  }) async {
+    final data = _call('export_data_package', {
+      'user_id': userId,
+      'format': format,
+      'output_dir': outputDirectoryPath,
+      'title': title,
+      'module': module,
+    });
+    if (data == null) {
+      return null;
+    }
+    return (data as Map).cast<String, Object?>();
+  }
+
+  @override
+  Future<Map<String, Object?>?> previewDataPackageExport({
+    required String userId,
+  }) async {
+    final data = _call('preview_data_package_export', {
+      'user_id': userId,
     });
     if (data == null) {
       return null;
@@ -657,18 +736,5 @@ class NativeRustApi implements RustApi {
       },
     });
     return AiCommitResultModel.fromJson((data as Map).cast<String, dynamic>());
-  }
-
-  String _toRustParserMode(String value) {
-    switch (value.trim().toLowerCase()) {
-      case 'rule':
-        return 'Rule';
-      case 'llm':
-        return 'Llm';
-      case 'vcp':
-        return 'Vcp';
-      default:
-        return 'Auto';
-    }
   }
 }

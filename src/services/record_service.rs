@@ -5,10 +5,10 @@ use crate::error::Result;
 use crate::models::{
     CaptureMetadata, CreateExpenseRecordInput, CreateIncomeRecordInput, CreateLearningRecordInput,
     CreateProjectInput, CreateTagInput, CreateTimeRecordInput, DimensionOption,
-    DimensionOptionInput, ExpenseRecord, ExpenseRecordSnapshot, IncomeRecord,
-    IncomeRecordSnapshot, LearningRecord, LearningRecordSnapshot, OperatingSettings, Project,
-    RecentRecordItem, RecordKind, Tag, TimeRecord, TimeRecordSnapshot, TodayAlerts,
-    TodayGoalProgress, TodayOverview, TodaySummary, UpdateOperatingSettingsInput, UserProfile,
+    DimensionOptionInput, ExpenseRecord, ExpenseRecordSnapshot, IncomeRecord, IncomeRecordSnapshot,
+    LearningRecord, LearningRecordSnapshot, OperatingSettings, Project, RecentRecordItem,
+    RecordKind, Tag, TimeRecord, TimeRecordSnapshot, TodayAlerts, TodayGoalProgress, TodayOverview,
+    TodaySummary, UpdateOperatingSettingsInput, UserProfile,
 };
 use crate::repositories::record_repository::RecordRepository;
 

@@ -6,6 +6,7 @@ import '../../../models/project_models.dart';
 import '../../../models/record_models.dart';
 import '../../../models/tag_models.dart';
 import '../../../shared/view_state.dart';
+import '../../../shared/widgets/safe_pop.dart';
 import '../../../shared/widgets/state_views.dart';
 import '../../capture/capture_controller.dart';
 import '../../capture/widgets/record_form_section.dart';
@@ -201,11 +202,11 @@ class _RecordEditorDialogState extends State<RecordEditorDialog> {
       ),
       actions: [
         TextButton(
-          onPressed: () => Navigator.of(context).pop(),
+          onPressed: () => safePop<void>(context),
           child: const Text('取消'),
         ),
         ElevatedButton(
-          onPressed: () => Navigator.of(context).pop(_buildResult()),
+          onPressed: () => safePop(context, _buildResult()),
           child: const Text('保存'),
         ),
       ],
@@ -274,8 +275,10 @@ class _RecordEditorDialogState extends State<RecordEditorDialog> {
           'occurred_on': TextEditingController(text: snapshot.occurredOn),
           'source_name': TextEditingController(text: snapshot.sourceName),
           'type_code': TextEditingController(text: snapshot.typeCode),
-          'amount_yuan': TextEditingController(text: _amount(snapshot.amountCents)),
-          'is_passive': TextEditingController(text: snapshot.isPassive.toString()),
+          'amount_yuan':
+              TextEditingController(text: _amount(snapshot.amountCents)),
+          'is_passive':
+              TextEditingController(text: snapshot.isPassive.toString()),
           'ai_assist_ratio':
               TextEditingController(text: _text(snapshot.aiAssistRatio)),
           'note': TextEditingController(text: snapshot.note ?? ''),
@@ -285,7 +288,8 @@ class _RecordEditorDialogState extends State<RecordEditorDialog> {
         return {
           'occurred_on': TextEditingController(text: snapshot.occurredOn),
           'category_code': TextEditingController(text: snapshot.categoryCode),
-          'amount_yuan': TextEditingController(text: _amount(snapshot.amountCents)),
+          'amount_yuan':
+              TextEditingController(text: _amount(snapshot.amountCents)),
           'ai_assist_ratio':
               TextEditingController(text: _text(snapshot.aiAssistRatio)),
           'note': TextEditingController(text: snapshot.note ?? ''),
@@ -295,7 +299,9 @@ class _RecordEditorDialogState extends State<RecordEditorDialog> {
         return {
           'occurred_on': TextEditingController(text: snapshot.occurredOn),
           'started_at': TextEditingController(
-            text: snapshot.startedAt == null ? '' : _utcToTime(snapshot.startedAt!),
+            text: snapshot.startedAt == null
+                ? ''
+                : _utcToTime(snapshot.startedAt!),
           ),
           'ended_at': TextEditingController(
             text: snapshot.endedAt == null ? '' : _utcToTime(snapshot.endedAt!),
@@ -388,7 +394,8 @@ class _RecordEditorDialogState extends State<RecordEditorDialog> {
               'type_code': _controllers['type_code']!.text,
               'amount_cents': _amountToCents(_controllers['amount_yuan']!.text),
               'is_passive':
-                  _controllers['is_passive']!.text.trim().toLowerCase() == 'true',
+                  _controllers['is_passive']!.text.trim().toLowerCase() ==
+                      'true',
               'ai_assist_ratio': _intValue('ai_assist_ratio'),
               'note': _nullable('note'),
               'source': 'manual',
@@ -465,7 +472,8 @@ class _RecordEditorDialogState extends State<RecordEditorDialog> {
     return raw.isEmpty ? null : raw;
   }
 
-  int _amountToCents(String value) => (double.parse(value.trim()) * 100).round();
+  int _amountToCents(String value) =>
+      (double.parse(value.trim()) * 100).round();
 
   String _utcToTime(String value) {
     final dateTime = DateTime.parse(value).toLocal();
@@ -475,8 +483,7 @@ class _RecordEditorDialogState extends State<RecordEditorDialog> {
   }
 
   String _toUtcTimestamp(String time) {
-    final normalized =
-        time.length == 5 ? '${time.trim()}:00' : time.trim();
+    final normalized = time.length == 5 ? '${time.trim()}:00' : time.trim();
     final local = DateTime.parse('${widget.anchorDate} $normalized');
     return local.toUtc().toIso8601String();
   }

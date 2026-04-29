@@ -40,6 +40,34 @@ class AppService {
     );
   }
 
+  Future<Map<String, Object?>?> exportSeedData({
+    required String userId,
+  }) {
+    return api.exportSeedData(userId: userId);
+  }
+
+  Future<Map<String, Object?>?> exportDataPackage({
+    required String userId,
+    required String format,
+    required String outputDirectoryPath,
+    required String title,
+    required String module,
+  }) {
+    return api.exportDataPackage(
+      userId: userId,
+      format: format,
+      outputDirectoryPath: outputDirectoryPath,
+      title: title,
+      module: module,
+    );
+  }
+
+  Future<Map<String, Object?>?> previewDataPackageExport({
+    required String userId,
+  }) {
+    return api.previewDataPackageExport(userId: userId);
+  }
+
   Future<TodayOverview?> getTodayOverview({
     required String userId,
     required String anchorDate,

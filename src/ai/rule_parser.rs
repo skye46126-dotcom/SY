@@ -399,7 +399,7 @@ fn extract_time_points(line: &str) -> Vec<TimePoint> {
 
         let mut explicit = false;
         let mut minute = 0;
-        if cursor < chars.len() && chars[cursor].1 == ':' {
+        if cursor < chars.len() && matches!(chars[cursor].1, ':' | '：' | '.') {
             explicit = true;
             cursor += 1;
             let Some((parsed_minute, next)) = parse_u32(chars.as_slice(), cursor, 2) else {
@@ -467,13 +467,13 @@ fn parse_u32(chars: &[(usize, char)], start: usize, max_len: usize) -> Option<(u
 
 fn is_range_separator(text: &str) -> bool {
     let normalized = text.trim();
-    ["到", "至", "-", "~", "—"]
+    ["到", "至", "-", "~", "～", "—"]
         .iter()
         .any(|token| normalized.contains(token))
 }
 
 fn parse_simple_hour_range(line: &str) -> Option<TimeRange> {
-    let separators = ["到", "至", "-", "~", "—"];
+    let separators = ["到", "至", "-", "~", "～", "—"];
     let separator = separators
         .iter()
         .find(|separator| line.contains(**separator))?;
@@ -655,6 +655,9 @@ fn extract_money(line: &str) -> Option<Money> {
         if suffix.trim_start().starts_with('%') {
             continue;
         }
+        if looks_like_time_number(&prefix, &suffix) {
+            continue;
+        }
 
         let value = number.parse::<f64>().ok()?;
         let explicit_unit = prefix.contains('¥')
@@ -694,6 +697,19 @@ fn extract_money(line: &str) -> Option<Money> {
         }
     }
     best
+}
+
+fn looks_like_time_number(prefix: &str, suffix: &str) -> bool {
+    let prefix = prefix.trim_end();
+    let suffix = suffix.trim_start();
+    suffix.starts_with(':')
+        || suffix.starts_with('：')
+        || suffix.starts_with('点')
+        || suffix.starts_with('时')
+        || prefix.ends_with(':')
+        || prefix.ends_with('：')
+        || prefix.ends_with('点')
+        || prefix.ends_with('时')
 }
 
 fn strip_trailing_zeros(value: f64) -> String {

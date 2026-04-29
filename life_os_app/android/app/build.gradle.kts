@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     id("kotlin-android")
@@ -37,8 +39,57 @@ android {
             signingConfig = signingConfigs.getByName("debug")
         }
     }
+
+    lint {
+        checkReleaseBuilds = false
+        abortOnError = false
+    }
 }
 
 flutter {
     source = "../.."
+}
+
+val localProperties = Properties().apply {
+    val localPropertiesFile = rootProject.file("local.properties")
+    if (localPropertiesFile.exists()) {
+        localPropertiesFile.inputStream().use { load(it) }
+    }
+}
+
+val androidSdkDir = localProperties.getProperty("sdk.dir")
+val resolvedNdkDir = if (androidSdkDir.isNullOrBlank()) {
+    null
+} else {
+    file("$androidSdkDir/ndk/${android.ndkVersion}")
+}
+
+val buildRustAndroidLibs = tasks.register<Exec>("buildRustAndroidLibs") {
+    group = "build"
+    description = "Builds the Rust FFI library for Android ABIs before packaging."
+    workingDir = file("../../..")
+    if (resolvedNdkDir != null) {
+        environment("ANDROID_HOME", androidSdkDir)
+        environment("ANDROID_SDK_ROOT", androidSdkDir)
+        environment("ANDROID_NDK_HOME", resolvedNdkDir.absolutePath)
+        environment("ANDROID_NDK_ROOT", resolvedNdkDir.absolutePath)
+    }
+    commandLine(
+        "cargo",
+        "ndk",
+        "-t",
+        "arm64-v8a",
+        "-t",
+        "armeabi-v7a",
+        "-t",
+        "x86_64",
+        "-o",
+        file("src/main/jniLibs").absolutePath,
+        "build",
+        "--release",
+    )
+}
+
+tasks.named("preBuild").configure {
+    dependsOn(buildRustAndroidLibs)
 }

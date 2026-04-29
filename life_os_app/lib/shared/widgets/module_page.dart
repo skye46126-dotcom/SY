@@ -9,12 +9,14 @@ class ModulePage extends StatelessWidget {
     required this.subtitle,
     required this.children,
     this.actions = const [],
+    this.exportBoundaryKey,
   });
 
   final String title;
   final String subtitle;
   final List<Widget> children;
   final List<Widget> actions;
+  final GlobalKey? exportBoundaryKey;
 
   @override
   Widget build(BuildContext context) {
@@ -61,52 +63,55 @@ class ModulePage extends StatelessWidget {
         SafeArea(
           child: SingleChildScrollView(
             padding: AppTheme.pagePadding,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                LayoutBuilder(
-                  builder: (context, constraints) {
-                    if (actions.isEmpty) {
-                      return titleBlock;
-                    }
+            child: RepaintBoundary(
+              key: exportBoundaryKey,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  LayoutBuilder(
+                    builder: (context, constraints) {
+                      if (actions.isEmpty) {
+                        return titleBlock;
+                      }
 
-                    final actionWrap = Wrap(
-                      spacing: 12,
-                      runSpacing: 12,
-                      alignment: WrapAlignment.end,
-                      children: actions,
-                    );
+                      final actionWrap = Wrap(
+                        spacing: 12,
+                        runSpacing: 12,
+                        alignment: WrapAlignment.end,
+                        children: actions,
+                      );
 
-                    if (constraints.maxWidth >= 720) {
-                      return Row(
+                      if (constraints.maxWidth >= 720) {
+                        return Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Expanded(child: titleBlock),
+                            const SizedBox(width: 16),
+                            Flexible(
+                              child: Align(
+                                alignment: Alignment.topRight,
+                                child: actionWrap,
+                              ),
+                            ),
+                          ],
+                        );
+                      }
+
+                      return Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Expanded(child: titleBlock),
-                          const SizedBox(width: 16),
-                          Flexible(
-                            child: Align(
-                              alignment: Alignment.topRight,
-                              child: actionWrap,
-                            ),
-                          ),
+                          titleBlock,
+                          const SizedBox(height: 16),
+                          actionWrap,
                         ],
                       );
-                    }
-
-                    return Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        titleBlock,
-                        const SizedBox(height: 16),
-                        actionWrap,
-                      ],
-                    );
-                  },
-                ),
-                const SizedBox(height: 24),
-                ..._withSpacing(children),
-                const SizedBox(height: 24),
-              ],
+                    },
+                  ),
+                  const SizedBox(height: 24),
+                  ..._withSpacing(children),
+                  const SizedBox(height: 24),
+                ],
+              ),
             ),
           ),
         ),

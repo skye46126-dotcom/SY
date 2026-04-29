@@ -1,7 +1,9 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../../app/app.dart';
-import '../../models/ai_models.dart';
+import '../../models/review_models.dart';
 import '../../shared/view_state.dart';
 import '../../shared/widgets/module_page.dart';
 import '../../shared/widgets/section_card.dart';
@@ -15,14 +17,12 @@ class AiChatPage extends StatefulWidget {
 }
 
 class _AiChatPageState extends State<AiChatPage> {
-  final TextEditingController _rawInputController = TextEditingController();
-  final TextEditingController _contextDateController = TextEditingController();
-  String _parserMode = 'auto';
-  bool _autoCreateTags = false;
-  ViewState<AiServiceConfigModel?> _configState = ViewState.initial();
-  ViewState<AiParseResultModel> _parseState = ViewState.initial();
-  ViewState<AiCommitResultModel> _commitState = ViewState.initial();
-  List<AiParseDraftModel> _editableDrafts = const [];
+  final TextEditingController _questionController = TextEditingController();
+  final TextEditingController _anchorDateController = TextEditingController();
+  final List<_ChatMessage> _messages = [];
+  ReviewWindowKind _selectedKind = ReviewWindowKind.day;
+  ViewState<String> _sendState = ViewState.initial();
+  ViewState<String> _configState = ViewState.initial();
   bool _loaded = false;
 
   @override
@@ -31,7 +31,7 @@ class _AiChatPageState extends State<AiChatPage> {
     if (_loaded) return;
     _loaded = true;
     final runtime = LifeOsScope.runtimeOf(context);
-    _contextDateController.text = runtime.todayDate;
+    _anchorDateController.text = runtime.todayDate;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       _loadConfig();
@@ -40,8 +40,8 @@ class _AiChatPageState extends State<AiChatPage> {
 
   @override
   void dispose() {
-    _rawInputController.dispose();
-    _contextDateController.dispose();
+    _questionController.dispose();
+    _anchorDateController.dispose();
     super.dispose();
   }
 
@@ -54,10 +54,11 @@ class _AiChatPageState extends State<AiChatPage> {
       );
       if (!mounted) return;
       setState(() {
-        _configState = ViewState.ready(config);
-        if (config != null) {
-          _parserMode = _normalizeParserMode(config.parserMode);
-        }
+        _configState = config == null
+            ? ViewState.empty('没有激活的 AI 配置')
+            : ViewState.ready(
+                '${config.provider} · ${config.model ?? '-'}',
+              );
       });
     } catch (error) {
       if (!mounted) return;
@@ -65,368 +66,325 @@ class _AiChatPageState extends State<AiChatPage> {
     }
   }
 
-  Future<void> _parse() async {
+  Future<void> _send() async {
+    final question = _questionController.text.trim();
+    if (question.isEmpty || _sendState.status == ViewStatus.loading) {
+      return;
+    }
     final runtime = LifeOsScope.runtimeOf(context);
-    setState(() => _parseState = ViewState.loading());
+    final payload = _reviewPayload(runtime.userId, runtime.timezone, question);
+    setState(() {
+      _messages.add(_ChatMessage(role: _ChatRole.user, text: question));
+      _sendState = ViewState.loading();
+      _questionController.clear();
+    });
     try {
-      final result = await LifeOsScope.of(context).parseAiCapture(
-        userId: runtime.userId,
-        rawInput: _rawInputController.text,
-        parserMode: _parserMode,
+      final result = await LifeOsScope.of(context).invokeRaw(
+        method: 'chat_review',
+        payload: payload,
       );
+      final data = (result as Map).cast<String, dynamic>();
       if (!mounted) return;
-      if (result == null) {
-        setState(() => _parseState = ViewState.empty('AI 没有返回解析结果。'));
-        return;
-      }
       setState(() {
-        final parsed = AiParseResultModel.fromJson(result.cast<String, dynamic>());
-        _editableDrafts = parsed.items;
-        _parseState = ViewState.ready(parsed);
-        _commitState = ViewState.initial();
+        _messages.add(
+          _ChatMessage(
+            role: _ChatRole.assistant,
+            text: data['answer']?.toString() ?? '',
+          ),
+        );
+        _sendState = ViewState.initial();
       });
     } catch (error) {
       if (!mounted) return;
-      setState(() => _parseState = ViewState.error(error.toString()));
+      setState(() => _sendState = ViewState.error(error.toString()));
     }
   }
 
-  Future<void> _commit() async {
-    final runtime = LifeOsScope.runtimeOf(context);
-    final parsed = _parseState.data;
-    if (parsed == null || _editableDrafts.isEmpty) {
-      return;
-    }
-    setState(() => _commitState = ViewState.loading());
-    try {
-      final result = await LifeOsScope.of(context).invokeRaw(
-        method: 'commit_ai_drafts',
-        payload: {
-          'user_id': runtime.userId,
-          'request_id': parsed.requestId,
-          'context_date': _contextDateController.text,
-          'drafts': _editableDrafts.map((item) => item.toJson()).toList(),
-          'options': {
-            'source': 'external',
-            'auto_create_tags': _autoCreateTags,
-            'strict_reference_resolution': false,
-          },
-        },
-      );
-      if (!mounted) return;
-      setState(() {
-        _commitState = ViewState.ready(
-          AiCommitResultModel.fromJson((result as Map).cast<String, dynamic>()),
-        );
-      });
-    } catch (error) {
-      if (!mounted) return;
-      setState(() => _commitState = ViewState.error(error.toString()));
-    }
+  Map<String, Object?> _reviewPayload(
+    String userId,
+    String timezone,
+    String question,
+  ) {
+    final anchorDate = _anchorDateController.text.trim();
+    return {
+      'user_id': userId,
+      'question': question,
+      'kind': _selectedKind.name,
+      'anchor_date': anchorDate,
+      'start_date': anchorDate,
+      'end_date': anchorDate,
+      'timezone': timezone,
+    };
   }
 
   @override
   Widget build(BuildContext context) {
+    final isSending = _sendState.status == ViewStatus.loading;
     return ModulePage(
       title: 'AI Chat',
       subtitle: 'Review Assistant',
       actions: [
         OutlinedButton(
-          onPressed: () => Navigator.of(context).pushNamed('/settings/ai-services'),
+          onPressed: () =>
+              Navigator.of(context).pushNamed('/settings/ai-services'),
           child: const Text('管理配置'),
-        ),
-        ElevatedButton(
-          onPressed: _parse,
-          child: const Text('解析草稿'),
         ),
       ],
       children: [
         SectionCard(
-          eyebrow: 'AI Config',
-          title: '当前激活配置',
-          child: switch (_configState.status) {
-            ViewStatus.loading => const SectionLoadingView(label: '正在读取 AI 配置'),
-            ViewStatus.data when _configState.data != null => Text(
-                '${_configState.data!.provider} · ${_configState.data!.model ?? '-'} · parser=$_parserMode',
-              ),
-            _ => SectionMessageView(
-                icon: Icons.tune_rounded,
-                title: '没有激活的 AI 配置',
-                description: _configState.message ?? '请先在设置中创建并激活配置。',
-              ),
-          },
-        ),
-        SectionCard(
-          eyebrow: 'Prompt',
-          title: '输入与解析选项',
+          eyebrow: 'Review Context',
+          title: '复盘范围',
           child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              switch (_configState.status) {
+                ViewStatus.loading =>
+                  const SectionLoadingView(label: '正在读取 AI 配置'),
+                ViewStatus.data => Text('当前模型：${_configState.data}'),
+                ViewStatus.error => SectionMessageView(
+                    icon: Icons.error_outline_rounded,
+                    title: 'AI 配置读取失败',
+                    description: _configState.message ?? '请稍后重试。',
+                  ),
+                _ => SectionMessageView(
+                    icon: Icons.tune_rounded,
+                    title: '没有激活的 AI 配置',
+                    description: _configState.message ?? '请先创建并激活配置。',
+                  ),
+              },
+              const SizedBox(height: 14),
               TextField(
-                controller: _contextDateController,
-                decoration: const InputDecoration(labelText: '上下文日期 YYYY-MM-DD'),
+                controller: _anchorDateController,
+                decoration: const InputDecoration(labelText: '锚点日期 YYYY-MM-DD'),
               ),
               const SizedBox(height: 12),
               Wrap(
                 spacing: 8,
                 children: [
-                  for (final mode in const ['auto', 'rule', 'llm', 'vcp'])
-                    ChoiceChip(
-                      label: Text(mode),
-                      selected: _parserMode == mode,
-                      onSelected: (_) => setState(() => _parserMode = mode),
-                    ),
+                  _WindowChip(
+                    label: '日',
+                    value: ReviewWindowKind.day,
+                    selected: _selectedKind,
+                    onSelected: _selectKind,
+                  ),
+                  _WindowChip(
+                    label: '周',
+                    value: ReviewWindowKind.week,
+                    selected: _selectedKind,
+                    onSelected: _selectKind,
+                  ),
+                  _WindowChip(
+                    label: '月',
+                    value: ReviewWindowKind.month,
+                    selected: _selectedKind,
+                    onSelected: _selectKind,
+                  ),
+                  _WindowChip(
+                    label: '年',
+                    value: ReviewWindowKind.year,
+                    selected: _selectedKind,
+                    onSelected: _selectKind,
+                  ),
                 ],
-              ),
-              const SizedBox(height: 12),
-              SwitchListTile(
-                value: _autoCreateTags,
-                onChanged: (value) => setState(() => _autoCreateTags = value),
-                title: const Text('提交时自动创建标签'),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: _rawInputController,
-                minLines: 8,
-                maxLines: 12,
-                decoration: const InputDecoration(
-                  labelText: '输入自然语言',
-                  hintText: '例如：今天下午做了 2 小时深度工作，项目是 SkyeOS，效率 8，AI 占比 30%',
-                ),
               ),
             ],
           ),
         ),
         SectionCard(
-          eyebrow: 'Parsed Drafts',
-          title: '解析结果',
-          trailing: ElevatedButton(
-            onPressed: _parseState.hasData && _parseState.data!.items.isNotEmpty ? _commit : null,
-            child: const Text('确认入库'),
-          ),
-          child: switch (_parseState.status) {
-            ViewStatus.loading => const SectionLoadingView(label: '正在解析草稿'),
-            ViewStatus.data => Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+          eyebrow: 'Conversation',
+          title: '复盘对话',
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (_messages.isEmpty)
+                const SectionMessageView(
+                  icon: Icons.auto_awesome_rounded,
+                  title: '开始复盘提问',
+                  description: '可以问今天哪里低效、项目投入是否合理、支出是否异常或下一步优先级。',
+                )
+              else
+                for (final message in _messages) ...[
+                  _ChatBubble(message: message),
+                  const SizedBox(height: 10),
+                ],
+              if (isSending) ...[
+                const _ChatThinkingBubble(),
+                const SizedBox(height: 10),
+              ],
+              if (_sendState.status == ViewStatus.error) ...[
+                SectionMessageView(
+                  icon: Icons.error_outline_rounded,
+                  title: '发送失败',
+                  description: _sendState.message ?? '请稍后重试。',
+                ),
+                const SizedBox(height: 10),
+              ],
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
-                  Text('parser: ${_parseState.data!.parserUsed}'),
-                  if (_parseState.data!.warnings.isNotEmpty) ...[
-                    const SizedBox(height: 8),
-                    for (final warning in _parseState.data!.warnings)
-                      Text('warning: $warning'),
-                  ],
-                  const SizedBox(height: 16),
-                  for (final item in _parseState.data!.items)
-                    Container(
-                      width: double.infinity,
-                      margin: const EdgeInsets.only(bottom: 12),
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.42),
-                        borderRadius: BorderRadius.circular(20),
-                        border: Border.all(color: Colors.white.withValues(alpha: 0.58)),
+                  Expanded(
+                    child: TextField(
+                      controller: _questionController,
+                      minLines: 1,
+                      maxLines: 4,
+                      decoration: const InputDecoration(
+                        labelText: '输入复盘问题',
+                        hintText: '例如：这周我最大的时间浪费在哪里？',
                       ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text('${item.kind} · confidence ${(item.confidence * 100).toStringAsFixed(1)}%'),
-                          const SizedBox(height: 8),
-                          for (final entry in item.payload.entries)
-                            Padding(
-                              padding: const EdgeInsets.only(bottom: 4),
-                              child: Text('${entry.key}: ${entry.value}'),
-                            ),
-                          if (item.warning != null) ...[
-                            const SizedBox(height: 8),
-                            Text('warning: ${item.warning}'),
-                          ],
-                          const SizedBox(height: 12),
-                          Row(
-                            children: [
-                              OutlinedButton(
-                                onPressed: () => _editDraft(item),
-                                child: const Text('修改草稿'),
-                              ),
-                              const SizedBox(width: 12),
-                              TextButton(
-                                onPressed: () => _removeDraft(item.draftId),
-                                child: const Text('移除'),
-                              ),
-                            ],
-                          ),
-                        ],
-                      ),
+                      onSubmitted: (_) => _send(),
                     ),
+                  ),
+                  const SizedBox(width: 12),
+                  FilledButton.icon(
+                    onPressed: isSending ? null : _send,
+                    icon: const Icon(Icons.send_rounded, size: 18),
+                    label: const Text('发送'),
+                  ),
                 ],
               ),
-            ViewStatus.empty => SectionMessageView(
-                icon: Icons.auto_awesome_rounded,
-                title: '没有可提交草稿',
-                description: _parseState.message ?? '请调整输入后重试。',
-              ),
-            ViewStatus.error => SectionMessageView(
-                icon: Icons.error_outline_rounded,
-                title: '解析失败',
-                description: _parseState.message ?? '请稍后重试。',
-              ),
-            _ => const SectionMessageView(
-                icon: Icons.auto_awesome_rounded,
-                title: '等待解析',
-                description: '输入内容后点击“解析草稿”。',
-              ),
-          },
-        ),
-        SectionCard(
-          eyebrow: 'Commit Result',
-          title: '入库结果',
-          child: switch (_commitState.status) {
-            ViewStatus.loading => const SectionLoadingView(label: '正在提交草稿'),
-            ViewStatus.data => Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  if (_commitState.data!.committed.isNotEmpty) ...[
-                    Text('成功提交 ${_commitState.data!.committed.length} 条'),
-                    const SizedBox(height: 8),
-                    for (final item in _commitState.data!.committed)
-                      Text('${item.kind} · ${item.recordId} · ${item.occurredAt}'),
-                  ],
-                  if (_commitState.data!.failures.isNotEmpty) ...[
-                    const SizedBox(height: 12),
-                    Text('失败 ${_commitState.data!.failures.length} 条'),
-                    const SizedBox(height: 8),
-                    for (final item in _commitState.data!.failures)
-                      Text('${item.kind} · ${item.message}'),
-                  ],
-                  if (_commitState.data!.warnings.isNotEmpty) ...[
-                    const SizedBox(height: 12),
-                    for (final warning in _commitState.data!.warnings)
-                      Text('warning: $warning'),
-                  ],
-                ],
-              ),
-            ViewStatus.error => SectionMessageView(
-                icon: Icons.error_outline_rounded,
-                title: '提交失败',
-                description: _commitState.message ?? '请稍后重试。',
-              ),
-            _ => const SectionMessageView(
-                icon: Icons.checklist_rounded,
-                title: '等待提交',
-                description: '解析出草稿后，可以在这里确认入库结果。',
-              ),
-          },
+            ],
+          ),
         ),
       ],
     );
   }
 
-  String _normalizeParserMode(String value) {
-    switch (value.toLowerCase()) {
-      case 'auto':
-      case 'rule':
-      case 'llm':
-      case 'vcp':
-        return value.toLowerCase();
-      default:
-        return 'auto';
-    }
+  void _selectKind(ReviewWindowKind kind) {
+    setState(() => _selectedKind = kind);
   }
+}
 
-  Future<void> _editDraft(AiParseDraftModel draft) async {
-    final kind = TextEditingController(text: draft.kind);
-    final confidence = TextEditingController(
-      text: (draft.confidence * 100).toStringAsFixed(1),
+class _WindowChip extends StatelessWidget {
+  const _WindowChip({
+    required this.label,
+    required this.value,
+    required this.selected,
+    required this.onSelected,
+  });
+
+  final String label;
+  final ReviewWindowKind value;
+  final ReviewWindowKind selected;
+  final ValueChanged<ReviewWindowKind> onSelected;
+
+  @override
+  Widget build(BuildContext context) {
+    return ChoiceChip(
+      label: Text(label),
+      selected: selected == value,
+      onSelected: (_) => onSelected(value),
     );
-    final warning = TextEditingController(text: draft.warning ?? '');
-    final payloadControllers = {
-      for (final entry in draft.payload.entries)
-        entry.key: TextEditingController(text: entry.value),
-    };
-    try {
-      final confirmed = await showDialog<bool>(
-        context: context,
-        builder: (context) => AlertDialog(
-          title: const Text('修改 AI 草稿'),
-          content: SizedBox(
-            width: 720,
-            child: SingleChildScrollView(
-              child: Column(
-                children: [
-                  TextField(controller: kind, decoration: const InputDecoration(labelText: 'Kind')),
-                  TextField(controller: confidence, decoration: const InputDecoration(labelText: 'Confidence %')),
-                  TextField(controller: warning, decoration: const InputDecoration(labelText: 'Warning')),
-                  const SizedBox(height: 12),
-                  for (final entry in payloadControllers.entries)
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: 10),
-                      child: TextField(
-                        controller: entry.value,
-                        decoration: InputDecoration(labelText: entry.key),
-                      ),
-                    ),
-                ],
-              ),
+  }
+}
+
+enum _ChatRole { user, assistant }
+
+class _ChatMessage {
+  const _ChatMessage({required this.role, required this.text});
+
+  final _ChatRole role;
+  final String text;
+}
+
+class _ChatBubble extends StatelessWidget {
+  const _ChatBubble({required this.message});
+
+  final _ChatMessage message;
+
+  @override
+  Widget build(BuildContext context) {
+    final isUser = message.role == _ChatRole.user;
+    final colorScheme = Theme.of(context).colorScheme;
+    return Align(
+      alignment: isUser ? Alignment.centerRight : Alignment.centerLeft,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 720),
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            color: isUser
+                ? colorScheme.primary.withValues(alpha: 0.12)
+                : Colors.white.withValues(alpha: 0.52),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(
+              color: isUser
+                  ? colorScheme.primary.withValues(alpha: 0.22)
+                  : Colors.white.withValues(alpha: 0.58),
             ),
           ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context, false),
-              child: const Text('取消'),
-            ),
-            ElevatedButton(
-              onPressed: () => Navigator.pop(context, true),
-              child: const Text('保存'),
-            ),
-          ],
+          child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: Text(message.text),
+          ),
         ),
-      );
-      if (confirmed != true) return;
-      final updated = draft.copyWith(
-        kind: kind.text.trim(),
-        confidence: ((double.tryParse(confidence.text.trim()) ?? 0) / 100).clamp(0, 1),
-        warning: warning.text.trim().isEmpty ? null : warning.text.trim(),
-        payload: {
-          for (final entry in payloadControllers.entries)
-            entry.key: entry.value.text,
-        },
-      );
-      setState(() {
-        _editableDrafts = _editableDrafts
-            .map((item) => item.draftId == draft.draftId ? updated : item)
-            .toList();
-        if (_parseState.hasData) {
-          _parseState = ViewState.ready(
-            AiParseResultModel(
-              requestId: _parseState.data!.requestId,
-              items: _editableDrafts,
-              warnings: _parseState.data!.warnings,
-              parserUsed: _parseState.data!.parserUsed,
-            ),
-          );
-        }
-      });
-    } finally {
-      kind.dispose();
-      confidence.dispose();
-      warning.dispose();
-      for (final controller in payloadControllers.values) {
-        controller.dispose();
-      }
-    }
+      ),
+    );
+  }
+}
+
+class _ChatThinkingBubble extends StatefulWidget {
+  const _ChatThinkingBubble();
+
+  @override
+  State<_ChatThinkingBubble> createState() => _ChatThinkingBubbleState();
+}
+
+class _ChatThinkingBubbleState extends State<_ChatThinkingBubble> {
+  static const _messages = [
+    '正在读取复盘数据',
+    '正在调用 LLM 分析',
+    '正在整理回答',
+  ];
+
+  Timer? _timer;
+  int _index = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _timer = Timer.periodic(const Duration(milliseconds: 1400), (_) {
+      if (!mounted) return;
+      setState(() => _index = (_index + 1) % _messages.length);
+    });
   }
 
-  void _removeDraft(String draftId) {
-    setState(() {
-      _editableDrafts = _editableDrafts.where((item) => item.draftId != draftId).toList();
-      if (_parseState.hasData) {
-        _parseState = ViewState.ready(
-          AiParseResultModel(
-            requestId: _parseState.data!.requestId,
-            items: _editableDrafts,
-            warnings: _parseState.data!.warnings,
-            parserUsed: _parseState.data!.parserUsed,
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: Colors.white.withValues(alpha: 0.52),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: Colors.white.withValues(alpha: 0.58)),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const SizedBox(
+                width: 16,
+                height: 16,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              ),
+              const SizedBox(width: 10),
+              AnimatedSwitcher(
+                duration: const Duration(milliseconds: 240),
+                child: Text(
+                  _messages[_index],
+                  key: ValueKey(_index),
+                ),
+              ),
+            ],
           ),
-        );
-      }
-    });
+        ),
+      ),
+    );
   }
 }

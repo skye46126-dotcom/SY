@@ -2,7 +2,7 @@ use chrono::{Datelike, Duration, Local, NaiveDate};
 use serde::{Deserialize, Serialize};
 
 use crate::error::{LifeOsError, Result};
-use crate::models::RecentRecordItem;
+use crate::models::{RecentRecordItem, ReviewNote};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum ReviewWindowKind {
@@ -188,6 +188,7 @@ pub struct ProjectProgressItem {
     pub time_spent_minutes: i64,
     pub income_earned_cents: i64,
     pub direct_expense_cents: i64,
+    pub time_cost_cents: i64,
     pub allocated_structural_cost_cents: i64,
     pub operating_cost_cents: i64,
     pub fully_loaded_cost_cents: i64,
@@ -224,6 +225,7 @@ pub struct ReviewReport {
     pub key_events: Vec<RecentRecordItem>,
     pub income_history: Vec<RecentRecordItem>,
     pub history_records: Vec<RecentRecordItem>,
+    pub review_notes: Vec<ReviewNote>,
     pub time_tag_metrics: Vec<ReviewTagMetric>,
     pub expense_tag_metrics: Vec<ReviewTagMetric>,
 }

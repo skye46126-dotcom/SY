@@ -4,6 +4,7 @@ import '../../app/app.dart';
 import '../../models/tag_models.dart';
 import '../../shared/view_state.dart';
 import '../../shared/widgets/module_page.dart';
+import '../../shared/widgets/safe_pop.dart';
 import '../../shared/widgets/section_card.dart';
 import '../../shared/widgets/state_views.dart';
 
@@ -22,10 +23,12 @@ class _TagManagePageState extends State<TagManagePage> {
     setState(() => _state = ViewState.loading());
     try {
       final runtime = LifeOsScope.runtimeOf(context);
-      final tags = await LifeOsScope.of(context).getTags(userId: runtime.userId);
+      final tags =
+          await LifeOsScope.of(context).getTags(userId: runtime.userId);
       if (!mounted) return;
       setState(() {
-        _state = tags.isEmpty ? ViewState.empty('当前还没有标签。') : ViewState.ready(tags);
+        _state =
+            tags.isEmpty ? ViewState.empty('当前还没有标签。') : ViewState.ready(tags);
       });
     } catch (error) {
       if (!mounted) return;
@@ -104,8 +107,9 @@ class _TagManagePageState extends State<TagManagePage> {
   }
 
   Future<void> _openTagDialog({TagModel? tag}) async {
-    final runtime = LifeOsScope.runtimeOf(context);
-    final service = LifeOsScope.of(context);
+    final rootContext = Navigator.of(context, rootNavigator: true).context;
+    final runtime = LifeOsScope.runtimeOf(rootContext);
+    final service = LifeOsScope.of(rootContext);
     final name = TextEditingController(text: tag?.name ?? '');
     final emoji = TextEditingController(text: tag?.emoji ?? '');
     final scope = TextEditingController(text: tag?.scope ?? 'global');
@@ -115,26 +119,47 @@ class _TagManagePageState extends State<TagManagePage> {
     final sortOrder = TextEditingController(text: '${tag?.sortOrder ?? 0}');
     try {
       final confirmed = await showDialog<bool>(
-        context: context,
-        builder: (context) {
+        context: rootContext,
+        builder: (dialogContext) {
           return AlertDialog(
             title: Text(tag == null ? '新建标签' : '编辑标签'),
             content: SingleChildScrollView(
               child: Column(
                 children: [
-                  TextField(controller: name, decoration: const InputDecoration(labelText: '名称')),
-                  TextField(controller: emoji, decoration: const InputDecoration(labelText: 'Emoji')),
-                  TextField(controller: scope, decoration: const InputDecoration(labelText: 'Scope')),
-                  TextField(controller: group, decoration: const InputDecoration(labelText: 'Group')),
-                  TextField(controller: level, decoration: const InputDecoration(labelText: 'Level')),
-                  TextField(controller: status, decoration: const InputDecoration(labelText: 'Status')),
-                  TextField(controller: sortOrder, decoration: const InputDecoration(labelText: 'Sort Order')),
+                  TextField(
+                      controller: name,
+                      decoration: const InputDecoration(labelText: '名称')),
+                  TextField(
+                      controller: emoji,
+                      decoration: const InputDecoration(labelText: 'Emoji')),
+                  TextField(
+                      controller: scope,
+                      decoration: const InputDecoration(labelText: 'Scope')),
+                  TextField(
+                      controller: group,
+                      decoration: const InputDecoration(labelText: 'Group')),
+                  TextField(
+                      controller: level,
+                      decoration: const InputDecoration(labelText: 'Level')),
+                  TextField(
+                      controller: status,
+                      decoration: const InputDecoration(labelText: 'Status')),
+                  TextField(
+                      controller: sortOrder,
+                      decoration:
+                          const InputDecoration(labelText: 'Sort Order')),
                 ],
               ),
             ),
             actions: [
-              TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('取消')),
-              ElevatedButton(onPressed: () => Navigator.pop(context, true), child: const Text('保存')),
+              TextButton(
+                onPressed: () => safePop(dialogContext, false),
+                child: const Text('取消'),
+              ),
+              ElevatedButton(
+                onPressed: () => safePop(dialogContext, true),
+                child: const Text('保存'),
+              ),
             ],
           );
         },
@@ -176,16 +201,23 @@ class _TagManagePageState extends State<TagManagePage> {
   }
 
   Future<void> _deleteTag(TagModel tag) async {
-    final runtime = LifeOsScope.runtimeOf(context);
-    final service = LifeOsScope.of(context);
+    final rootContext = Navigator.of(context, rootNavigator: true).context;
+    final runtime = LifeOsScope.runtimeOf(rootContext);
+    final service = LifeOsScope.of(rootContext);
     final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
+      context: rootContext,
+      builder: (dialogContext) => AlertDialog(
         title: const Text('删除标签'),
         content: Text('确认删除 ${tag.name} 吗？'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('取消')),
-          ElevatedButton(onPressed: () => Navigator.pop(context, true), child: const Text('删除')),
+          TextButton(
+            onPressed: () => safePop(dialogContext, false),
+            child: const Text('取消'),
+          ),
+          ElevatedButton(
+            onPressed: () => safePop(dialogContext, true),
+            child: const Text('删除'),
+          ),
         ],
       ),
     );

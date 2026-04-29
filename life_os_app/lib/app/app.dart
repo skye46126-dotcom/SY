@@ -1,6 +1,9 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../features/today/today_page.dart';
+import '../services/launch_route_bridge.dart';
 import '../shared/view_state.dart';
 import '../shared/widgets/module_page.dart';
 import '../shared/widgets/state_views.dart';
@@ -58,10 +61,15 @@ class LifeOsApp extends StatefulWidget {
 class _LifeOsAppState extends State<LifeOsApp> {
   late final AppService _service;
   late final AppRuntimeController _runtime;
+  late final GlobalKey<NavigatorState> _navigatorKey;
+  late final LaunchRouteBridge _launchRouteBridge;
+  StreamSubscription<String>? _launchRouteSubscription;
+  String? _pendingLaunchRoute;
 
   @override
   void initState() {
     super.initState();
+    _navigatorKey = GlobalKey<NavigatorState>();
     _service = AppService(
       api: widget.api ??
           NativeRustApi.createOrFallback(
@@ -69,13 +77,49 @@ class _LifeOsAppState extends State<LifeOsApp> {
           ),
     );
     _runtime = AppRuntimeController(_service);
+    _runtime.addListener(_applyPendingLaunchRoute);
+    _launchRouteBridge = LaunchRouteBridge();
+    _launchRouteSubscription = _launchRouteBridge.routes.listen(
+      _handleIncomingLaunchRoute,
+    );
+    _launchRouteBridge.consumeLaunchRoute().then(_handleIncomingLaunchRoute);
     _runtime.initialize();
   }
 
   @override
   void dispose() {
+    final launchRouteSubscription = _launchRouteSubscription;
+    if (launchRouteSubscription != null) {
+      unawaited(launchRouteSubscription.cancel());
+    }
+    unawaited(_launchRouteBridge.dispose());
+    _runtime.removeListener(_applyPendingLaunchRoute);
     _runtime.dispose();
     super.dispose();
+  }
+
+  void _handleIncomingLaunchRoute(String? route) {
+    if (route == null) {
+      return;
+    }
+    _pendingLaunchRoute = route;
+    _applyPendingLaunchRoute();
+  }
+
+  void _applyPendingLaunchRoute() {
+    final route = _pendingLaunchRoute;
+    if (route == null || _runtime.state.status != ViewStatus.data) {
+      return;
+    }
+    final navigator = _navigatorKey.currentState;
+    if (navigator == null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _applyPendingLaunchRoute();
+      });
+      return;
+    }
+    _pendingLaunchRoute = null;
+    navigator.pushNamedAndRemoveUntil(route, (existing) => false);
   }
 
   @override
@@ -84,8 +128,9 @@ class _LifeOsAppState extends State<LifeOsApp> {
       service: _service,
       runtime: _runtime,
       child: MaterialApp(
+        navigatorKey: _navigatorKey,
         debugShowCheckedModeBanner: false,
-        title: 'SkyeOS',
+        title: 'SkyOS',
         theme: AppTheme.light(),
         home: _RootGate(runtime: _runtime),
         onGenerateRoute: AppRouter.onGenerateRoute,

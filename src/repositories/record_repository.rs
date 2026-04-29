@@ -465,7 +465,11 @@ impl RecordRepository {
         Ok(result)
     }
 
-    pub fn update_tag(connection: &mut Connection, tag_id: &str, input: &CreateTagInput) -> Result<Tag> {
+    pub fn update_tag(
+        connection: &mut Connection,
+        tag_id: &str,
+        input: &CreateTagInput,
+    ) -> Result<Tag> {
         input.validate()?;
 
         let tx = connection.transaction()?;
@@ -550,16 +554,15 @@ impl RecordRepository {
         ensure_user_exists(&tx, user_id)?;
         ensure_tag_exists(&tx, user_id, tag_id)?;
 
-        let in_use = tx
-            .query_row(
-                "SELECT EXISTS(
+        let in_use = tx.query_row(
+            "SELECT EXISTS(
                     SELECT 1 FROM record_tag_links
                     WHERE tag_id = ?1 AND user_id = ?2
                     LIMIT 1
                  )",
-                params![tag_id, user_id],
-                |row| row.get::<_, i64>(0),
-            )?;
+            params![tag_id, user_id],
+            |row| row.get::<_, i64>(0),
+        )?;
         if in_use == 1 {
             return Err(LifeOsError::InvalidInput(
                 "tag is still referenced by records and cannot be deleted".to_string(),
@@ -583,11 +586,27 @@ impl RecordRepository {
         Ok(CaptureMetadata {
             project_options: load_project_options(connection, user_id)?,
             tags: Self::list_tags(connection, user_id)?,
-            time_categories: list_dimension_options(connection, DimensionKind::TimeCategory, false)?,
+            time_categories: list_dimension_options(
+                connection,
+                DimensionKind::TimeCategory,
+                false,
+            )?,
             income_types: list_dimension_options(connection, DimensionKind::IncomeType, false)?,
-            expense_categories: list_dimension_options(connection, DimensionKind::ExpenseCategory, false)?,
-            learning_levels: list_dimension_options(connection, DimensionKind::LearningLevel, false)?,
-            project_statuses: list_dimension_options(connection, DimensionKind::ProjectStatus, false)?,
+            expense_categories: list_dimension_options(
+                connection,
+                DimensionKind::ExpenseCategory,
+                false,
+            )?,
+            learning_levels: list_dimension_options(
+                connection,
+                DimensionKind::LearningLevel,
+                false,
+            )?,
+            project_statuses: list_dimension_options(
+                connection,
+                DimensionKind::ProjectStatus,
+                false,
+            )?,
             income_source_suggestions: load_recent_income_sources(connection, user_id)?,
             defaults: load_capture_defaults(connection, user_id)?,
         })
@@ -600,11 +619,7 @@ impl RecordRepository {
         include_inactive: bool,
     ) -> Result<Vec<DimensionOption>> {
         ensure_user_exists(connection, user_id)?;
-        list_dimension_options(
-            connection,
-            parse_dimension_kind(kind)?,
-            include_inactive,
-        )
+        list_dimension_options(connection, parse_dimension_kind(kind)?, include_inactive)
     }
 
     pub fn save_dimension_option(
@@ -689,18 +704,17 @@ impl RecordRepository {
             },
         )?;
         let current_month = current_month_for_timezone(&timezone)?;
-        let (current_month_basic_living_cents, current_month_fixed_subscription_cents) =
-            connection
-                .query_row(
-                    "SELECT COALESCE(basic_living_cents, 0), COALESCE(fixed_subscription_cents, 0)
+        let (current_month_basic_living_cents, current_month_fixed_subscription_cents) = connection
+            .query_row(
+                "SELECT COALESCE(basic_living_cents, 0), COALESCE(fixed_subscription_cents, 0)
                      FROM expense_baseline_months
                      WHERE user_id = ?1 AND month = ?2
                      LIMIT 1",
-                    params![user_id, current_month],
-                    |row| Ok((row.get::<_, i64>(0)?, row.get::<_, i64>(1)?)),
-                )
-                .optional()?
-                .unwrap_or((0, 0));
+                params![user_id, current_month],
+                |row| Ok((row.get::<_, i64>(0)?, row.get::<_, i64>(1)?)),
+            )
+            .optional()?
+            .unwrap_or((0, 0));
         Ok(OperatingSettings {
             timezone,
             currency_code,
@@ -1023,24 +1037,18 @@ impl RecordRepository {
         } else {
             "neutral".to_string()
         };
-        let work_status = if overview.total_work_minutes >= load_int_setting(
-            connection,
-            user_id,
-            "today_work_target_minutes",
-            180,
-        )? {
+        let work_status = if overview.total_work_minutes
+            >= load_int_setting(connection, user_id, "today_work_target_minutes", 180)?
+        {
             "on_track".to_string()
         } else if overview.total_work_minutes == 0 {
             "missing".to_string()
         } else {
             "behind".to_string()
         };
-        let learning_status = if overview.total_learning_minutes >= load_int_setting(
-            connection,
-            user_id,
-            "today_learning_target_minutes",
-            60,
-        )? {
+        let learning_status = if overview.total_learning_minutes
+            >= load_int_setting(connection, user_id, "today_learning_target_minutes", 60)?
+        {
             "on_track".to_string()
         } else if overview.total_learning_minutes == 0 {
             "missing".to_string()
@@ -1053,9 +1061,10 @@ impl RecordRepository {
             || overview.total_work_minutes == 0
             || overview.total_learning_minutes == 0;
         let freedom_cents = snapshot.as_ref().and_then(|item| item.freedom_cents);
-        let passive_cover_ratio_bps = snapshot
-            .as_ref()
-            .and_then(|item| item.passive_cover_ratio.map(|value| (value * 10_000.0).round() as i64));
+        let passive_cover_ratio_bps = snapshot.as_ref().and_then(|item| {
+            item.passive_cover_ratio
+                .map(|value| (value * 10_000.0).round() as i64)
+        });
 
         let headline = build_today_headline(
             &finance_status,
@@ -1542,7 +1551,7 @@ impl RecordRepository {
                SELECT id AS record_id, 'time' AS kind, started_at AS occurred_at, category_code AS title,
                       COALESCE(note, '') AS detail
                FROM time_records
-               WHERE user_id = ?1 AND is_deleted = 0 AND started_at >= ?2 AND started_at < ?3
+               WHERE user_id = ?1 AND is_deleted = 0 AND started_at < ?3 AND ended_at > ?2
                UNION ALL
                SELECT id AS record_id, 'income' AS kind, occurred_on AS occurred_at, source_name AS title,
                       CAST(amount_cents AS TEXT) || ' cents' ||
@@ -2243,7 +2252,12 @@ fn load_latest_dimension_code(
         .map_err(Into::into)
 }
 
-fn write_setting(connection: &Connection, user_id: &str, key: &str, value_json: &str) -> Result<()> {
+fn write_setting(
+    connection: &Connection,
+    user_id: &str,
+    key: &str,
+    value_json: &str,
+) -> Result<()> {
     connection.execute(
         "INSERT INTO settings(user_id, key, value_json, updated_at)
          VALUES (?1, ?2, ?3, CURRENT_TIMESTAMP)

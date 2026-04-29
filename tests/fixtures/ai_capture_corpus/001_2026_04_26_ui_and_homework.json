@@ -1,0 +1,27 @@
+{
+  "name": "2026-04-26 UI优化和作业",
+  "context_date": "2026-04-26",
+  "mode": "auto",
+  "raw_text": "4.26中午\n12-1点\n\n下午\n5-9点\n\n做UI的优化和功能增加\n\n加入数据导出和图片分享导出功能（海报类似，但是没有做完，估计还需要一天时间，更改UI适配了很久很久，还有细节需要打磨\n\n把boke和VCP结合，制作中间层聚合数据，方便管理\n\n\n9点-12点\n写数学作业和电路作业\n\n使用GPT辅助，真的很不错\n\n学习\n3-12点睡觉",
+  "minimums": {
+    "items": 3,
+    "review_notes": 1,
+    "blocked_max": 1
+  },
+  "expected_events": [
+    {
+      "kind": "time_record",
+      "raw_text_contains": "做UI的优化和功能增加"
+    },
+    {
+      "kind": "time_record",
+      "raw_text_contains": "写数学作业和电路作业"
+    }
+  ],
+  "expected_notes": [
+    {
+      "note_type": "ai_usage",
+      "content_contains": "GPT辅助"
+    }
+  ]
+}

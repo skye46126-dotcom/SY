@@ -1,14 +1,24 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 
 import '../../app/app.dart';
+import '../../features/export/application/export_orchestrator.dart';
+import '../../features/export/domain/export_artifact.dart';
+import '../../features/export/domain/export_range.dart';
+import '../../features/export/domain/export_request.dart';
 import '../../models/config_models.dart';
 import '../../models/project_models.dart';
 import '../../models/record_models.dart';
 import '../../models/snapshot_models.dart';
 import '../../models/tag_models.dart';
 import '../../services/app_service.dart';
+import '../../services/export_metadata_builders.dart';
+import '../../services/image_export_service.dart';
 import '../../shared/view_state.dart';
+import '../../shared/widgets/export_document_dialog.dart';
 import '../../shared/widgets/module_page.dart';
+import '../../shared/widgets/safe_pop.dart';
 import '../../shared/widgets/section_card.dart';
 import '../../shared/widgets/state_views.dart';
 import '../review/widgets/record_editor_dialog.dart';
@@ -59,14 +69,20 @@ class ProjectDetailPage extends StatefulWidget {
 }
 
 class _ProjectDetailPageState extends State<ProjectDetailPage> {
+  final GlobalKey _exportBoundaryKey = GlobalKey();
+  ExportOrchestrator? _exportOrchestrator;
   ProjectDetailController? _controller;
-  ViewState<ProjectMetricSnapshotSummaryModel?> _snapshotState = ViewState.initial();
+  ViewState<ProjectMetricSnapshotSummaryModel?> _snapshotState =
+      ViewState.initial();
   bool _loaded = false;
+  bool _isExporting = false;
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
     _controller ??= ProjectDetailController(LifeOsScope.of(context));
+    _exportOrchestrator ??=
+        ExportOrchestrator(service: LifeOsScope.of(context));
     if (_loaded) {
       return;
     }
@@ -103,7 +119,14 @@ class _ProjectDetailPageState extends State<ProjectDetailPage> {
         return ModulePage(
           title: '项目详情',
           subtitle: 'Project Detail',
+          exportBoundaryKey: _exportBoundaryKey,
           actions: [
+            OutlinedButton(
+              onPressed: detail == null || _isExporting
+                  ? null
+                  : _exportProjectDocument,
+              child: Text(_isExporting ? '正在导出' : '导出图片文档'),
+            ),
             ElevatedButton(
               onPressed: () => _openProjectEditDialog(detail),
               child: const Text('完整编辑'),
@@ -142,7 +165,8 @@ class _ProjectDetailPageState extends State<ProjectDetailPage> {
                         Text('状态: ${detail.statusCode}'),
                         Text('评估: ${detail.evaluationStatus}'),
                         Text('ROI: ${detail.roiPerc.toStringAsFixed(2)}%'),
-                        Text('经营 ROI: ${detail.operatingRoiPerc.toStringAsFixed(2)}%'),
+                        Text(
+                            '经营 ROI: ${detail.operatingRoiPerc.toStringAsFixed(2)}%'),
                       ],
                     ),
             ),
@@ -153,16 +177,21 @@ class _ProjectDetailPageState extends State<ProjectDetailPage> {
                   ? const SectionMessageView(
                       icon: Icons.calculate_rounded,
                       title: '指标区域已建立',
-                      description: '等待 ProjectDetail 返回收入、成本、利润和 break-even 指标。',
+                      description:
+                          '等待 ProjectDetail 返回收入、成本、利润和 break-even 指标。',
                     )
                   : Wrap(
                       spacing: 18,
                       runSpacing: 12,
                       children: [
-                        Text('收入: ¥${(detail.totalIncomeCents / 100).toStringAsFixed(2)}'),
-                        Text('支出: ¥${(detail.totalExpenseCents / 100).toStringAsFixed(2)}'),
-                        Text('总成本: ¥${(detail.totalCostCents / 100).toStringAsFixed(2)}'),
-                        Text('利润: ¥${(detail.profitCents / 100).toStringAsFixed(2)}'),
+                        Text(
+                            '收入: ¥${(detail.totalIncomeCents / 100).toStringAsFixed(2)}'),
+                        Text(
+                            '直接支出: ¥${(detail.totalExpenseCents / 100).toStringAsFixed(2)}'),
+                        Text(
+                            '全成本: ¥${(detail.totalCostCents / 100).toStringAsFixed(2)}'),
+                        Text(
+                            '全成本利润: ¥${(detail.profitCents / 100).toStringAsFixed(2)}'),
                         Text('时长: ${detail.totalTimeMinutes} 分钟'),
                         Text('学习: ${detail.totalLearningMinutes} 分钟'),
                       ],
@@ -172,16 +201,21 @@ class _ProjectDetailPageState extends State<ProjectDetailPage> {
               eyebrow: 'Snapshot',
               title: '最近月度项目快照',
               child: switch (_snapshotState.status) {
-                ViewStatus.loading => const SectionLoadingView(label: '正在读取项目快照'),
+                ViewStatus.loading =>
+                  const SectionLoadingView(label: '正在读取项目快照'),
                 ViewStatus.data when _snapshotState.data != null => Wrap(
                     spacing: 18,
                     runSpacing: 12,
                     children: [
-                      Text('快照收入: ¥${(_snapshotState.data!.incomeCents / 100).toStringAsFixed(2)}'),
-                      Text('快照总成本: ¥${(_snapshotState.data!.totalCostCents / 100).toStringAsFixed(2)}'),
-                      Text('快照利润: ¥${(_snapshotState.data!.profitCents / 100).toStringAsFixed(2)}'),
+                      Text(
+                          '快照收入: ¥${(_snapshotState.data!.incomeCents / 100).toStringAsFixed(2)}'),
+                      Text(
+                          '快照总成本: ¥${(_snapshotState.data!.totalCostCents / 100).toStringAsFixed(2)}'),
+                      Text(
+                          '快照利润: ¥${(_snapshotState.data!.profitCents / 100).toStringAsFixed(2)}'),
                       Text('快照投入: ${_snapshotState.data!.investedMinutes} 分钟'),
-                      Text('快照 ROI: ${(_snapshotState.data!.roiRatio * 100).toStringAsFixed(2)}%'),
+                      Text(
+                          '快照 ROI: ${(_snapshotState.data!.roiRatio * 100).toStringAsFixed(2)}%'),
                     ],
                   ),
                 _ => SectionMessageView(
@@ -217,10 +251,12 @@ class _ProjectDetailPageState extends State<ProjectDetailPage> {
                               },
                               itemBuilder: (context) => const [
                                 PopupMenuItem(value: 'edit', child: Text('编辑')),
-                                PopupMenuItem(value: 'delete', child: Text('删除')),
+                                PopupMenuItem(
+                                    value: 'delete', child: Text('删除')),
                               ],
                               child: Padding(
-                                padding: const EdgeInsets.symmetric(vertical: 8),
+                                padding:
+                                    const EdgeInsets.symmetric(vertical: 8),
                                 child: Text(record.occurredAt),
                               ),
                             ),
@@ -252,7 +288,10 @@ class _ProjectDetailPageState extends State<ProjectDetailPage> {
         userId: runtime.userId,
         metricSnapshotId: latest.id,
       );
-      final item = projectSnapshots.where((entry) => entry.projectId == widget.projectId).cast<ProjectMetricSnapshotSummaryModel?>().firstWhere(
+      final item = projectSnapshots
+          .where((entry) => entry.projectId == widget.projectId)
+          .cast<ProjectMetricSnapshotSummaryModel?>()
+          .firstWhere(
             (entry) => entry != null,
             orElse: () => null,
           );
@@ -266,10 +305,59 @@ class _ProjectDetailPageState extends State<ProjectDetailPage> {
     }
   }
 
+  Future<void> _exportProjectDocument() async {
+    final detail = _controller?.state.data;
+    if (detail == null || _isExporting) {
+      return;
+    }
+
+    setState(() => _isExporting = true);
+    try {
+      final exportResult = await _exportOrchestrator!.export(
+        ExportRequest.snapshot(
+          title: 'project-${detail.name}-${detail.analysisEndDate}',
+          module: 'project',
+          range: ExportRange.month,
+          boundaryKey: _exportBoundaryKey,
+          metadata: buildProjectExportMetadata(
+            detail: detail,
+            snapshot: _snapshotState.data,
+          ),
+        ),
+      );
+      final artifact = exportResult.primaryArtifact;
+      if (!mounted) return;
+      await showExportDocumentDialog(
+          context, _artifactToImageDocument(artifact));
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('导出项目图片文档失败：$error')),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _isExporting = false);
+      }
+    }
+  }
+
+  ExportedImageDocument _artifactToImageDocument(ExportArtifact artifact) {
+    return ExportedImageDocument(
+      module: artifact.module,
+      title: artifact.title,
+      exportedAt: artifact.createdAt,
+      directoryPath: File(artifact.filePath).parent.path,
+      imagePath: artifact.filePath,
+      metadataPath: artifact.metadataPath,
+      metadata: Map<String, dynamic>.from(artifact.metadata.toJson()),
+    );
+  }
+
   Future<void> _openProjectStateDialog(ProjectDetail? detail) async {
     if (detail == null) return;
-    final runtime = LifeOsScope.runtimeOf(context);
-    final service = LifeOsScope.of(context);
+    final rootContext = Navigator.of(context, rootNavigator: true).context;
+    final runtime = LifeOsScope.runtimeOf(rootContext);
+    final service = LifeOsScope.of(rootContext);
     final metadata = await service.invokeRaw(
       method: 'get_capture_metadata',
       payload: {'user_id': runtime.userId},
@@ -283,66 +371,86 @@ class _ProjectDetailPageState extends State<ProjectDetailPage> {
     final note = TextEditingController(text: detail.note ?? '');
     final endedOn = TextEditingController(text: detail.endedOn ?? '');
     try {
+      if (!mounted) return;
       final confirmed = await showDialog<bool>(
         context: context,
-        builder: (context) => AlertDialog(
-          title: const Text('更新项目状态'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              ListTile(
-                contentPadding: EdgeInsets.zero,
-                title: const Text('状态'),
-                subtitle: Text(
-                  statuses
-                          .where((item) => item.code == selectedStatus)
-                          .map((item) => item.displayName)
-                          .cast<String?>()
-                          .firstWhere((item) => item != null, orElse: () => selectedStatus) ??
-                      selectedStatus,
-                ),
-                trailing: const Icon(Icons.arrow_drop_down_rounded),
-                onTap: () async {
-                  final selected = await showModalBottomSheet<String>(
-                    context: context,
-                    builder: (context) => SafeArea(
-                      child: ListView(
-                        shrinkWrap: true,
-                        children: [
-                          for (final item in statuses)
-                            ListTile(
-                              title: Text(item.displayName),
-                              subtitle: Text(item.code),
-                              trailing: item.code == selectedStatus
-                                  ? const Icon(Icons.check_rounded)
-                                  : null,
-                              onTap: () => Navigator.of(context).pop(item.code),
-                            ),
-                        ],
+        useRootNavigator: true,
+        builder: (dialogContext) => StatefulBuilder(
+          builder: (dialogContentContext, setDialogState) => AlertDialog(
+            title: const Text('更新项目状态'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('状态'),
+                  subtitle: Text(
+                    statuses
+                            .where((item) => item.code == selectedStatus)
+                            .map((item) => item.displayName)
+                            .cast<String?>()
+                            .firstWhere(
+                              (item) => item != null,
+                              orElse: () => selectedStatus,
+                            ) ??
+                        selectedStatus,
+                  ),
+                  trailing: const Icon(Icons.arrow_drop_down_rounded),
+                  onTap: () async {
+                    final selected = await showModalBottomSheet<String>(
+                      context: rootContext,
+                      useRootNavigator: true,
+                      builder: (context) => SafeArea(
+                        child: ListView(
+                          shrinkWrap: true,
+                          children: [
+                            for (final item in statuses)
+                              ListTile(
+                                title: Text(item.displayName),
+                                subtitle: Text(item.code),
+                                trailing: item.code == selectedStatus
+                                    ? const Icon(Icons.check_rounded)
+                                    : null,
+                                onTap: () =>
+                                    Navigator.of(context).pop(item.code),
+                              ),
+                          ],
+                        ),
                       ),
-                    ),
-                  );
-                  if (selected != null) {
-                    selectedStatus = selected;
-                    if (mounted) {
-                      setState(() {});
+                    );
+                    if (!dialogContentContext.mounted) return;
+                    if (selected != null) {
+                      selectedStatus = selected;
+                      setDialogState(() {});
                     }
-                  }
-                },
+                  },
+                ),
+                TextField(
+                  controller: score,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(labelText: '评分 /10'),
+                ),
+                TextField(
+                  controller: endedOn,
+                  decoration: const InputDecoration(labelText: '结束日期'),
+                ),
+                TextField(
+                  controller: note,
+                  decoration: const InputDecoration(labelText: '备注'),
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => safePop(dialogContext, false),
+                child: const Text('取消'),
               ),
-              TextField(
-                controller: score,
-                keyboardType: TextInputType.number,
-                decoration: const InputDecoration(labelText: '评分 /10'),
+              ElevatedButton(
+                onPressed: () => safePop(dialogContext, true),
+                child: const Text('保存'),
               ),
-              TextField(controller: endedOn, decoration: const InputDecoration(labelText: '结束日期')),
-              TextField(controller: note, decoration: const InputDecoration(labelText: '备注')),
             ],
           ),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('取消')),
-            ElevatedButton(onPressed: () => Navigator.pop(context, true), child: const Text('保存')),
-          ],
         ),
       );
       if (confirmed != true) return;
@@ -372,8 +480,9 @@ class _ProjectDetailPageState extends State<ProjectDetailPage> {
 
   Future<void> _openProjectEditDialog(ProjectDetail? detail) async {
     if (detail == null) return;
-    final runtime = LifeOsScope.runtimeOf(context);
-    final service = LifeOsScope.of(context);
+    final rootContext = Navigator.of(context, rootNavigator: true).context;
+    final runtime = LifeOsScope.runtimeOf(rootContext);
+    final service = LifeOsScope.of(rootContext);
     final tags = await service.getTags(userId: runtime.userId);
     final metadata = await service.invokeRaw(
       method: 'get_capture_metadata',
@@ -393,8 +502,10 @@ class _ProjectDetailPageState extends State<ProjectDetailPage> {
     final note = TextEditingController(text: detail.note ?? '');
     final selectedTagIds = detail.tagIds.toSet();
     try {
+      if (!mounted) return;
       final confirmed = await showDialog<bool>(
         context: context,
+        useRootNavigator: true,
         builder: (context) {
           return StatefulBuilder(
             builder: (context, setState) => AlertDialog(
@@ -405,7 +516,9 @@ class _ProjectDetailPageState extends State<ProjectDetailPage> {
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      TextField(controller: name, decoration: const InputDecoration(labelText: '项目名称')),
+                      TextField(
+                          controller: name,
+                          decoration: const InputDecoration(labelText: '项目名称')),
                       ListTile(
                         contentPadding: EdgeInsets.zero,
                         title: const Text('状态'),
@@ -414,13 +527,15 @@ class _ProjectDetailPageState extends State<ProjectDetailPage> {
                                   .where((item) => item.code == selectedStatus)
                                   .map((item) => item.displayName)
                                   .cast<String?>()
-                                  .firstWhere((item) => item != null, orElse: () => selectedStatus) ??
+                                  .firstWhere((item) => item != null,
+                                      orElse: () => selectedStatus) ??
                               selectedStatus,
                         ),
                         trailing: const Icon(Icons.arrow_drop_down_rounded),
                         onTap: () async {
                           final selected = await showModalBottomSheet<String>(
-                            context: context,
+                            context: rootContext,
+                            useRootNavigator: true,
                             builder: (context) => SafeArea(
                               child: ListView(
                                 shrinkWrap: true,
@@ -432,20 +547,26 @@ class _ProjectDetailPageState extends State<ProjectDetailPage> {
                                       trailing: item.code == selectedStatus
                                           ? const Icon(Icons.check_rounded)
                                           : null,
-                                      onTap: () => Navigator.of(context).pop(item.code),
+                                      onTap: () =>
+                                          Navigator.of(context).pop(item.code),
                                     ),
                                 ],
                               ),
                             ),
                           );
+                          if (!context.mounted) return;
                           if (selected != null) {
                             selectedStatus = selected;
                             setState(() {});
                           }
                         },
                       ),
-                      TextField(controller: startedOn, decoration: const InputDecoration(labelText: '开始日期')),
-                      TextField(controller: endedOn, decoration: const InputDecoration(labelText: '结束日期')),
+                      TextField(
+                          controller: startedOn,
+                          decoration: const InputDecoration(labelText: '开始日期')),
+                      TextField(
+                          controller: endedOn,
+                          decoration: const InputDecoration(labelText: '结束日期')),
                       TextField(
                         controller: score,
                         keyboardType: TextInputType.number,
@@ -454,9 +575,13 @@ class _ProjectDetailPageState extends State<ProjectDetailPage> {
                       TextField(
                         controller: aiEnableRatio,
                         keyboardType: TextInputType.number,
-                        decoration: const InputDecoration(labelText: 'AI 启用比例 %'),
+                        decoration:
+                            const InputDecoration(labelText: 'AI 启用比例 %'),
                       ),
-                      TextField(controller: note, decoration: const InputDecoration(labelText: '备注'), maxLines: 3),
+                      TextField(
+                          controller: note,
+                          decoration: const InputDecoration(labelText: '备注'),
+                          maxLines: 3),
                       const SizedBox(height: 16),
                       Wrap(
                         spacing: 8,
@@ -483,8 +608,14 @@ class _ProjectDetailPageState extends State<ProjectDetailPage> {
                 ),
               ),
               actions: [
-                TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('取消')),
-                ElevatedButton(onPressed: () => Navigator.pop(context, true), child: const Text('保存')),
+                TextButton(
+                  onPressed: () => safePop(context, false),
+                  child: const Text('取消'),
+                ),
+                ElevatedButton(
+                  onPressed: () => safePop(context, true),
+                  child: const Text('保存'),
+                ),
               ],
             ),
           );
@@ -495,13 +626,13 @@ class _ProjectDetailPageState extends State<ProjectDetailPage> {
         method: 'update_project_record',
         payload: {
           'project_id': detail.id,
-            'input': {
-              'user_id': runtime.userId,
-              'name': name.text,
-              'status_code': selectedStatus,
-              'started_on': startedOn.text,
-              'ended_on': endedOn.text.isEmpty ? null : endedOn.text,
-              'ai_enable_ratio': int.tryParse(aiEnableRatio.text),
+          'input': {
+            'user_id': runtime.userId,
+            'name': name.text,
+            'status_code': selectedStatus,
+            'started_on': startedOn.text,
+            'ended_on': endedOn.text.isEmpty ? null : endedOn.text,
+            'ai_enable_ratio': int.tryParse(aiEnableRatio.text),
             'score': int.tryParse(score.text),
             'note': note.text.isEmpty ? null : note.text,
             'tag_ids': selectedTagIds.toList(),
@@ -581,7 +712,7 @@ class _ProjectDetailPageState extends State<ProjectDetailPage> {
     final tags = await service.getTags(userId: runtime.userId);
     if (!mounted) return;
     final result = await showDialog<RecordEditorResult>(
-      context: context,
+      context: Navigator.of(context, rootNavigator: true).context,
       builder: (context) {
         final typedProjectOptions = projectOptions.cast<ProjectOption>();
         final typedTags = tags.cast<TagModel>();
@@ -591,7 +722,8 @@ class _ProjectDetailPageState extends State<ProjectDetailPage> {
               recordId: record.recordId,
               userId: runtime.userId,
               anchorDate: detailAnchorDate(),
-              timeSnapshot: TimeRecordSnapshotModel.fromJson(snapshot.cast<String, dynamic>()),
+              timeSnapshot: TimeRecordSnapshotModel.fromJson(
+                  snapshot.cast<String, dynamic>()),
               projectOptions: typedProjectOptions,
               tags: typedTags,
             );
@@ -600,7 +732,8 @@ class _ProjectDetailPageState extends State<ProjectDetailPage> {
               recordId: record.recordId,
               userId: runtime.userId,
               anchorDate: detailAnchorDate(),
-              incomeSnapshot: IncomeRecordSnapshotModel.fromJson(snapshot.cast<String, dynamic>()),
+              incomeSnapshot: IncomeRecordSnapshotModel.fromJson(
+                  snapshot.cast<String, dynamic>()),
               projectOptions: typedProjectOptions,
               tags: typedTags,
             );
@@ -609,7 +742,8 @@ class _ProjectDetailPageState extends State<ProjectDetailPage> {
               recordId: record.recordId,
               userId: runtime.userId,
               anchorDate: detailAnchorDate(),
-              expenseSnapshot: ExpenseRecordSnapshotModel.fromJson(snapshot.cast<String, dynamic>()),
+              expenseSnapshot: ExpenseRecordSnapshotModel.fromJson(
+                  snapshot.cast<String, dynamic>()),
               projectOptions: typedProjectOptions,
               tags: typedTags,
             );
@@ -618,7 +752,8 @@ class _ProjectDetailPageState extends State<ProjectDetailPage> {
               recordId: record.recordId,
               userId: runtime.userId,
               anchorDate: detailAnchorDate(),
-              learningSnapshot: LearningRecordSnapshotModel.fromJson(snapshot.cast<String, dynamic>()),
+              learningSnapshot: LearningRecordSnapshotModel.fromJson(
+                  snapshot.cast<String, dynamic>()),
               projectOptions: typedProjectOptions,
               tags: typedTags,
             );

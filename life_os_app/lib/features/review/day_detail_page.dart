@@ -1,10 +1,19 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 
 import '../../app/app.dart';
+import '../../features/export/application/export_orchestrator.dart';
+import '../../features/export/domain/export_artifact.dart';
+import '../../features/export/domain/export_range.dart';
+import '../../features/export/domain/export_request.dart';
 import '../../models/project_models.dart';
 import '../../models/record_models.dart';
 import '../../models/tag_models.dart';
+import '../../services/export_metadata_builders.dart';
+import '../../services/image_export_service.dart';
 import '../../shared/view_state.dart';
+import '../../shared/widgets/export_document_dialog.dart';
 import '../../shared/widgets/module_page.dart';
 import '../../shared/widgets/section_card.dart';
 import '../../shared/widgets/state_views.dart';
@@ -23,8 +32,11 @@ class DayDetailPage extends StatefulWidget {
 }
 
 class _DayDetailPageState extends State<DayDetailPage> {
+  final GlobalKey _exportBoundaryKey = GlobalKey();
+  ExportOrchestrator? _exportOrchestrator;
   ViewState<List<RecentRecordItem>> _state = ViewState.initial();
   bool _loaded = false;
+  bool _isExporting = false;
 
   Future<void> _load() async {
     setState(() {
@@ -59,6 +71,8 @@ class _DayDetailPageState extends State<DayDetailPage> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
+    _exportOrchestrator ??=
+        ExportOrchestrator(service: LifeOsScope.of(context));
     if (_loaded) {
       return;
     }
@@ -74,7 +88,13 @@ class _DayDetailPageState extends State<DayDetailPage> {
     return ModulePage(
       title: '日详情',
       subtitle: widget.anchorDate,
+      exportBoundaryKey: _exportBoundaryKey,
       actions: [
+        OutlinedButton(
+          onPressed:
+              _state.hasData && !_isExporting ? _exportDayDetailDocument : null,
+          child: Text(_isExporting ? '正在导出' : '导出图片文档'),
+        ),
         OutlinedButton(
           onPressed: () => Navigator.of(context).pushNamed('/capture'),
           child: const Text('新增时间记录'),
@@ -125,6 +145,55 @@ class _DayDetailPageState extends State<DayDetailPage> {
     );
   }
 
+  Future<void> _exportDayDetailDocument() async {
+    final records = _state.data;
+    if (records == null || _isExporting) {
+      return;
+    }
+    setState(() => _isExporting = true);
+    try {
+      final runtime = LifeOsScope.runtimeOf(context);
+      final exportResult = await _exportOrchestrator!.export(
+        ExportRequest.snapshot(
+          title: 'day-detail-${widget.anchorDate}',
+          module: 'day_detail',
+          range: ExportRange.today,
+          boundaryKey: _exportBoundaryKey,
+          metadata: buildDayDetailExportMetadata(
+            anchorDate: widget.anchorDate,
+            timezone: runtime.timezone,
+            records: records,
+          ),
+        ),
+      );
+      final artifact = exportResult.primaryArtifact;
+      if (!mounted) return;
+      await showExportDocumentDialog(
+          context, _artifactToImageDocument(artifact));
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('导出日详情图片文档失败：$error')),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _isExporting = false);
+      }
+    }
+  }
+
+  ExportedImageDocument _artifactToImageDocument(ExportArtifact artifact) {
+    return ExportedImageDocument(
+      module: artifact.module,
+      title: artifact.title,
+      exportedAt: artifact.createdAt,
+      directoryPath: File(artifact.filePath).parent.path,
+      imagePath: artifact.filePath,
+      metadataPath: artifact.metadataPath,
+      metadata: Map<String, dynamic>.from(artifact.metadata.toJson()),
+    );
+  }
+
   Future<void> _deleteRecord(RecentRecordItem record) async {
     final runtime = LifeOsScope.runtimeOf(context);
     await LifeOsScope.of(context).invokeRaw(
@@ -164,7 +233,7 @@ class _DayDetailPageState extends State<DayDetailPage> {
     if (!mounted) return;
 
     final result = await showDialog<RecordEditorResult>(
-      context: context,
+      context: Navigator.of(context, rootNavigator: true).context,
       builder: (context) {
         final typedProjectOptions = projectOptions.cast<ProjectOption>();
         final typedTags = tags.cast<TagModel>();
@@ -174,7 +243,8 @@ class _DayDetailPageState extends State<DayDetailPage> {
               recordId: record.recordId,
               userId: runtime.userId,
               anchorDate: widget.anchorDate,
-              timeSnapshot: TimeRecordSnapshotModel.fromJson(snapshot.cast<String, dynamic>()),
+              timeSnapshot: TimeRecordSnapshotModel.fromJson(
+                  snapshot.cast<String, dynamic>()),
               projectOptions: typedProjectOptions,
               tags: typedTags,
             );
@@ -183,7 +253,8 @@ class _DayDetailPageState extends State<DayDetailPage> {
               recordId: record.recordId,
               userId: runtime.userId,
               anchorDate: widget.anchorDate,
-              incomeSnapshot: IncomeRecordSnapshotModel.fromJson(snapshot.cast<String, dynamic>()),
+              incomeSnapshot: IncomeRecordSnapshotModel.fromJson(
+                  snapshot.cast<String, dynamic>()),
               projectOptions: typedProjectOptions,
               tags: typedTags,
             );
@@ -192,7 +263,8 @@ class _DayDetailPageState extends State<DayDetailPage> {
               recordId: record.recordId,
               userId: runtime.userId,
               anchorDate: widget.anchorDate,
-              expenseSnapshot: ExpenseRecordSnapshotModel.fromJson(snapshot.cast<String, dynamic>()),
+              expenseSnapshot: ExpenseRecordSnapshotModel.fromJson(
+                  snapshot.cast<String, dynamic>()),
               projectOptions: typedProjectOptions,
               tags: typedTags,
             );
@@ -201,7 +273,8 @@ class _DayDetailPageState extends State<DayDetailPage> {
               recordId: record.recordId,
               userId: runtime.userId,
               anchorDate: widget.anchorDate,
-              learningSnapshot: LearningRecordSnapshotModel.fromJson(snapshot.cast<String, dynamic>()),
+              learningSnapshot: LearningRecordSnapshotModel.fromJson(
+                  snapshot.cast<String, dynamic>()),
               projectOptions: typedProjectOptions,
               tags: typedTags,
             );

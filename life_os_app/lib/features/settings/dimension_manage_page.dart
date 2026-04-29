@@ -4,6 +4,7 @@ import '../../app/app.dart';
 import '../../models/config_models.dart';
 import '../../shared/view_state.dart';
 import '../../shared/widgets/module_page.dart';
+import '../../shared/widgets/safe_pop.dart';
 import '../../shared/widgets/section_card.dart';
 import '../../shared/widgets/state_views.dart';
 
@@ -50,7 +51,8 @@ class _DimensionManagePageState extends State<DimensionManagePage> {
       );
       final items = ((response as List?) ?? const [])
           .whereType<Map>()
-          .map((item) => DimensionOptionModel.fromJson(item.cast<String, dynamic>()))
+          .map((item) =>
+              DimensionOptionModel.fromJson(item.cast<String, dynamic>()))
           .toList();
       if (!mounted) {
         return;
@@ -109,8 +111,7 @@ class _DimensionManagePageState extends State<DimensionManagePage> {
                 trailing: Wrap(
                   spacing: 8,
                   children: [
-                    if (item.isSystem)
-                      const Chip(label: Text('系统')),
+                    if (item.isSystem) const Chip(label: Text('系统')),
                     TextButton(
                       onPressed: () => _openEditor(kind: kind, existing: item),
                       child: const Text('编辑'),
@@ -132,18 +133,20 @@ class _DimensionManagePageState extends State<DimensionManagePage> {
     required String kind,
     DimensionOptionModel? existing,
   }) async {
-    final runtime = LifeOsScope.runtimeOf(context);
-    final service = LifeOsScope.of(context);
+    final rootContext = Navigator.of(context, rootNavigator: true).context;
+    final runtime = LifeOsScope.runtimeOf(rootContext);
+    final service = LifeOsScope.of(rootContext);
     final code = TextEditingController(text: existing?.code ?? '');
-    final displayName = TextEditingController(text: existing?.displayName ?? '');
+    final displayName =
+        TextEditingController(text: existing?.displayName ?? '');
     final active = ValueNotifier<bool>(existing?.isActive ?? true);
     try {
       final confirmed = await showDialog<bool>(
-        context: context,
-        builder: (context) => AlertDialog(
+        context: rootContext,
+        builder: (dialogContext) => AlertDialog(
           title: Text(existing == null ? '新增维度项' : '编辑维度项'),
           content: StatefulBuilder(
-            builder: (context, setState) => Column(
+            builder: (dialogContentContext, setDialogState) => Column(
               mainAxisSize: MainAxisSize.min,
               children: [
                 TextField(
@@ -164,7 +167,7 @@ class _DimensionManagePageState extends State<DimensionManagePage> {
                   value: active.value,
                   onChanged: (value) {
                     active.value = value;
-                    setState(() {});
+                    setDialogState(() {});
                   },
                   title: const Text('启用'),
                 ),
@@ -173,11 +176,11 @@ class _DimensionManagePageState extends State<DimensionManagePage> {
           ),
           actions: [
             TextButton(
-              onPressed: () => Navigator.pop(context, false),
+              onPressed: () => safePop(dialogContext, false),
               child: const Text('取消'),
             ),
             ElevatedButton(
-              onPressed: () => Navigator.pop(context, true),
+              onPressed: () => safePop(dialogContext, true),
               child: const Text('保存'),
             ),
           ],

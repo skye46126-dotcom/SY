@@ -3,13 +3,19 @@ import 'package:flutter/material.dart';
 import '../../app/app.dart';
 import '../../models/config_models.dart';
 import '../../shared/widgets/module_page.dart';
+import 'capture_launch.dart';
 import 'capture_controller.dart';
 import 'widgets/ai_capture_section.dart';
 import 'widgets/capture_type_selector.dart';
 import 'widgets/record_form_section.dart';
 
 class CapturePage extends StatefulWidget {
-  const CapturePage({super.key});
+  const CapturePage({
+    super.key,
+    this.launchConfig,
+  });
+
+  final CaptureLaunchConfig? launchConfig;
 
   @override
   State<CapturePage> createState() => _CapturePageState();
@@ -18,22 +24,26 @@ class CapturePage extends StatefulWidget {
 class _CapturePageState extends State<CapturePage> {
   CaptureController? _controller;
   late final TextEditingController _aiInputController;
+  late final FocusNode _aiInputFocusNode;
   final Map<String, TextEditingController> _formControllers = {};
   final Set<String> _selectedProjectIds = {};
   final Set<String> _selectedTagIds = {};
   bool _metadataLoaded = false;
+  bool _launchConfigApplied = false;
   CaptureType? _lastAppliedType;
 
   @override
   void initState() {
     super.initState();
     _aiInputController = TextEditingController();
+    _aiInputFocusNode = FocusNode();
   }
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
     _controller ??= CaptureController(LifeOsScope.of(context));
+    _applyLaunchConfig();
     if (!_metadataLoaded) {
       _metadataLoaded = true;
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -58,6 +68,7 @@ class _CapturePageState extends State<CapturePage> {
   @override
   void dispose() {
     _aiInputController.dispose();
+    _aiInputFocusNode.dispose();
     for (final controller in _formControllers.values) {
       controller.dispose();
     }
@@ -88,7 +99,8 @@ class _CapturePageState extends State<CapturePage> {
           anchorDate: runtime.todayDate,
         );
         final fieldControllers = {
-          for (final field in captureFieldDefinitionsFor(controller.selectedType))
+          for (final field
+              in captureFieldDefinitionsFor(controller.selectedType))
             field.key: _controllerFor(field.key),
         };
         return ModulePage(
@@ -143,7 +155,8 @@ class _CapturePageState extends State<CapturePage> {
                 });
               },
               onSubmit: () {
-                controller.submitManual(
+                controller
+                    .submitManual(
                   userId: runtime.userId,
                   anchorDate: runtime.todayDate,
                   fields: {
@@ -152,7 +165,8 @@ class _CapturePageState extends State<CapturePage> {
                   },
                   projectIds: _selectedProjectIds.toList(),
                   tagIds: _selectedTagIds.toList(),
-                ).then((success) {
+                )
+                    .then((success) {
                   if (!mounted || !success) {
                     return;
                   }
@@ -167,13 +181,18 @@ class _CapturePageState extends State<CapturePage> {
             AiCaptureSection(
               aiState: controller.aiState,
               inputController: _aiInputController,
+              inputFocusNode: _aiInputFocusNode,
+              autofocusInput: widget.launchConfig?.focusAiInput ?? false,
+              parseMode: controller.selectedAiParseMode,
+              onParseModeChanged: controller.selectAiParseMode,
               onParsePressed: () {
                 controller.parseAiInput(
                   userId: runtime.userId,
                   rawInput: _aiInputController.text,
-                  parserMode: 'balanced',
+                  contextDate: runtime.todayDate,
                 );
               },
+              onDraftChanged: controller.updateAiDraftEnvelope,
               onCommitPressed: () {
                 final draft = controller.aiState.data;
                 if (draft == null) {
@@ -184,11 +203,42 @@ class _CapturePageState extends State<CapturePage> {
                   draftEnvelope: draft,
                 );
               },
+              optionResolver: controller.optionsFor,
+              sourceSuggestions: controller.incomeSourceSuggestions,
+              projectOptions: controller.projectOptions,
+              tags: controller.tags,
             ),
           ],
         );
       },
     );
+  }
+
+  void _applyLaunchConfig() {
+    if (_launchConfigApplied) {
+      return;
+    }
+    final config = widget.launchConfig;
+    final controller = _controller;
+    if (config == null || controller == null) {
+      return;
+    }
+    _launchConfigApplied = true;
+    if (config.initialType != null) {
+      controller.selectType(config.initialType!);
+    }
+    final prefillText = config.prefillText;
+    if (prefillText != null && _aiInputController.text.trim().isEmpty) {
+      _aiInputController.text = prefillText;
+    }
+    if (config.focusAiInput) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) {
+          return;
+        }
+        _aiInputFocusNode.requestFocus();
+      });
+    }
   }
 
   void _applyDefaults({

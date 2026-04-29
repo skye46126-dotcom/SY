@@ -79,7 +79,9 @@ impl AiParseOrchestrator {
     ) -> AiParseResult {
         let result = match parser_mode {
             ParserMode::Rule => self.rule_engine.parse(input, context, config),
-            ParserMode::Llm => self.llm_engine.parse(input, context, config),
+            ParserMode::Llm | ParserMode::Fast | ParserMode::Deep => {
+                self.llm_engine.parse(input, context, config)
+            }
             ParserMode::Vcp => self.vcp_engine.parse(input, context, config),
             ParserMode::Auto => self.parse_auto(input, context, config),
         };

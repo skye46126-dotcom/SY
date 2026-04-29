@@ -81,9 +81,9 @@ pub struct UpdateOperatingSettingsInput {
 impl UpdateOperatingSettingsInput {
     pub fn validate(&self) -> Result<()> {
         normalize_required_string("timezone", &self.timezone)?;
-        self.timezone.parse::<Tz>().map_err(|_| {
-            LifeOsError::InvalidTimezone(self.timezone.trim().to_string())
-        })?;
+        self.timezone
+            .parse::<Tz>()
+            .map_err(|_| LifeOsError::InvalidTimezone(self.timezone.trim().to_string()))?;
 
         let currency = self.currency_code.trim().to_uppercase();
         if currency.len() != 3 || !currency.chars().all(|char| char.is_ascii_alphabetic()) {

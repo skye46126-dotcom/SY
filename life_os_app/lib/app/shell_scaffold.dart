@@ -1,8 +1,12 @@
 import 'package:flutter/material.dart';
 
+import '../features/capture/capture_page.dart';
+import '../features/management/management_page.dart';
+import '../features/review/review_page.dart';
+import '../features/today/today_page.dart';
 import 'router.dart';
 
-class ShellScaffold extends StatelessWidget {
+class ShellScaffold extends StatefulWidget {
   const ShellScaffold({
     super.key,
     required this.destination,
@@ -12,11 +16,48 @@ class ShellScaffold extends StatelessWidget {
   final AppDestination destination;
   final Widget child;
 
-  void _openDestination(BuildContext context, AppDestination next) {
-    if (next == destination) {
+  @override
+  State<ShellScaffold> createState() => _ShellScaffoldState();
+}
+
+class _ShellScaffoldState extends State<ShellScaffold> {
+  late AppDestination _destination;
+
+  @override
+  void initState() {
+    super.initState();
+    _destination = widget.destination;
+  }
+
+  @override
+  void didUpdateWidget(covariant ShellScaffold oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.destination != widget.destination) {
+      _destination = widget.destination;
+    }
+  }
+
+  void _openDestination(AppDestination next) {
+    if (next == _destination) {
       return;
     }
-    Navigator.of(context).pushReplacementNamed(next.route);
+    setState(() => _destination = next);
+  }
+
+  Widget _buildCurrentPage() {
+    if (_destination == widget.destination) {
+      return widget.child;
+    }
+    switch (_destination) {
+      case AppDestination.today:
+        return const TodayPage();
+      case AppDestination.capture:
+        return const CapturePage();
+      case AppDestination.management:
+        return const ManagementPage();
+      case AppDestination.review:
+        return const ReviewPage();
+    }
   }
 
   @override
@@ -33,10 +74,10 @@ class ShellScaffold extends StatelessWidget {
                 padding: const EdgeInsets.all(16),
                 child: NavigationRail(
                   backgroundColor: Colors.white.withValues(alpha: 0.44),
-                  selectedIndex: destination.index,
+                  selectedIndex: _destination.index,
                   labelType: NavigationRailLabelType.all,
                   onDestinationSelected: (index) {
-                    _openDestination(context, destinations[index]);
+                    _openDestination(destinations[index]);
                   },
                   destinations: [
                     for (final item in destinations)
@@ -47,15 +88,15 @@ class ShellScaffold extends StatelessWidget {
                   ],
                 ),
               ),
-            Expanded(child: child),
+            Expanded(child: _buildCurrentPage()),
           ],
         ),
       ),
       bottomNavigationBar: isCompact
           ? NavigationBar(
-              selectedIndex: destination.index,
+              selectedIndex: _destination.index,
               onDestinationSelected: (index) {
-                _openDestination(context, destinations[index]);
+                _openDestination(destinations[index]);
               },
               destinations: [
                 for (final item in destinations)

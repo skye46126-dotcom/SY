@@ -1,10 +1,21 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 
 import '../../app/app.dart';
+import '../../features/export/application/export_orchestrator.dart';
+import '../../features/export/domain/export_artifact.dart';
+import '../../features/export/domain/export_range.dart';
+import '../../features/export/domain/export_request.dart';
 import '../../models/config_models.dart';
 import '../../models/cost_models.dart';
+import '../../services/export_metadata_builders.dart';
+import '../../services/image_export_service.dart';
 import '../../shared/view_state.dart';
+import '../../shared/widgets/export_document_dialog.dart';
+import '../../shared/widgets/more_action_menu.dart';
 import '../../shared/widgets/module_page.dart';
+import '../../shared/widgets/safe_pop.dart';
 import '../../shared/widgets/section_card.dart';
 import '../../shared/widgets/state_views.dart';
 
@@ -16,6 +27,8 @@ class CostManagementPage extends StatefulWidget {
 }
 
 class _CostManagementPageState extends State<CostManagementPage> {
+  final GlobalKey _exportBoundaryKey = GlobalKey();
+  ExportOrchestrator? _exportOrchestrator;
   ViewState<MonthlyCostBaselineModel> _baselineState = ViewState.initial();
   ViewState<List<RecurringCostRuleModel>> _recurringState = ViewState.initial();
   ViewState<List<CapexCostModel>> _capexState = ViewState.initial();
@@ -24,6 +37,7 @@ class _CostManagementPageState extends State<CostManagementPage> {
   String? _selectedMonth;
   String _rateWindowType = 'month';
   bool _loaded = false;
+  bool _isExporting = false;
 
   Future<void> _load() async {
     final runtime = LifeOsScope.runtimeOf(context);
@@ -40,7 +54,8 @@ class _CostManagementPageState extends State<CostManagementPage> {
         userId: runtime.userId,
         month: month,
       );
-      final recurring = await service.listRecurringCostRules(userId: runtime.userId);
+      final recurring =
+          await service.listRecurringCostRules(userId: runtime.userId);
       final capex = await service.listCapexCosts(userId: runtime.userId);
       final expenseCategories = await service.invokeRaw(
         method: 'list_dimension_options',
@@ -62,7 +77,8 @@ class _CostManagementPageState extends State<CostManagementPage> {
         _rateState = ViewState.ready(rate);
         _expenseCategoryOptions = ((expenseCategories as List?) ?? const [])
             .whereType<Map>()
-            .map((item) => DimensionOptionModel.fromJson(item.cast<String, dynamic>()))
+            .map((item) =>
+                DimensionOptionModel.fromJson(item.cast<String, dynamic>()))
             .toList();
       });
     } catch (error) {
@@ -78,6 +94,8 @@ class _CostManagementPageState extends State<CostManagementPage> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
+    _exportOrchestrator ??=
+        ExportOrchestrator(service: LifeOsScope.of(context));
     if (_loaded) return;
     _loaded = true;
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -100,29 +118,49 @@ class _CostManagementPageState extends State<CostManagementPage> {
         (_capexState.data ?? const []).where((item) => item.isActive).toList();
     final inactiveCapex =
         (_capexState.data ?? const []).where((item) => !item.isActive).toList();
+    final canExport = _baselineState.hasData &&
+        _recurringState.hasData &&
+        _capexState.hasData &&
+        _rateState.hasData;
     return ModulePage(
       title: '成本管理',
       subtitle: 'Cost Management',
+      exportBoundaryKey: _exportBoundaryKey,
       actions: [
-        OutlinedButton(
-          onPressed: _previousMonth,
-          child: const Text('上月'),
-        ),
-        OutlinedButton(
-          onPressed: _nextMonth,
-          child: const Text('下月'),
-        ),
-        ElevatedButton(
-          onPressed: _editBaseline,
-          child: const Text('编辑月基线'),
-        ),
-        OutlinedButton(
-          onPressed: _createRecurringRule,
-          child: const Text('新增周期规则'),
-        ),
-        OutlinedButton(
-          onPressed: _createCapex,
-          child: const Text('新增 CAPEX'),
+        MoreActionMenu(
+          items: [
+            MoreActionMenuItem(
+              label: _isExporting ? '正在导出' : '导出图片文档',
+              icon: Icons.ios_share_rounded,
+              enabled: canExport && !_isExporting,
+              onPressed: _exportCostDocument,
+            ),
+            MoreActionMenuItem(
+              label: '上月',
+              icon: Icons.chevron_left_rounded,
+              onPressed: _previousMonth,
+            ),
+            MoreActionMenuItem(
+              label: '下月',
+              icon: Icons.chevron_right_rounded,
+              onPressed: _nextMonth,
+            ),
+            MoreActionMenuItem(
+              label: '编辑月基线',
+              icon: Icons.edit_calendar_rounded,
+              onPressed: _editBaseline,
+            ),
+            MoreActionMenuItem(
+              label: '新增周期规则',
+              icon: Icons.repeat_rounded,
+              onPressed: _createRecurringRule,
+            ),
+            MoreActionMenuItem(
+              label: '新增 CAPEX',
+              icon: Icons.add_chart_rounded,
+              onPressed: _createCapex,
+            ),
+          ],
         ),
       ],
       children: [
@@ -301,44 +339,123 @@ class _CostManagementPageState extends State<CostManagementPage> {
   }
 
   void _previousMonth() {
-    final base = DateTime.parse('${_selectedMonth ?? LifeOsScope.runtimeOf(context).todayDate.substring(0, 7)}-01');
+    final base = DateTime.parse(
+        '${_selectedMonth ?? LifeOsScope.runtimeOf(context).todayDate.substring(0, 7)}-01');
     final previous = DateTime(base.year, base.month - 1, 1);
-    setState(() => _selectedMonth = '${previous.year}-${previous.month.toString().padLeft(2, '0')}');
+    setState(() => _selectedMonth =
+        '${previous.year}-${previous.month.toString().padLeft(2, '0')}');
     _load();
   }
 
   void _nextMonth() {
-    final base = DateTime.parse('${_selectedMonth ?? LifeOsScope.runtimeOf(context).todayDate.substring(0, 7)}-01');
+    final base = DateTime.parse(
+        '${_selectedMonth ?? LifeOsScope.runtimeOf(context).todayDate.substring(0, 7)}-01');
     final next = DateTime(base.year, base.month + 1, 1);
-    setState(() => _selectedMonth = '${next.year}-${next.month.toString().padLeft(2, '0')}');
+    setState(() => _selectedMonth =
+        '${next.year}-${next.month.toString().padLeft(2, '0')}');
     _load();
   }
 
+  Future<void> _exportCostDocument() async {
+    if (_isExporting ||
+        !_baselineState.hasData ||
+        !_recurringState.hasData ||
+        !_capexState.hasData ||
+        !_rateState.hasData) {
+      return;
+    }
+
+    setState(() => _isExporting = true);
+    try {
+      final runtime = LifeOsScope.runtimeOf(context);
+      final month = _selectedMonth ?? runtime.todayDate.substring(0, 7);
+      final exportResult = await _exportOrchestrator!.export(
+        ExportRequest.snapshot(
+          title: 'cost-$month-$_rateWindowType',
+          module: 'cost',
+          range:
+              _rateWindowType == 'year' ? ExportRange.year : ExportRange.month,
+          boundaryKey: _exportBoundaryKey,
+          metadata: buildCostExportMetadata(
+            month: month,
+            rateWindowType: _rateWindowType,
+            baseline: _baselineState.data,
+            rate: _rateState.data,
+            recurringRules: _recurringState.data ?? const [],
+            capexItems: _capexState.data ?? const [],
+          ),
+        ),
+      );
+      final artifact = exportResult.primaryArtifact;
+      if (!mounted) return;
+      await showExportDocumentDialog(
+          context, _artifactToImageDocument(artifact));
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('导出成本图片文档失败：$error')),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _isExporting = false);
+      }
+    }
+  }
+
+  ExportedImageDocument _artifactToImageDocument(ExportArtifact artifact) {
+    return ExportedImageDocument(
+      module: artifact.module,
+      title: artifact.title,
+      exportedAt: artifact.createdAt,
+      directoryPath: File(artifact.filePath).parent.path,
+      imagePath: artifact.filePath,
+      metadataPath: artifact.metadataPath,
+      metadata: Map<String, dynamic>.from(artifact.metadata.toJson()),
+    );
+  }
+
   Future<void> _editBaseline() async {
-    final runtime = LifeOsScope.runtimeOf(context);
-    final service = LifeOsScope.of(context);
+    final rootContext = Navigator.of(context, rootNavigator: true).context;
+    final runtime = LifeOsScope.runtimeOf(rootContext);
+    final service = LifeOsScope.of(rootContext);
     final current = _baselineState.data;
     final basic = TextEditingController(
-      text: current == null ? '' : (current.basicLivingCents / 100).toStringAsFixed(2),
+      text: current == null
+          ? ''
+          : (current.basicLivingCents / 100).toStringAsFixed(2),
     );
     final fixed = TextEditingController(
-      text: current == null ? '' : (current.fixedSubscriptionCents / 100).toStringAsFixed(2),
+      text: current == null
+          ? ''
+          : (current.fixedSubscriptionCents / 100).toStringAsFixed(2),
     );
     try {
       final confirmed = await showDialog<bool>(
-        context: context,
-        builder: (context) => AlertDialog(
+        context: rootContext,
+        builder: (dialogContext) => AlertDialog(
           title: const Text('编辑月基线'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(controller: basic, decoration: const InputDecoration(labelText: '基础生活(元)')),
-              TextField(controller: fixed, decoration: const InputDecoration(labelText: '固定订阅(元)')),
-            ],
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                    controller: basic,
+                    decoration: const InputDecoration(labelText: '基础生活(元)')),
+                TextField(
+                    controller: fixed,
+                    decoration: const InputDecoration(labelText: '固定订阅(元)')),
+              ],
+            ),
           ),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('取消')),
-            ElevatedButton(onPressed: () => Navigator.pop(context, true), child: const Text('保存')),
+            TextButton(
+              onPressed: () => safePop(dialogContext, false),
+              child: const Text('取消'),
+            ),
+            ElevatedButton(
+              onPressed: () => safePop(dialogContext, true),
+              child: const Text('保存'),
+            ),
           ],
         ),
       );
@@ -350,7 +467,8 @@ class _CostManagementPageState extends State<CostManagementPage> {
           'input': {
             'month': _selectedMonth ?? runtime.todayDate.substring(0, 7),
             'basic_living_cents': (double.parse(basic.text) * 100).round(),
-            'fixed_subscription_cents': (double.parse(fixed.text) * 100).round(),
+            'fixed_subscription_cents':
+                (double.parse(fixed.text) * 100).round(),
             'note': null,
           },
         },
@@ -368,13 +486,17 @@ class _CostManagementPageState extends State<CostManagementPage> {
   Future<void> _editRecurringRule(RecurringCostRuleModel item) =>
       _openRecurringRuleDialog(existing: item);
 
-  Future<void> _openRecurringRuleDialog({RecurringCostRuleModel? existing}) async {
-    final runtime = LifeOsScope.runtimeOf(context);
-    final service = LifeOsScope.of(context);
+  Future<void> _openRecurringRuleDialog(
+      {RecurringCostRuleModel? existing}) async {
+    final rootContext = Navigator.of(context, rootNavigator: true).context;
+    final runtime = LifeOsScope.runtimeOf(rootContext);
+    final service = LifeOsScope.of(rootContext);
     final name = TextEditingController(text: existing?.name ?? '');
     String selectedCategory = existing?.categoryCode ?? 'necessary';
     final amount = TextEditingController(
-      text: existing == null ? '' : (existing.monthlyAmountCents / 100).toStringAsFixed(2),
+      text: existing == null
+          ? ''
+          : (existing.monthlyAmountCents / 100).toStringAsFixed(2),
     );
     final startMonth = TextEditingController(
       text: existing?.startMonth ?? runtime.todayDate.substring(0, 7),
@@ -383,75 +505,100 @@ class _CostManagementPageState extends State<CostManagementPage> {
     final necessary = ValueNotifier<bool>(existing?.isNecessary ?? true);
     try {
       final confirmed = await showDialog<bool>(
-        context: context,
-        builder: (context) => AlertDialog(
+        context: rootContext,
+        builder: (dialogContext) => AlertDialog(
           title: Text(existing == null ? '新增周期规则' : '编辑周期规则'),
           content: StatefulBuilder(
-            builder: (context, setState) => Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TextField(controller: name, decoration: const InputDecoration(labelText: '名称')),
-                ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  title: const Text('类别'),
-                  subtitle: Text(
-                    _expenseCategoryOptions
-                            .where((item) => item.code == selectedCategory)
-                            .map((item) => item.displayName)
-                            .cast<String?>()
-                            .firstWhere((item) => item != null, orElse: () => '请选择') ??
-                        '请选择',
-                  ),
-                  trailing: const Icon(Icons.arrow_drop_down_rounded),
-                  onTap: () async {
-                    final selected = await showModalBottomSheet<String>(
-                      context: context,
-                      builder: (context) => SafeArea(
-                        child: ListView(
-                          shrinkWrap: true,
-                          children: [
-                            for (final item in _expenseCategoryOptions)
-                              ListTile(
-                                title: Text(item.displayName),
-                                subtitle: Text(item.code),
-                                trailing: item.code == selectedCategory
-                                    ? const Icon(Icons.check_rounded)
-                                    : null,
-                                onTap: () => Navigator.of(context).pop(item.code),
-                              ),
-                          ],
+            builder: (dialogContentContext, setDialogState) =>
+                SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextField(
+                      controller: name,
+                      decoration: const InputDecoration(labelText: '名称')),
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: const Text('类别'),
+                    subtitle: Text(
+                      _expenseCategoryOptions
+                              .where((item) => item.code == selectedCategory)
+                              .map((item) => item.displayName)
+                              .cast<String?>()
+                              .firstWhere((item) => item != null,
+                                  orElse: () => '请选择') ??
+                          '请选择',
+                    ),
+                    trailing: const Icon(Icons.arrow_drop_down_rounded),
+                    onTap: () async {
+                      final selected = await showModalBottomSheet<String>(
+                        context: rootContext,
+                        useRootNavigator: true,
+                        builder: (context) => SafeArea(
+                          child: ListView(
+                            shrinkWrap: true,
+                            children: [
+                              for (final item in _expenseCategoryOptions)
+                                ListTile(
+                                  title: Text(item.displayName),
+                                  subtitle: Text(item.code),
+                                  trailing: item.code == selectedCategory
+                                      ? const Icon(Icons.check_rounded)
+                                      : null,
+                                  onTap: () =>
+                                      Navigator.of(context).pop(item.code),
+                                ),
+                            ],
+                          ),
                         ),
-                      ),
-                    );
-                    if (selected != null) {
-                      selectedCategory = selected;
-                      setState(() {});
-                    }
-                  },
-                ),
-                TextField(controller: amount, decoration: const InputDecoration(labelText: '金额(元)')),
-                TextField(controller: startMonth, decoration: const InputDecoration(labelText: '开始月份 YYYY-MM')),
-                TextField(controller: endMonth, decoration: const InputDecoration(labelText: '结束月份 YYYY-MM')),
-                SwitchListTile(
-                  value: necessary.value,
-                  onChanged: (value) {
-                    necessary.value = value;
-                    setState(() {});
-                  },
-                  title: const Text('必要支出'),
-                ),
-              ],
+                      );
+                      if (!dialogContentContext.mounted) return;
+                      if (selected != null) {
+                        selectedCategory = selected;
+                        setDialogState(() {});
+                      }
+                    },
+                  ),
+                  TextField(
+                      controller: amount,
+                      decoration: const InputDecoration(labelText: '金额(元)')),
+                  TextField(
+                      controller: startMonth,
+                      decoration:
+                          const InputDecoration(labelText: '开始月份 YYYY-MM')),
+                  TextField(
+                      controller: endMonth,
+                      decoration:
+                          const InputDecoration(labelText: '结束月份 YYYY-MM')),
+                  SwitchListTile(
+                    value: necessary.value,
+                    onChanged: (value) {
+                      necessary.value = value;
+                      setDialogState(() {});
+                    },
+                    title: const Text('必要支出'),
+                  ),
+                ],
+              ),
             ),
           ),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('取消')),
-            ElevatedButton(onPressed: () => Navigator.pop(context, true), child: const Text('保存')),
+            TextButton(
+              onPressed: () => safePop(dialogContext, false),
+              child: const Text('取消'),
+            ),
+            ElevatedButton(
+              onPressed: () => safePop(dialogContext, true),
+              child: const Text('保存'),
+            ),
           ],
         ),
       );
       if (confirmed != true) return;
       await service.invokeRaw(
-        method: existing == null ? 'create_recurring_cost_rule' : 'update_recurring_cost_rule',
+        method: existing == null
+            ? 'create_recurring_cost_rule'
+            : 'update_recurring_cost_rule',
         payload: {
           'user_id': runtime.userId,
           if (existing != null) 'rule_id': existing.id,
@@ -490,44 +637,67 @@ class _CostManagementPageState extends State<CostManagementPage> {
 
   Future<void> _createCapex() => _openCapexDialog();
 
-  Future<void> _editCapex(CapexCostModel item) => _openCapexDialog(existing: item);
+  Future<void> _editCapex(CapexCostModel item) =>
+      _openCapexDialog(existing: item);
 
   Future<void> _openCapexDialog({CapexCostModel? existing}) async {
-    final runtime = LifeOsScope.runtimeOf(context);
-    final service = LifeOsScope.of(context);
+    final rootContext = Navigator.of(context, rootNavigator: true).context;
+    final runtime = LifeOsScope.runtimeOf(rootContext);
+    final service = LifeOsScope.of(rootContext);
     final name = TextEditingController(text: existing?.name ?? '');
-    final date = TextEditingController(text: existing?.purchaseDate ?? runtime.todayDate);
+    final date = TextEditingController(
+        text: existing?.purchaseDate ?? runtime.todayDate);
     final amount = TextEditingController(
-      text: existing == null ? '' : (existing.purchaseAmountCents / 100).toStringAsFixed(2),
+      text: existing == null
+          ? ''
+          : (existing.purchaseAmountCents / 100).toStringAsFixed(2),
     );
-    final usefulMonths = TextEditingController(text: '${existing?.usefulMonths ?? 12}');
+    final usefulMonths =
+        TextEditingController(text: '${existing?.usefulMonths ?? 12}');
     final residual = TextEditingController(
       text: ((existing?.residualRateBps ?? 0) / 100).toStringAsFixed(2),
     );
     try {
       final confirmed = await showDialog<bool>(
-        context: context,
-        builder: (context) => AlertDialog(
+        context: rootContext,
+        builder: (dialogContext) => AlertDialog(
           title: Text(existing == null ? '新增 CAPEX' : '编辑 CAPEX'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(controller: name, decoration: const InputDecoration(labelText: '名称')),
-              TextField(controller: date, decoration: const InputDecoration(labelText: '购买日期 YYYY-MM-DD')),
-              TextField(controller: amount, decoration: const InputDecoration(labelText: '金额(元)')),
-              TextField(controller: usefulMonths, decoration: const InputDecoration(labelText: '使用月数')),
-              TextField(
-                controller: residual,
-                decoration: const InputDecoration(
-                  labelText: '残值率(%)',
-                  helperText: '例如 20 表示残值率为 20%。',
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                    controller: name,
+                    decoration: const InputDecoration(labelText: '名称')),
+                TextField(
+                    controller: date,
+                    decoration:
+                        const InputDecoration(labelText: '购买日期 YYYY-MM-DD')),
+                TextField(
+                    controller: amount,
+                    decoration: const InputDecoration(labelText: '金额(元)')),
+                TextField(
+                    controller: usefulMonths,
+                    decoration: const InputDecoration(labelText: '使用月数')),
+                TextField(
+                  controller: residual,
+                  decoration: const InputDecoration(
+                    labelText: '残值率(%)',
+                    helperText: '例如 20 表示残值率为 20%。',
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('取消')),
-            ElevatedButton(onPressed: () => Navigator.pop(context, true), child: const Text('保存')),
+            TextButton(
+              onPressed: () => safePop(dialogContext, false),
+              child: const Text('取消'),
+            ),
+            ElevatedButton(
+              onPressed: () => safePop(dialogContext, true),
+              child: const Text('保存'),
+            ),
           ],
         ),
       );

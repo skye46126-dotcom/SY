@@ -4,6 +4,7 @@ import '../../app/app.dart';
 import '../../models/sync_models.dart';
 import '../../shared/view_state.dart';
 import '../../shared/widgets/module_page.dart';
+import '../../shared/widgets/safe_pop.dart';
 import '../../shared/widgets/section_card.dart';
 import '../../shared/widgets/state_views.dart';
 
@@ -27,7 +28,9 @@ class _CloudSyncConfigsPageState extends State<CloudSyncConfigsPage> {
       );
       if (!mounted) return;
       setState(() {
-        _state = items.isEmpty ? ViewState.empty('暂无云同步配置。') : ViewState.ready(items);
+        _state = items.isEmpty
+            ? ViewState.empty('暂无云同步配置。')
+            : ViewState.ready(items);
       });
     } catch (error) {
       if (!mounted) return;
@@ -72,8 +75,10 @@ class _CloudSyncConfigsPageState extends State<CloudSyncConfigsPage> {
                   for (final item in _state.data!)
                     ListTile(
                       contentPadding: EdgeInsets.zero,
-                      leading: Icon(item.isActive ? Icons.cloud_done : Icons.cloud_queue),
-                      title: Text('${item.provider} · ${item.endpointUrl ?? '-'}'),
+                      leading: Icon(
+                          item.isActive ? Icons.cloud_done : Icons.cloud_queue),
+                      title:
+                          Text('${item.provider} · ${item.endpointUrl ?? '-'}'),
                       subtitle: Text(
                         '${item.bucketName ?? '-'} · ${item.region ?? '-'} · ${item.rootPath ?? '-'}',
                       ),
@@ -90,9 +95,11 @@ class _CloudSyncConfigsPageState extends State<CloudSyncConfigsPage> {
                         },
                         itemBuilder: (context) => [
                           if (!item.isActive)
-                            const PopupMenuItem(value: 'activate', child: Text('设为激活')),
+                            const PopupMenuItem(
+                                value: 'activate', child: Text('设为激活')),
                           const PopupMenuItem(value: 'edit', child: Text('编辑')),
-                          const PopupMenuItem(value: 'delete', child: Text('删除')),
+                          const PopupMenuItem(
+                              value: 'delete', child: Text('删除')),
                         ],
                       ),
                     ),
@@ -148,44 +155,73 @@ class _CloudSyncConfigsPageState extends State<CloudSyncConfigsPage> {
   }
 
   Future<void> _openConfigDialog({CloudSyncConfigModel? existing}) async {
-    final runtime = LifeOsScope.runtimeOf(context);
-    final service = LifeOsScope.of(context);
-    final provider = TextEditingController(text: existing?.provider ?? 'lifeos_http');
+    final rootContext = Navigator.of(context, rootNavigator: true).context;
+    final runtime = LifeOsScope.runtimeOf(rootContext);
+    final service = LifeOsScope.of(rootContext);
+    final provider =
+        TextEditingController(text: existing?.provider ?? 'lifeos_http');
     final endpoint = TextEditingController(text: existing?.endpointUrl ?? '');
     final bucket = TextEditingController(text: existing?.bucketName ?? '');
     final region = TextEditingController(text: existing?.region ?? '');
     final rootPath = TextEditingController(text: existing?.rootPath ?? '');
-    final deviceId = TextEditingController(text: existing?.accessKeyId ?? 'android');
+    final deviceId =
+        TextEditingController(text: existing?.accessKeyId ?? 'android');
     final apiKey = TextEditingController(text: existing?.secretEncrypted ?? '');
     bool isActive = existing?.isActive ?? true;
     try {
       final confirmed = await showDialog<bool>(
-        context: context,
-        builder: (context) {
+        context: rootContext,
+        builder: (dialogContext) {
           return StatefulBuilder(
-            builder: (context, setState) => AlertDialog(
+            builder: (dialogContentContext, setDialogState) => AlertDialog(
               title: Text(existing == null ? '新增云同步配置' : '编辑云同步配置'),
               content: SingleChildScrollView(
                 child: Column(
                   children: [
-                    TextField(controller: provider, decoration: const InputDecoration(labelText: 'Provider')),
-                    TextField(controller: endpoint, decoration: const InputDecoration(labelText: 'Endpoint URL')),
-                    TextField(controller: bucket, decoration: const InputDecoration(labelText: 'Bucket')),
-                    TextField(controller: region, decoration: const InputDecoration(labelText: 'Region')),
-                    TextField(controller: rootPath, decoration: const InputDecoration(labelText: 'Root Path')),
-                    TextField(controller: deviceId, decoration: const InputDecoration(labelText: 'Device ID')),
-                    TextField(controller: apiKey, decoration: const InputDecoration(labelText: 'API Key')),
+                    TextField(
+                        controller: provider,
+                        decoration:
+                            const InputDecoration(labelText: 'Provider')),
+                    TextField(
+                        controller: endpoint,
+                        decoration:
+                            const InputDecoration(labelText: 'Endpoint URL')),
+                    TextField(
+                        controller: bucket,
+                        decoration: const InputDecoration(labelText: 'Bucket')),
+                    TextField(
+                        controller: region,
+                        decoration: const InputDecoration(labelText: 'Region')),
+                    TextField(
+                        controller: rootPath,
+                        decoration:
+                            const InputDecoration(labelText: 'Root Path')),
+                    TextField(
+                        controller: deviceId,
+                        decoration:
+                            const InputDecoration(labelText: 'Device ID')),
+                    TextField(
+                        controller: apiKey,
+                        decoration:
+                            const InputDecoration(labelText: 'API Key')),
                     SwitchListTile(
                       value: isActive,
-                      onChanged: (value) => setState(() => isActive = value),
+                      onChanged: (value) =>
+                          setDialogState(() => isActive = value),
                       title: const Text('激活'),
                     ),
                   ],
                 ),
               ),
               actions: [
-                TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('取消')),
-                ElevatedButton(onPressed: () => Navigator.pop(context, true), child: const Text('保存')),
+                TextButton(
+                  onPressed: () => safePop(dialogContext, false),
+                  child: const Text('取消'),
+                ),
+                ElevatedButton(
+                  onPressed: () => safePop(dialogContext, true),
+                  child: const Text('保存'),
+                ),
               ],
             ),
           );
@@ -193,7 +229,9 @@ class _CloudSyncConfigsPageState extends State<CloudSyncConfigsPage> {
       );
       if (confirmed != true) return;
       await service.invokeRaw(
-        method: existing == null ? 'create_cloud_sync_config' : 'update_cloud_sync_config',
+        method: existing == null
+            ? 'create_cloud_sync_config'
+            : 'update_cloud_sync_config',
         payload: {
           if (existing != null) 'config_id': existing.id,
           'input': {

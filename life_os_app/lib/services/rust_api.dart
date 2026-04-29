@@ -220,6 +220,22 @@ abstract class RustApi {
     required String parserMode,
   });
 
+  Future<Map<String, Object?>?> exportSeedData({
+    required String userId,
+  });
+
+  Future<Map<String, Object?>?> exportDataPackage({
+    required String userId,
+    required String format,
+    required String outputDirectoryPath,
+    required String title,
+    required String module,
+  });
+
+  Future<Map<String, Object?>?> previewDataPackageExport({
+    required String userId,
+  });
+
   Future<AiCommitResultModel> commitAiDrafts({
     required String userId,
     required String? requestId,
@@ -572,6 +588,31 @@ class UnimplementedRustApi implements RustApi {
     required String parserMode,
   }) async {
     _notReady('parseAiCapture');
+  }
+
+  @override
+  Future<Map<String, Object?>?> exportSeedData({
+    required String userId,
+  }) async {
+    _notReady('exportSeedData');
+  }
+
+  @override
+  Future<Map<String, Object?>?> exportDataPackage({
+    required String userId,
+    required String format,
+    required String outputDirectoryPath,
+    required String title,
+    required String module,
+  }) async {
+    _notReady('exportDataPackage');
+  }
+
+  @override
+  Future<Map<String, Object?>?> previewDataPackageExport({
+    required String userId,
+  }) async {
+    _notReady('previewDataPackageExport');
   }
 
   @override

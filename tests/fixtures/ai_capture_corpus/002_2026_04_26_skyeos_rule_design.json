@@ -1,0 +1,29 @@
+{
+  "name": "2026-04-26 SkyeOS规则与方案讨论",
+  "context_date": "2026-04-26",
+  "mode": "auto",
+  "raw_text": "中午12.30-3.50   改skyeos UI  完善数据导出和海报到处蹭\n\ncodex与chat版本聊天，商讨方案\n\n4-5.30   实验\n\n5.30-10点    开发skyos，优化规则层面\n\n启发是提示词和部分细节不可以交给AI处理，效果很不好\n\n拟订了第二方案，还需要时间执行\n\nnote记录和数据处理\n\n11.30-12.30\n\n优化boke论坛，效率较低，需要单独拿出来进行单元测试，去本地开发\n\n开发agent数模，增加vsearch，设置按键\n\nskyos解析数据，方案讨论",
+  "minimums": {
+    "items": 3,
+    "review_notes": 2,
+    "blocked_max": 1
+  },
+  "expected_events": [
+    {
+      "kind": "time_record",
+      "raw_text_contains": "改skyeos UI"
+    },
+    {
+      "kind": "time_record",
+      "raw_text_contains": "开发skyos"
+    }
+  ],
+  "expected_notes": [
+    {
+      "content_contains": "提示词和部分细节不可以交给AI处理"
+    },
+    {
+      "content_contains": "拟订了第二方案"
+    }
+  ]
+}

@@ -47,9 +47,11 @@ class TagSelector extends StatelessWidget {
   }
 
   Future<void> _openTagSheet(BuildContext context) {
+    final rootContext = Navigator.of(context, rootNavigator: true).context;
     return showModalBottomSheet<void>(
-      context: context,
+      context: rootContext,
       showDragHandle: true,
+      useRootNavigator: true,
       backgroundColor: const Color(0xFFF7F9FD),
       builder: (context) {
         return StatefulBuilder(
