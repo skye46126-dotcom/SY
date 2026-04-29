@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 
 import '../../app/app.dart';
+import '../../features/export/application/export_orchestrator.dart';
+import '../../features/export/domain/export_request.dart';
 import '../../models/sync_models.dart';
 import '../../shared/view_state.dart';
 import '../../shared/widgets/module_page.dart';
@@ -15,6 +17,7 @@ class BackupPage extends StatefulWidget {
 }
 
 class _BackupPageState extends State<BackupPage> {
+  ExportOrchestrator? _exportOrchestrator;
   ViewState<BackupResultModel?> _latestState = ViewState.initial();
   ViewState<List<BackupRecordModel>> _backupState = ViewState.initial();
   ViewState<List<RestoreRecordModel>> _restoreState = ViewState.initial();
@@ -48,8 +51,9 @@ class _BackupPageState extends State<BackupPage> {
       if (!mounted) return;
       setState(() {
         _latestState = ViewState.ready(latest);
-        _backupState =
-            backups.isEmpty ? ViewState.empty('暂无备份记录。') : ViewState.ready(backups);
+        _backupState = backups.isEmpty
+            ? ViewState.empty('暂无备份记录。')
+            : ViewState.ready(backups);
         _restoreState = restores.isEmpty
             ? ViewState.empty('暂无恢复记录。')
             : ViewState.ready(restores);
@@ -71,6 +75,8 @@ class _BackupPageState extends State<BackupPage> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
+    _exportOrchestrator ??=
+        ExportOrchestrator(service: LifeOsScope.of(context));
     if (_loaded) return;
     _loaded = true;
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -106,7 +112,8 @@ class _BackupPageState extends State<BackupPage> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               switch (_latestState.status) {
-                ViewStatus.loading => const SectionLoadingView(label: '正在读取最新备份'),
+                ViewStatus.loading =>
+                  const SectionLoadingView(label: '正在读取最新备份'),
                 ViewStatus.data when _latestState.data != null => Text(
                     '最新备份: ${_latestState.data!.filePath}\n创建时间: ${_latestState.data!.createdAt}',
                   ),
@@ -135,7 +142,9 @@ class _BackupPageState extends State<BackupPage> {
                     for (final item in _backupState.data!)
                       ListTile(
                         contentPadding: EdgeInsets.zero,
-                        leading: Icon(item.isSuccess ? Icons.check_circle : Icons.error_outline),
+                        leading: Icon(item.isSuccess
+                            ? Icons.check_circle
+                            : Icons.error_outline),
                         title: Text(item.backupType),
                         subtitle: Text(item.filePath),
                         trailing: PopupMenuButton<String>(
@@ -173,7 +182,8 @@ class _BackupPageState extends State<BackupPage> {
                       ListTile(
                         contentPadding: EdgeInsets.zero,
                         title: Text(item.filename),
-                        subtitle: Text('${item.modifiedAt} · ${item.sizeBytes} bytes'),
+                        subtitle: Text(
+                            '${item.modifiedAt} · ${item.sizeBytes} bytes'),
                         trailing: PopupMenuButton<String>(
                           onSelected: (value) {
                             switch (value) {
@@ -186,8 +196,11 @@ class _BackupPageState extends State<BackupPage> {
                             }
                           },
                           itemBuilder: (context) => const [
-                            PopupMenuItem(value: 'download', child: Text('只下载')),
-                            PopupMenuItem(value: 'download_restore', child: Text('下载并恢复')),
+                            PopupMenuItem(
+                                value: 'download', child: Text('只下载')),
+                            PopupMenuItem(
+                                value: 'download_restore',
+                                child: Text('下载并恢复')),
                             PopupMenuItem(value: 'delete', child: Text('删除远程')),
                           ],
                         ),
@@ -212,7 +225,9 @@ class _BackupPageState extends State<BackupPage> {
                   for (final item in _restoreState.data!)
                     ListTile(
                       contentPadding: EdgeInsets.zero,
-                      leading: Icon(item.isSuccess ? Icons.history_toggle_off : Icons.error_outline),
+                      leading: Icon(item.isSuccess
+                          ? Icons.history_toggle_off
+                          : Icons.error_outline),
                       title: Text(item.status),
                       subtitle: Text(item.backupRecordId ?? '无备份记录 ID'),
                       trailing: Text(item.restoredAt),
@@ -234,9 +249,25 @@ class _BackupPageState extends State<BackupPage> {
     setState(() => _createState = ViewState.loading());
     try {
       final runtime = LifeOsScope.runtimeOf(context);
-      final result = await LifeOsScope.of(context).createBackup(
-        userId: runtime.userId,
+      final exportResult = await _exportOrchestrator!.export(
+        ExportRequest.backup(
+          title: 'backup-manual',
+          userId: runtime.userId,
+          backupType: 'manual',
+        ),
+      );
+      final artifact = exportResult.primaryArtifact;
+      final result = BackupResultModel(
+        id: artifact.id,
         backupType: 'manual',
+        filePath: artifact.filePath,
+        fileSizeBytes:
+            (artifact.metadata.toJson()['file_size_bytes'] as num?)?.toInt() ??
+                0,
+        checksum: artifact.metadata.toJson()['checksum'] as String?,
+        success: (artifact.metadata.toJson()['success'] as bool?) ?? true,
+        errorMessage: artifact.metadata.toJson()['error_message'] as String?,
+        createdAt: artifact.createdAt.toIso8601String(),
       );
       if (!mounted) return;
       setState(() => _createState = ViewState.ready(result));

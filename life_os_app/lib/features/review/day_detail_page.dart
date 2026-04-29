@@ -1,6 +1,12 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 
 import '../../app/app.dart';
+import '../../features/export/application/export_orchestrator.dart';
+import '../../features/export/domain/export_artifact.dart';
+import '../../features/export/domain/export_range.dart';
+import '../../features/export/domain/export_request.dart';
 import '../../models/project_models.dart';
 import '../../models/record_models.dart';
 import '../../models/tag_models.dart';
@@ -27,7 +33,7 @@ class DayDetailPage extends StatefulWidget {
 
 class _DayDetailPageState extends State<DayDetailPage> {
   final GlobalKey _exportBoundaryKey = GlobalKey();
-  final ImageExportService _imageExportService = const ImageExportService();
+  ExportOrchestrator? _exportOrchestrator;
   ViewState<List<RecentRecordItem>> _state = ViewState.initial();
   bool _loaded = false;
   bool _isExporting = false;
@@ -65,6 +71,8 @@ class _DayDetailPageState extends State<DayDetailPage> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
+    _exportOrchestrator ??=
+        ExportOrchestrator(service: LifeOsScope.of(context));
     if (_loaded) {
       return;
     }
@@ -145,18 +153,23 @@ class _DayDetailPageState extends State<DayDetailPage> {
     setState(() => _isExporting = true);
     try {
       final runtime = LifeOsScope.runtimeOf(context);
-      final result = await _imageExportService.exportBoundary(
-        boundaryKey: _exportBoundaryKey,
-        module: 'day_detail',
-        title: 'day-detail-${widget.anchorDate}',
-        metadata: buildDayDetailExportMetadata(
-          anchorDate: widget.anchorDate,
-          timezone: runtime.timezone,
-          records: records,
+      final exportResult = await _exportOrchestrator!.export(
+        ExportRequest.snapshot(
+          title: 'day-detail-${widget.anchorDate}',
+          module: 'day_detail',
+          range: ExportRange.today,
+          boundaryKey: _exportBoundaryKey,
+          metadata: buildDayDetailExportMetadata(
+            anchorDate: widget.anchorDate,
+            timezone: runtime.timezone,
+            records: records,
+          ),
         ),
       );
+      final artifact = exportResult.primaryArtifact;
       if (!mounted) return;
-      await showExportDocumentDialog(context, result);
+      await showExportDocumentDialog(
+          context, _artifactToImageDocument(artifact));
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -167,6 +180,18 @@ class _DayDetailPageState extends State<DayDetailPage> {
         setState(() => _isExporting = false);
       }
     }
+  }
+
+  ExportedImageDocument _artifactToImageDocument(ExportArtifact artifact) {
+    return ExportedImageDocument(
+      module: artifact.module,
+      title: artifact.title,
+      exportedAt: artifact.createdAt,
+      directoryPath: File(artifact.filePath).parent.path,
+      imagePath: artifact.filePath,
+      metadataPath: artifact.metadataPath,
+      metadata: Map<String, dynamic>.from(artifact.metadata.toJson()),
+    );
   }
 
   Future<void> _deleteRecord(RecentRecordItem record) async {

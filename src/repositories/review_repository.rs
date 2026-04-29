@@ -8,6 +8,7 @@ use crate::models::{
     TimeCategoryAllocation,
 };
 use crate::repositories::record_repository::ensure_user_exists;
+use crate::repositories::review_note_repository::ReviewNoteRepository;
 
 pub struct ReviewRepository;
 
@@ -223,6 +224,12 @@ impl ReviewRepository {
             &end_at_utc_exclusive,
             timezone,
         )?;
+        let review_notes = ReviewNoteRepository::list_for_range(
+            connection,
+            user_id,
+            &window.start_date,
+            &window.end_date,
+        )?;
 
         Ok(ReviewReport {
             window: window.clone(),
@@ -257,6 +264,7 @@ impl ReviewRepository {
             key_events,
             income_history,
             history_records,
+            review_notes,
             time_tag_metrics,
             expense_tag_metrics,
         })

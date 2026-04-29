@@ -1,6 +1,12 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 
 import '../../app/app.dart';
+import '../../features/export/application/export_orchestrator.dart';
+import '../../features/export/domain/export_artifact.dart';
+import '../../features/export/domain/export_range.dart';
+import '../../features/export/domain/export_request.dart';
 import '../../models/record_models.dart';
 import '../../models/review_models.dart';
 import '../../services/export_metadata_builders.dart';
@@ -32,7 +38,7 @@ class ReviewPage extends StatefulWidget {
 
 class _ReviewPageState extends State<ReviewPage> {
   final GlobalKey _exportBoundaryKey = GlobalKey();
-  final ImageExportService _imageExportService = const ImageExportService();
+  ExportOrchestrator? _exportOrchestrator;
   ReviewController? _controller;
   bool _loaded = false;
   bool _isExporting = false;
@@ -42,6 +48,8 @@ class _ReviewPageState extends State<ReviewPage> {
     super.didChangeDependencies();
     _controller ??= ReviewController(LifeOsScope.of(context))
       ..selectedKind = widget.initialKind;
+    _exportOrchestrator ??=
+        ExportOrchestrator(service: LifeOsScope.of(context));
     if (_loaded) {
       return;
     }
@@ -146,16 +154,16 @@ class _ReviewPageState extends State<ReviewPage> {
                   AppleSegmentOption(value: ReviewWindowKind.year, label: '年'),
                 ],
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: 8),
               Align(
-                alignment: Alignment.centerRight,
+                alignment: Alignment.center,
                 child: Wrap(
-                  spacing: 10,
-                  runSpacing: 10,
+                  spacing: 8,
+                  runSpacing: 8,
                   children: [
                     _SmallActionButton(
                       icon: Icons.chevron_left_rounded,
-                      label: '上一周期',
+                      label: '上期',
                       onPressed: () => controller.shiftPeriod(
                         -1,
                         runtime.userId,
@@ -164,7 +172,7 @@ class _ReviewPageState extends State<ReviewPage> {
                     ),
                     _SmallActionButton(
                       icon: Icons.today_rounded,
-                      label: '回到今天',
+                      label: '今天',
                       onPressed: () => controller.jumpToToday(
                         runtime.userId,
                         runtime.timezone,
@@ -172,7 +180,7 @@ class _ReviewPageState extends State<ReviewPage> {
                     ),
                     _SmallActionButton(
                       icon: Icons.chevron_right_rounded,
-                      label: '下一周期',
+                      label: '下期',
                       onPressed: () => controller.shiftPeriod(
                         1,
                         runtime.userId,
@@ -194,6 +202,7 @@ class _ReviewPageState extends State<ReviewPage> {
               message: controller.state.message,
             ),
             _ReviewOverviewCard(report: report),
+            _ReviewNotesCard(report: report),
             _AdaptiveColumns(
               children: [
                 _ReviewTrendCard(report: report),
@@ -267,20 +276,25 @@ class _ReviewPageState extends State<ReviewPage> {
     setState(() => _isExporting = true);
     try {
       final report = data.report;
-      final result = await _imageExportService.exportBoundary(
-        boundaryKey: _exportBoundaryKey,
-        module: 'review',
-        title:
-            'review-${data.selectedKind.name}-${report.window.startDate}-${report.window.endDate}',
-        metadata: buildReviewExportMetadata(
-          report: report,
-          windowKind: data.selectedKind,
-          anchorDate: data.anchorDate,
-          snapshot: data.snapshot,
+      final exportResult = await _exportOrchestrator!.export(
+        ExportRequest.snapshot(
+          title:
+              'review-${data.selectedKind.name}-${report.window.startDate}-${report.window.endDate}',
+          module: 'review',
+          range: _mapRange(data.selectedKind),
+          boundaryKey: _exportBoundaryKey,
+          metadata: buildReviewExportMetadata(
+            report: report,
+            windowKind: data.selectedKind,
+            anchorDate: data.anchorDate,
+            snapshot: data.snapshot,
+          ),
         ),
       );
+      final artifact = exportResult.primaryArtifact;
       if (!mounted) return;
-      await showExportDocumentDialog(context, result);
+      await showExportDocumentDialog(
+          context, _artifactToImageDocument(artifact));
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -291,6 +305,33 @@ class _ReviewPageState extends State<ReviewPage> {
         setState(() => _isExporting = false);
       }
     }
+  }
+
+  ExportRange _mapRange(ReviewWindowKind kind) {
+    switch (kind) {
+      case ReviewWindowKind.day:
+        return ExportRange.today;
+      case ReviewWindowKind.week:
+        return ExportRange.week;
+      case ReviewWindowKind.month:
+        return ExportRange.month;
+      case ReviewWindowKind.year:
+        return ExportRange.year;
+      case ReviewWindowKind.range:
+        return ExportRange.custom;
+    }
+  }
+
+  ExportedImageDocument _artifactToImageDocument(ExportArtifact artifact) {
+    return ExportedImageDocument(
+      module: artifact.module,
+      title: artifact.title,
+      exportedAt: artifact.createdAt,
+      directoryPath: File(artifact.filePath).parent.path,
+      imagePath: artifact.filePath,
+      metadataPath: artifact.metadataPath,
+      metadata: Map<String, dynamic>.from(artifact.metadata.toJson()),
+    );
   }
 
   void _openProject(String projectId) {
@@ -422,11 +463,11 @@ class _AdaptiveColumns extends StatelessWidget {
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        if (constraints.maxWidth < 920) {
+        if (constraints.maxWidth < 600) {
           return Column(
             children: [
               for (var index = 0; index < children.length; index++) ...[
-                if (index > 0) const SizedBox(height: 20),
+                if (index > 0) const SizedBox(height: 14),
                 children[index],
               ],
             ],
@@ -437,7 +478,7 @@ class _AdaptiveColumns extends StatelessWidget {
           children: [
             for (var index = 0; index < children.length; index++) ...[
               Expanded(child: children[index]),
-              if (index < children.length - 1) const SizedBox(width: 20),
+              if (index < children.length - 1) const SizedBox(width: 14),
             ],
           ],
         );
@@ -468,130 +509,51 @@ class _ReviewCoreSummaryCard extends StatelessWidget {
     }
 
     return AppleDashboardCard(
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          final compact = constraints.maxWidth < 760;
-          final summaryPanel = Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
             children: [
-              Row(
-                children: [
-                  const AppleIconCircle(
-                    icon: Icons.text_snippet_rounded,
-                    color: AppleDashboardPalette.primary,
-                    size: 42,
-                  ),
-                  const SizedBox(width: 12),
-                  Text(
-                    '${_windowTitle(report!.window.kind)}总结',
-                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                          color: AppleDashboardPalette.text,
-                          fontSize: 22,
-                          fontWeight: FontWeight.w700,
-                        ),
-                  ),
-                ],
+              const AppleIconCircle(
+                icon: Icons.text_snippet_rounded,
+                color: AppleDashboardPalette.primary,
+                size: 42,
               ),
-              const SizedBox(height: 16),
-              Text(
-                _reviewSummary(report!),
-                style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                      color: AppleDashboardPalette.secondaryText,
-                      height: 1.65,
-                    ),
-              ),
-              const SizedBox(height: 18),
-              Wrap(
-                spacing: 10,
-                runSpacing: 10,
-                children: _reviewPills(report!).map((pill) {
-                  return ApplePill(
-                    label: pill.label,
-                    backgroundColor: pill.background,
-                    foregroundColor: pill.foreground,
-                  );
-                }).toList(),
-              ),
-            ],
-          );
-
-          final illustration = Container(
-            height: compact ? 120 : 180,
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(22),
-              gradient: const LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [Color(0xFFF4F7FF), Color(0xFFF9FBFF)],
-              ),
-            ),
-            child: Center(
-              child: Stack(
-                alignment: Alignment.center,
-                children: [
-                  Container(
-                    width: compact ? 82 : 112,
-                    height: compact ? 104 : 138,
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(22),
-                      border: Border.all(color: AppleDashboardPalette.border),
-                      boxShadow: const [
-                        BoxShadow(
-                          color: AppleDashboardPalette.shadow,
-                          blurRadius: 18,
-                          offset: Offset(0, 8),
-                        ),
-                      ],
-                    ),
-                  ),
-                  Positioned(
-                    top: compact ? 28 : 38,
-                    child: Row(
-                      children: const [
-                        _MiniBlueBar(height: 24),
-                        SizedBox(width: 8),
-                        _MiniBlueBar(height: 36),
-                        SizedBox(width: 8),
-                        _MiniBlueBar(height: 28),
-                      ],
-                    ),
-                  ),
-                  Positioned(
-                    right: compact ? 20 : 28,
-                    bottom: compact ? 18 : 22,
-                    child: Container(
-                      width: compact ? 42 : 56,
-                      height: compact ? 42 : 56,
-                      decoration: const BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: Color(0xFF5D8DFF),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  '${_windowTitle(report!.window.kind)}总结',
+                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                        color: AppleDashboardPalette.text,
+                        fontSize: 22,
+                        fontWeight: FontWeight.w700,
                       ),
-                    ),
-                  ),
-                ],
+                ),
               ),
-            ),
-          );
-
-          if (compact) {
-            return Column(
-              children: [
-                summaryPanel,
-                const SizedBox(height: 20),
-                illustration,
-              ],
-            );
-          }
-
-          return Row(
-            children: [
-              Expanded(flex: 3, child: summaryPanel),
-              const SizedBox(width: 20),
-              Expanded(flex: 2, child: illustration),
             ],
-          );
-        },
+          ),
+          const SizedBox(height: 12),
+          Text(
+            _reviewSummary(report!),
+            style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                  color: AppleDashboardPalette.secondaryText,
+                  fontSize: 15,
+                  height: 1.45,
+                ),
+          ),
+          const SizedBox(height: 14),
+          Wrap(
+            spacing: 10,
+            runSpacing: 8,
+            children: _reviewPills(report!).map((pill) {
+              return ApplePill(
+                label: pill.label,
+                backgroundColor: pill.background,
+                foregroundColor: pill.foreground,
+              );
+            }).toList(),
+          ),
+        ],
       ),
     );
   }
@@ -685,12 +647,12 @@ class _ReviewOverviewCard extends StatelessWidget {
       ),
       child: LayoutBuilder(
         builder: (context, constraints) {
-          final columns = constraints.maxWidth < 760 ? 2 : 3;
+          final columns = constraints.maxWidth < 340 ? 2 : 3;
           final tileWidth =
-              (constraints.maxWidth - (columns - 1) * 12) / columns;
+              (constraints.maxWidth - (columns - 1) * 10) / columns;
           return Wrap(
-            spacing: 12,
-            runSpacing: 12,
+            spacing: 10,
+            runSpacing: 10,
             children: items
                 .map((item) => SizedBox(
                       width: tileWidth,
@@ -699,6 +661,64 @@ class _ReviewOverviewCard extends StatelessWidget {
                 .toList(),
           );
         },
+      ),
+    );
+  }
+}
+
+class _ReviewNotesCard extends StatelessWidget {
+  const _ReviewNotesCard({required this.report});
+
+  final ReviewReport? report;
+
+  @override
+  Widget build(BuildContext context) {
+    final notes = report?.reviewNotes ?? const <ReviewNoteModel>[];
+    if (notes.isEmpty) {
+      return const SizedBox.shrink();
+    }
+    return AppleDashboardSection(
+      title: '复盘素材',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          for (final note in notes.take(6)) ...[
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                ApplePill(
+                  label: _reviewNoteTypeLabel(note.noteType),
+                  backgroundColor: const Color(0xFFE2E8F0),
+                  foregroundColor: AppleDashboardPalette.secondaryText,
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        note.title,
+                        style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                              color: AppleDashboardPalette.text,
+                              fontWeight: FontWeight.w700,
+                            ),
+                      ),
+                      const SizedBox(height: 3),
+                      Text(
+                        note.content,
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                              color: AppleDashboardPalette.secondaryText,
+                              height: 1.35,
+                            ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            if (note != notes.take(6).last) const SizedBox(height: 12),
+          ],
+        ],
       ),
     );
   }
@@ -743,7 +763,7 @@ class _ReviewTrendCard extends StatelessWidget {
             deltaLabel: _ratioLabel(report!.incomeChangeRatio),
             positive: (report!.incomeChangeRatio ?? 0) >= 0,
           ),
-          const SizedBox(height: 18),
+          const SizedBox(height: 14),
           _CompareMetricRow(
             label: '经营支出',
             currentLabel: _currency(report!.totalExpenseCents),
@@ -754,7 +774,7 @@ class _ReviewTrendCard extends StatelessWidget {
             deltaLabel: _ratioLabel(report!.expenseChangeRatio),
             positive: (report!.expenseChangeRatio ?? 0) <= 0,
           ),
-          const SizedBox(height: 18),
+          const SizedBox(height: 14),
           _CompareMetricRow(
             label: '经营结余',
             currentLabel: _currency(currentNet),
@@ -767,7 +787,7 @@ class _ReviewTrendCard extends StatelessWidget {
             deltaLabel: _deltaRatio(currentNet, previousNet),
             positive: currentNet >= previousNet,
           ),
-          const SizedBox(height: 18),
+          const SizedBox(height: 14),
           _CompareMetricRow(
             label: 'AI占比',
             currentLabel: _ratio(report!.aiAssistRate),
@@ -779,7 +799,7 @@ class _ReviewTrendCard extends StatelessWidget {
             positive: true,
             showPreviousBar: false,
           ),
-          const SizedBox(height: 18),
+          const SizedBox(height: 14),
           _CompareMetricRow(
             label: '工作时长',
             currentLabel: _hours(report!.totalWorkMinutes),
@@ -849,9 +869,9 @@ class _ReviewTimeAnalysisCard extends StatelessWidget {
               ),
             ),
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 12),
           for (var index = 0; index < allocations.length; index++) ...[
-            if (index > 0) const SizedBox(height: 10),
+            if (index > 0) const SizedBox(height: 8),
             _LegendRow(
               label: allocations[index].categoryName,
               color: _timeColor(allocations[index].categoryName),
@@ -860,7 +880,7 @@ class _ReviewTimeAnalysisCard extends StatelessWidget {
             ),
           ],
           if (tags.isNotEmpty) ...[
-            const SizedBox(height: 18),
+            const SizedBox(height: 14),
             Text(
               '时间标签 TOP 3',
               style: Theme.of(context).textTheme.titleMedium?.copyWith(
@@ -869,9 +889,9 @@ class _ReviewTimeAnalysisCard extends StatelessWidget {
                     fontWeight: FontWeight.w700,
                   ),
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 9),
             for (var index = 0; index < tags.length; index++) ...[
-              if (index > 0) const SizedBox(height: 12),
+              if (index > 0) const SizedBox(height: 10),
               _TagRow(
                 metric: tags[index],
                 color: _tagColor(index),
@@ -921,7 +941,7 @@ class _ReviewAiEfficiencyCard extends StatelessWidget {
             displayValue: _ratio(report!.aiAssistRate),
             color: AppleDashboardPalette.primary,
           ),
-          const SizedBox(height: 14),
+          const SizedBox(height: 11),
           _QualityMetricRow(
             label: '工作效率（元/h）',
             value: _normalizeEfficiency(
@@ -931,7 +951,7 @@ class _ReviewAiEfficiencyCard extends StatelessWidget {
             hint: _deltaRatio(
                 report!.actualHourlyRateCents, report!.idealHourlyRateCents),
           ),
-          const SizedBox(height: 14),
+          const SizedBox(height: 11),
           _QualityMetricRow(
             label: '学习效率',
             value: ((report!.learningEfficiencyAvg ?? 0) / 10).clamp(0.0, 1.0),
@@ -941,7 +961,7 @@ class _ReviewAiEfficiencyCard extends StatelessWidget {
             color: const Color(0xFF39C2BD),
             hint: report!.learningEfficiencyAvg == null ? null : '学习节奏稳定',
           ),
-          const SizedBox(height: 14),
+          const SizedBox(height: 11),
           _QualityMetricRow(
             label: '单位收入耗时',
             value: unitIncomeHours == null
@@ -953,9 +973,9 @@ class _ReviewAiEfficiencyCard extends StatelessWidget {
             color: AppleDashboardPalette.success,
             hint: unitIncomeHours == null ? null : '按经营结余折算',
           ),
-          const SizedBox(height: 18),
+          const SizedBox(height: 14),
           Container(
-            padding: const EdgeInsets.all(14),
+            padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
               color: const Color(0xFFF8FAFD),
               borderRadius: BorderRadius.circular(18),
@@ -1024,14 +1044,14 @@ class _ReviewProjectCard extends StatelessWidget {
             positive: true,
             onProjectTap: onProjectTap,
           ),
-          const SizedBox(height: 18),
+          const SizedBox(height: 14),
           _ProjectGroup(
             title: '需要警惕',
             items: riskProjects,
             positive: false,
             onProjectTap: onProjectTap,
           ),
-          const SizedBox(height: 14),
+          const SizedBox(height: 8),
           Align(
             alignment: Alignment.centerRight,
             child: TextButton(
@@ -1122,36 +1142,16 @@ class _SmallActionButton extends StatelessWidget {
   Widget build(BuildContext context) {
     return TextButton.icon(
       onPressed: onPressed,
-      icon: Icon(icon, size: 18),
+      icon: Icon(icon, size: 17),
       label: Text(label),
       style: TextButton.styleFrom(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
         foregroundColor: AppleDashboardPalette.secondaryText,
         backgroundColor: Colors.white,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(999),
           side: const BorderSide(color: AppleDashboardPalette.border),
         ),
-      ),
-    );
-  }
-}
-
-class _MiniBlueBar extends StatelessWidget {
-  const _MiniBlueBar({
-    required this.height,
-  });
-
-  final double height;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: 10,
-      height: height,
-      decoration: BoxDecoration(
-        color: AppleDashboardPalette.primary,
-        borderRadius: BorderRadius.circular(999),
       ),
     );
   }
@@ -1184,7 +1184,7 @@ class _OverviewMetricTile extends StatelessWidget {
         ? AppleDashboardPalette.success
         : AppleDashboardPalette.danger;
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(11),
       decoration: BoxDecoration(
         color: const Color(0xFFF8FAFD),
         borderRadius: BorderRadius.circular(18),
@@ -1199,20 +1199,25 @@ class _OverviewMetricTile extends StatelessWidget {
                   color: AppleDashboardPalette.secondaryText,
                 ),
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 5),
           Text(
             item.value,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
             style: Theme.of(context).textTheme.titleLarge?.copyWith(
                   color: AppleDashboardPalette.text,
-                  fontSize: 18,
+                  fontSize: 17,
                   fontWeight: FontWeight.w700,
                 ),
           ),
-          const SizedBox(height: 6),
+          const SizedBox(height: 4),
           Text(
             item.change,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
             style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                   color: tone,
+                  fontSize: 12,
                   fontWeight: FontWeight.w600,
                 ),
           ),
@@ -1560,14 +1565,14 @@ class _ProjectGroup extends StatelessWidget {
                 fontWeight: FontWeight.w700,
               ),
         ),
-        const SizedBox(height: 10),
+        const SizedBox(height: 8),
         for (var index = 0; index < items.length; index++) ...[
-          if (index > 0) const SizedBox(height: 10),
+          if (index > 0) const SizedBox(height: 8),
           InkWell(
             borderRadius: BorderRadius.circular(16),
             onTap: () => onProjectTap(items[index].projectId),
             child: Container(
-              padding: const EdgeInsets.all(14),
+              padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
                 color: const Color(0xFFF8FAFD),
                 borderRadius: BorderRadius.circular(16),
@@ -1584,13 +1589,15 @@ class _ProjectGroup extends StatelessWidget {
                           style:
                               Theme.of(context).textTheme.titleMedium?.copyWith(
                                     color: AppleDashboardPalette.text,
-                                    fontSize: 15,
+                                    fontSize: 14,
                                     fontWeight: FontWeight.w600,
                                   ),
                         ),
                         const SizedBox(height: 4),
                         Text(
                           '收入 ${_currency(items[index].incomeEarnedCents)} · 时间 ${_hours(items[index].timeSpentMinutes)} · Time cost ${_currency(items[index].timeCostCents)}',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                           style:
                               Theme.of(context).textTheme.bodyMedium?.copyWith(
                                     color: AppleDashboardPalette.secondaryText,
@@ -1745,6 +1752,29 @@ String _ratioLabel(double? value) {
   }
   final prefix = value > 0 ? '+' : '';
   return '$prefix${(value * 100).toStringAsFixed(1)}%';
+}
+
+String _reviewNoteTypeLabel(String value) {
+  switch (value) {
+    case 'reflection':
+      return '反思';
+    case 'feeling':
+      return '感受';
+    case 'plan':
+      return '计划';
+    case 'idea':
+      return '灵感';
+    case 'context':
+      return '上下文';
+    case 'ai_usage':
+      return 'AI 使用';
+    case 'risk':
+      return '风险';
+    case 'summary':
+      return '总结';
+    default:
+      return '复盘';
+  }
 }
 
 String _deltaRatio(int? current, int? previous) {

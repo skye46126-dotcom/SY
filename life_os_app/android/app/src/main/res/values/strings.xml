@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">SkyOS</string>
+    <string name="shortcut_capture_ai_short">AI 速记</string>
+    <string name="shortcut_capture_ai_long">打开 AI 快速录入</string>
+    <string name="shortcut_capture_time_short">时间记录</string>
+    <string name="shortcut_capture_time_long">直接开始时间记录</string>
+    <string name="shortcut_capture_learning_short">学习记录</string>
+    <string name="shortcut_capture_learning_long">直接开始学习记录</string>
+</resources>

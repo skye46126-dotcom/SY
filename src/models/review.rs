@@ -2,7 +2,7 @@ use chrono::{Datelike, Duration, Local, NaiveDate};
 use serde::{Deserialize, Serialize};
 
 use crate::error::{LifeOsError, Result};
-use crate::models::RecentRecordItem;
+use crate::models::{RecentRecordItem, ReviewNote};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum ReviewWindowKind {
@@ -225,6 +225,7 @@ pub struct ReviewReport {
     pub key_events: Vec<RecentRecordItem>,
     pub income_history: Vec<RecentRecordItem>,
     pub history_records: Vec<RecentRecordItem>,
+    pub review_notes: Vec<ReviewNote>,
     pub time_tag_metrics: Vec<ReviewTagMetric>,
     pub expense_tag_metrics: Vec<ReviewTagMetric>,
 }

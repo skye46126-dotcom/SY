@@ -6,15 +6,16 @@ use serde_json::Value;
 
 use crate::error::LifeOsError;
 use crate::models::{
-    AiCommitInput, AiParseInput, CapexCostInput, CreateAiServiceConfigInput,
+    AiCaptureCommitInput, AiCommitInput, AiParseInput, CapexCostInput, CreateAiServiceConfigInput,
     CreateCloudSyncConfigInput, CreateExpenseRecordInput, CreateIncomeRecordInput,
-    CreateLearningRecordInput, CreateProjectInput, CreateTagInput, CreateTimeRecordInput,
-    DimensionOptionInput, MonthlyCostBaselineInput, RecordKind, RecurringCostRuleInput,
-    UpdateOperatingSettingsInput,
+    CreateLearningRecordInput, CreateProjectInput, CreateReviewNoteInput, CreateTagInput,
+    CreateTimeRecordInput, DimensionOptionInput, MonthlyCostBaselineInput, RecordKind,
+    RecurringCostRuleInput, UpdateOperatingSettingsInput,
 };
 use crate::services::{
-    AiService, BackupService, CostService, DemoDataService, ProjectService, RecordService,
-    ReviewService, SnapshotService,
+    AiService, BackupService, CostService, DataPackageExportInput, DemoDataService, ExportService,
+    ProjectService, RecordService, ReviewNoteService, ReviewService, ShareService,
+    ShareTargetInput, SnapshotService,
 };
 
 #[derive(Debug, Serialize)]
@@ -79,6 +80,28 @@ struct EmptyPayload {}
 #[derive(Debug, serde::Deserialize)]
 struct UserScopedRequest {
     user_id: String,
+}
+
+#[derive(Debug, serde::Deserialize)]
+struct ExportSeedRequest {
+    user_id: String,
+}
+
+#[derive(Debug, serde::Deserialize)]
+struct ExportDataPackageRequest {
+    user_id: String,
+    format: String,
+    output_dir: String,
+    title: String,
+    module: Option<String>,
+}
+
+#[derive(Debug, serde::Deserialize)]
+struct PrepareShareTargetRequest {
+    file_path: String,
+    title: Option<String>,
+    mime_type: Option<String>,
+    text: Option<String>,
 }
 
 #[derive(Debug, serde::Deserialize)]
@@ -270,6 +293,19 @@ struct TagDetailRecordsRequest {
 }
 
 #[derive(Debug, serde::Deserialize)]
+struct ReviewNotesForDateRequest {
+    user_id: String,
+    occurred_on: String,
+}
+
+#[derive(Debug, serde::Deserialize)]
+struct ReviewNotesForRangeRequest {
+    user_id: String,
+    start_date: String,
+    end_date: String,
+}
+
+#[derive(Debug, serde::Deserialize)]
 struct UpdateTagRequest {
     tag_id: String,
     input: CreateTagInput,
@@ -311,6 +347,17 @@ struct AiConfigMutationRequest {
 struct DeleteAiConfigRequest {
     user_id: String,
     config_id: String,
+}
+
+#[derive(Debug, serde::Deserialize)]
+struct AiReviewChatRequest {
+    user_id: String,
+    question: String,
+    kind: String,
+    anchor_date: Option<String>,
+    start_date: Option<String>,
+    end_date: Option<String>,
+    timezone: String,
 }
 
 #[derive(Debug, serde::Deserialize)]
@@ -600,6 +647,44 @@ fn invoke_inner(
                 .map_err(BridgeInvokeError::from_core)?;
             Ok(success_response(data))
         }
+        "export_seed_data" => {
+            let request: ExportSeedRequest = parse_payload(payload_json)?;
+            let data = ExportService::new(database_path)
+                .export_seed_data(&request.user_id)
+                .map_err(BridgeInvokeError::from_core)?;
+            Ok(success_response(data))
+        }
+        "export_data_package" => {
+            let request: ExportDataPackageRequest = parse_payload(payload_json)?;
+            let data = ExportService::new(database_path)
+                .export_data_package(&DataPackageExportInput {
+                    user_id: request.user_id,
+                    format: request.format,
+                    output_dir: request.output_dir,
+                    title: request.title,
+                    module: request.module,
+                })
+                .map_err(BridgeInvokeError::from_core)?;
+            Ok(success_response(data))
+        }
+        "preview_data_package_export" => {
+            let request: ExportSeedRequest = parse_payload(payload_json)?;
+            let data = ExportService::new(database_path)
+                .preview_data_package(&request.user_id)
+                .map_err(BridgeInvokeError::from_core)?;
+            Ok(success_response(data))
+        }
+        "prepare_share_target" => {
+            let request: PrepareShareTargetRequest = parse_payload(payload_json)?;
+            let data = ShareService::prepare_target(ShareTargetInput {
+                file_path: request.file_path,
+                title: request.title,
+                mime_type: request.mime_type,
+                text: request.text,
+            })
+            .map_err(BridgeInvokeError::from_core)?;
+            Ok(success_response(data))
+        }
         "update_operating_settings" => {
             let request: UpdateOperatingSettingsRequest = parse_payload(payload_json)?;
             let data = RecordService::new(database_path)
@@ -771,6 +856,13 @@ fn invoke_inner(
                 .delete_service_config(&request.user_id, &request.config_id)
                 .map_err(BridgeInvokeError::from_core)?;
             Ok(success_response(true))
+        }
+        "test_ai_service_config" => {
+            let request: AiConfigMutationRequest = parse_payload(payload_json)?;
+            let data = AiService::new(database_path)
+                .test_service_config(&request.input)
+                .map_err(BridgeInvokeError::from_core)?;
+            Ok(success_response(data))
         }
         "get_monthly_baseline" => {
             let request: MonthlyBaselineRequest = parse_payload(payload_json)?;
@@ -994,6 +1086,71 @@ fn invoke_inner(
             .map_err(BridgeInvokeError::from_core)?;
             Ok(success_response(data))
         }
+        "chat_review" => {
+            let request: AiReviewChatRequest = parse_payload(payload_json)?;
+            let service = ReviewService::new(database_path);
+            let report = match request.kind.trim().to_lowercase().as_str() {
+                "day" => service.get_daily_review(
+                    &request.user_id,
+                    request.anchor_date.as_deref().ok_or_else(|| {
+                        BridgeInvokeError::invalid_argument(
+                            "anchor_date is required for day review",
+                        )
+                    })?,
+                    &request.timezone,
+                ),
+                "week" => service.get_weekly_review(
+                    &request.user_id,
+                    request.anchor_date.as_deref().ok_or_else(|| {
+                        BridgeInvokeError::invalid_argument(
+                            "anchor_date is required for week review",
+                        )
+                    })?,
+                    &request.timezone,
+                ),
+                "month" => service.get_monthly_review(
+                    &request.user_id,
+                    request.anchor_date.as_deref().ok_or_else(|| {
+                        BridgeInvokeError::invalid_argument(
+                            "anchor_date is required for month review",
+                        )
+                    })?,
+                    &request.timezone,
+                ),
+                "year" => service.get_yearly_review(
+                    &request.user_id,
+                    request.anchor_date.as_deref().ok_or_else(|| {
+                        BridgeInvokeError::invalid_argument(
+                            "anchor_date is required for year review",
+                        )
+                    })?,
+                    &request.timezone,
+                ),
+                "range" => service.get_range_review(
+                    &request.user_id,
+                    request.start_date.as_deref().ok_or_else(|| {
+                        BridgeInvokeError::invalid_argument(
+                            "start_date is required for range review",
+                        )
+                    })?,
+                    request.end_date.as_deref().ok_or_else(|| {
+                        BridgeInvokeError::invalid_argument("end_date is required for range review")
+                    })?,
+                    &request.timezone,
+                ),
+                other => return Err(BridgeInvokeError::unsupported_method(other)),
+            }
+            .map_err(BridgeInvokeError::from_core)?;
+            let context_json = serde_json::to_string(&report).map_err(|error| {
+                BridgeInvokeError::invalid_argument(format!(
+                    "failed to serialize review context: {error}"
+                ))
+            })?;
+            let data = AiService::new(database_path)
+                .chat_review(&request.user_id, &request.question, &context_json)
+                .map_err(BridgeInvokeError::from_core)?;
+            Ok(success_response(data))
+        }
         "get_tag_detail_records" => {
             let request: TagDetailRecordsRequest = parse_payload(payload_json)?;
             let data = ReviewService::new(database_path)
@@ -1009,6 +1166,27 @@ fn invoke_inner(
                 .map_err(BridgeInvokeError::from_core)?;
             Ok(success_response(data))
         }
+        "create_review_note" => {
+            let request: CreateReviewNoteInput = parse_payload(payload_json)?;
+            let data = ReviewNoteService::new(database_path)
+                .create_note(&request)
+                .map_err(BridgeInvokeError::from_core)?;
+            Ok(success_response(data))
+        }
+        "list_review_notes_for_date" => {
+            let request: ReviewNotesForDateRequest = parse_payload(payload_json)?;
+            let data = ReviewNoteService::new(database_path)
+                .list_notes_for_date(&request.user_id, &request.occurred_on)
+                .map_err(BridgeInvokeError::from_core)?;
+            Ok(success_response(data))
+        }
+        "list_review_notes_for_range" => {
+            let request: ReviewNotesForRangeRequest = parse_payload(payload_json)?;
+            let data = ReviewNoteService::new(database_path)
+                .list_notes_for_range(&request.user_id, &request.start_date, &request.end_date)
+                .map_err(BridgeInvokeError::from_core)?;
+            Ok(success_response(data))
+        }
         "parse_ai_input" => {
             let request: AiParseInput = parse_payload(payload_json)?;
             let data = AiService::new(database_path)
@@ -1016,10 +1194,24 @@ fn invoke_inner(
                 .map_err(BridgeInvokeError::from_core)?;
             Ok(success_response(data))
         }
+        "parse_ai_input_v2" => {
+            let request: AiParseInput = parse_payload(payload_json)?;
+            let data = AiService::new(database_path)
+                .parse_input_v2(&request)
+                .map_err(BridgeInvokeError::from_core)?;
+            Ok(success_response(data))
+        }
         "commit_ai_drafts" => {
             let request: AiCommitInput = parse_payload(payload_json)?;
             let data = AiService::new(database_path)
                 .commit_drafts(&request)
+                .map_err(BridgeInvokeError::from_core)?;
+            Ok(success_response(data))
+        }
+        "commit_ai_capture" => {
+            let request: AiCaptureCommitInput = parse_payload(payload_json)?;
+            let data = AiService::new(database_path)
+                .commit_capture(&request)
                 .map_err(BridgeInvokeError::from_core)?;
             Ok(success_response(data))
         }

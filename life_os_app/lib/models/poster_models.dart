@@ -63,6 +63,9 @@ enum PosterArtKind {
   growthWave,
   amberSun,
   glassRibbon,
+  projectCard,
+  galleryFrame,
+  uploadedImage,
 }
 
 class PosterCoverAsset {
@@ -72,6 +75,8 @@ class PosterCoverAsset {
     required this.helperText,
     required this.themeKey,
     required this.artKind,
+    this.imagePath,
+    this.imageLabel,
   });
 
   final String id;
@@ -79,6 +84,8 @@ class PosterCoverAsset {
   final String helperText;
   final String themeKey;
   final PosterArtKind artKind;
+  final String? imagePath;
+  final String? imageLabel;
 
   Map<String, Object?> toJson() {
     return {
@@ -87,6 +94,8 @@ class PosterCoverAsset {
       'helper_text': helperText,
       'theme_key': themeKey,
       'art_kind': artKind.name,
+      'image_path': imagePath,
+      'image_label': imageLabel,
     };
   }
 }
@@ -97,6 +106,9 @@ enum PosterCoverSource {
   growthMint,
   amberReset,
   calmSilver,
+  projectCover,
+  galleryImage,
+  localUpload,
 }
 
 extension PosterCoverSourceLabel on PosterCoverSource {
@@ -112,6 +124,12 @@ extension PosterCoverSourceLabel on PosterCoverSource {
         return 'Amber Reset';
       case PosterCoverSource.calmSilver:
         return 'Calm Silver';
+      case PosterCoverSource.projectCover:
+        return '项目封面';
+      case PosterCoverSource.galleryImage:
+        return '画廊图片';
+      case PosterCoverSource.localUpload:
+        return '本地上传';
     }
   }
 
@@ -127,6 +145,12 @@ extension PosterCoverSourceLabel on PosterCoverSource {
         return 'amber_reset';
       case PosterCoverSource.calmSilver:
         return 'calm_silver';
+      case PosterCoverSource.projectCover:
+        return 'project_cover';
+      case PosterCoverSource.galleryImage:
+        return 'gallery_image';
+      case PosterCoverSource.localUpload:
+        return 'local_upload';
     }
   }
 
@@ -142,6 +166,27 @@ extension PosterCoverSourceLabel on PosterCoverSource {
         return '恢复、复位、重新起步';
       case PosterCoverSource.calmSilver:
         return '克制、留白、公开分享';
+      case PosterCoverSource.projectCover:
+        return '使用主项目相关封面';
+      case PosterCoverSource.galleryImage:
+        return '使用画廊中的图片路径';
+      case PosterCoverSource.localUpload:
+        return '使用本地图片文件';
+    }
+  }
+
+  bool get acceptsImagePath {
+    switch (this) {
+      case PosterCoverSource.projectCover:
+      case PosterCoverSource.galleryImage:
+      case PosterCoverSource.localUpload:
+        return true;
+      case PosterCoverSource.auto:
+      case PosterCoverSource.focusBlue:
+      case PosterCoverSource.growthMint:
+      case PosterCoverSource.amberReset:
+      case PosterCoverSource.calmSilver:
+        return false;
     }
   }
 }

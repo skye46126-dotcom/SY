@@ -54,6 +54,8 @@ class PosterExportService {
     required PosterTemplateKind template,
     required PosterCoverSource coverSource,
     required PosterPrivacyPolicy policy,
+    String? coverImagePath,
+    String? coverImageLabel,
   }) {
     final stateScore = _buildStateScore(source);
     final stateLabel = _stateLabel(stateScore);
@@ -62,6 +64,8 @@ class PosterExportService {
     final coverAsset = _coverSelector.resolve(
       source: source,
       coverSource: coverSource,
+      imagePath: coverImagePath,
+      imageLabel: coverImageLabel,
     );
     final themeKey = coverAsset.themeKey;
 
@@ -103,7 +107,7 @@ class PosterExportService {
 
     final trimmedMetrics = metrics.take(5).toList();
     final summary = policy.showSummary
-        ? _trimSummary(source.summaryText)
+        ? _safeSummary(source, policy, stateLabel)
         : _fallbackSummary(source, stateLabel);
 
     return PosterExportData(
@@ -112,7 +116,7 @@ class PosterExportService {
       coverSource: coverSource,
       coverAsset: coverAsset,
       policy: policy,
-      brandLabel: 'SkyeOS',
+      brandLabel: 'SkyOS',
       title: _titleForRange(source.range),
       periodLabel: source.periodLabel,
       dateLabel: source.dateLabel,
@@ -399,8 +403,40 @@ class PosterExportService {
     return '${source.range.label}状态归纳为 $stateLabel，$finance。';
   }
 
+  String _safeSummary(
+    PosterSourceData source,
+    PosterPrivacyPolicy policy,
+    String stateLabel,
+  ) {
+    switch (policy.mode) {
+      case PosterPrivacyMode.publicShare:
+        return _publicSummary(source, stateLabel);
+      case PosterPrivacyMode.limitedShare:
+        return _limitedSummary(source, stateLabel);
+      case PosterPrivacyMode.privateReview:
+        return _trimSummary(source.summaryText);
+    }
+  }
+
+  String _publicSummary(PosterSourceData source, String stateLabel) {
+    final work = source.workMinutes > 0 ? '专注投入稳定' : '正在恢复节奏';
+    final learn = source.learningMinutes > 0 ? '学习保持在线' : '学习带宽待补充';
+    final finance = source.netIncomeCents >= 0 ? '现金流正向' : '现金流需要观察';
+    return '${source.range.label}状态：$stateLabel，$work，$learn，$finance。';
+  }
+
+  String _limitedSummary(PosterSourceData source, String stateLabel) {
+    final work = _workNote(source.workChangeRatio);
+    final finance = source.netIncomeCents >= 0 ? '经营状态正向' : '经营状态偏弱';
+    return '${source.range.label}复盘：$stateLabel，$work，$finance。';
+  }
+
   String _trimSummary(String value) {
-    final compact = value.trim().replaceAll(RegExp(r'\s+'), ' ');
+    final compact = value
+        .trim()
+        .replaceAll(RegExp(r'\s+'), ' ')
+        .replaceAll(RegExp(r'¥\s*-?\d+(?:\.\d+)?'), '金额已隐藏')
+        .replaceAll(RegExp(r'-?\d+(?:\.\d+)?\s*元'), '金额已隐藏');
     if (compact.length <= 92) return compact;
     return '${compact.substring(0, 89)}...';
   }

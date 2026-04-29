@@ -1,4 +1,6 @@
+import 'dart:io';
 import 'dart:math' as math;
+import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 
@@ -14,6 +16,14 @@ class PosterPreviewCanvas extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final backgroundImage = _existingImageFile(data.coverAsset.imagePath);
+    if (backgroundImage != null) {
+      return _PhotoPosterCanvas(
+        data: data,
+        backgroundImage: backgroundImage,
+      );
+    }
+
     return DecoratedBox(
       decoration: BoxDecoration(
         gradient: LinearGradient(
@@ -44,6 +54,312 @@ class PosterPreviewCanvas extends StatelessWidget {
         ],
       ),
     );
+  }
+}
+
+File? _existingImageFile(String? imagePath) {
+  if (imagePath == null || imagePath.trim().isEmpty) {
+    return null;
+  }
+  final file = File(imagePath.trim());
+  return file.existsSync() ? file : null;
+}
+
+class _PhotoPosterCanvas extends StatelessWidget {
+  const _PhotoPosterCanvas({
+    required this.data,
+    required this.backgroundImage,
+  });
+
+  final PosterExportData data;
+  final File backgroundImage;
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = _palette(data.themeKey);
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        ImageFiltered(
+          imageFilter: ui.ImageFilter.blur(sigmaX: 14, sigmaY: 14),
+          child: Image.file(
+            backgroundImage,
+            fit: BoxFit.cover,
+            errorBuilder: (_, __, ___) => DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: palette.background,
+                ),
+              ),
+            ),
+          ),
+        ),
+        DecoratedBox(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [
+                Colors.black.withValues(alpha: 0.42),
+                const Color(0xFF07101C).withValues(alpha: 0.54),
+                Colors.black.withValues(alpha: 0.68),
+              ],
+              stops: const [0.0, 0.48, 1.0],
+            ),
+          ),
+        ),
+        DecoratedBox(
+          decoration: BoxDecoration(
+            gradient: RadialGradient(
+              center: const Alignment(0.72, -0.66),
+              radius: 1.08,
+              colors: [
+                palette.accent.withValues(alpha: 0.28),
+                Colors.transparent,
+              ],
+            ),
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(64, 58, 64, 56),
+          child: _PhotoPosterLayout(data: data, palette: palette),
+        ),
+      ],
+    );
+  }
+}
+
+class _PhotoPosterLayout extends StatelessWidget {
+  const _PhotoPosterLayout({
+    required this.data,
+    required this.palette,
+  });
+
+  final PosterExportData data;
+  final _PosterPalette palette;
+
+  @override
+  Widget build(BuildContext context) {
+    final visibleMetrics = data.metrics.take(4).toList();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _BrandRow(data: data),
+        const Spacer(flex: 5),
+        _GlassPanel(
+          padding: const EdgeInsets.fromLTRB(34, 30, 34, 32),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                data.periodLabel,
+                style: TextStyle(
+                  color: Colors.white.withValues(alpha: 0.78),
+                  fontSize: 24,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(height: 12),
+              Text(
+                data.policy.showStateScore
+                    ? '${data.stateScore}'
+                    : data.stateLabel,
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: data.policy.showStateScore ? 164 : 86,
+                  height: 0.88,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: data.policy.showStateScore ? -6 : -1.8,
+                ),
+              ),
+              const SizedBox(height: 14),
+              Text(
+                data.stateLabel,
+                style: TextStyle(
+                  color: Colors.white.withValues(alpha: 0.90),
+                  fontSize: 34,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: -0.4,
+                ),
+              ),
+            ],
+          ),
+        ),
+        const Spacer(flex: 2),
+        Wrap(
+          spacing: 14,
+          runSpacing: 14,
+          children: [
+            for (final metric in visibleMetrics)
+              _PhotoMetricTile(metric: metric, palette: palette),
+          ],
+        ),
+        const SizedBox(height: 24),
+        _GlassPanel(
+          padding: const EdgeInsets.fromLTRB(24, 20, 24, 22),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (data.projectLabel != null) ...[
+                Text(
+                  data.projectLabel!,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 30,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: -0.8,
+                  ),
+                ),
+                const SizedBox(height: 10),
+              ],
+              Text(
+                data.summary,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: Colors.white.withValues(alpha: 0.92),
+                  fontSize: 23,
+                  height: 1.34,
+                  fontWeight: FontWeight.w600,
+                  letterSpacing: -0.2,
+                ),
+              ),
+              if (data.keywords.isNotEmpty) ...[
+                const SizedBox(height: 16),
+                Wrap(
+                  spacing: 10,
+                  runSpacing: 10,
+                  children: [
+                    for (final item in data.keywords.take(3))
+                      _KeywordChip(label: item, dark: true),
+                  ],
+                ),
+              ],
+            ],
+          ),
+        ),
+        const SizedBox(height: 18),
+        _FooterLine(data: data),
+      ],
+    );
+  }
+}
+
+class _GlassPanel extends StatelessWidget {
+  const _GlassPanel({
+    required this.child,
+    required this.padding,
+  });
+
+  final Widget child;
+  final EdgeInsetsGeometry padding;
+
+  @override
+  Widget build(BuildContext context) {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(32),
+      child: BackdropFilter(
+        filter: ui.ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+        child: Container(
+          padding: padding,
+          decoration: BoxDecoration(
+            color: Colors.white.withValues(alpha: 0.13),
+            borderRadius: BorderRadius.circular(32),
+            border: Border.all(
+              color: Colors.white.withValues(alpha: 0.22),
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.16),
+                blurRadius: 32,
+                offset: const Offset(0, 18),
+              ),
+            ],
+          ),
+          child: child,
+        ),
+      ),
+    );
+  }
+}
+
+class _PhotoMetricTile extends StatelessWidget {
+  const _PhotoMetricTile({
+    required this.metric,
+    required this.palette,
+  });
+
+  final PosterMetricData metric;
+  final _PosterPalette palette;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: 221,
+      child: _GlassPanel(
+        padding: const EdgeInsets.fromLTRB(18, 16, 18, 17),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 42,
+              height: 5,
+              decoration: BoxDecoration(
+                color: _toneColor(metric.tone),
+                borderRadius: BorderRadius.circular(999),
+              ),
+            ),
+            const SizedBox(height: 16),
+            Text(
+              metric.label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                color: Colors.white.withValues(alpha: 0.76),
+                fontSize: 15,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              metric.value,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 30,
+                fontWeight: FontWeight.w800,
+                letterSpacing: -0.8,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Color _toneColor(String tone) {
+    switch (tone) {
+      case 'primary':
+        return palette.accent;
+      case 'secondary':
+        return palette.support;
+      case 'accent':
+        return palette.hero.last;
+      case 'positive':
+        return const Color(0xFF62E59B);
+      case 'warning':
+        return const Color(0xFFFFB45F);
+      default:
+        return Colors.white.withValues(alpha: 0.72);
+    }
   }
 }
 
@@ -167,72 +483,100 @@ class _PosterLayout extends StatelessWidget {
         const SizedBox(height: 28),
         Expanded(
           flex: 13,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Wrap(
-                spacing: 14,
-                runSpacing: 14,
-                children: [
-                  for (final metric in data.metrics)
-                    _MetricTile(
-                      metric: metric,
-                      palette: palette,
-                      width: 420,
-                    ),
-                ],
-              ),
-              const Spacer(),
-              if (data.projectLabel != null) ...[
-                Text(
-                  'Main Focus',
-                  style: TextStyle(
-                    color: Colors.white.withValues(alpha: 0.70),
-                    fontSize: 18,
-                    fontWeight: FontWeight.w600,
-                    letterSpacing: 0.2,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  data.projectLabel!,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 34,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: -1.3,
-                  ),
-                ),
-                const SizedBox(height: 20),
-              ],
-              Text(
-                '“${data.summary}”',
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 26,
-                  height: 1.42,
-                  fontWeight: FontWeight.w500,
-                  letterSpacing: -0.3,
-                ),
-              ),
-              const SizedBox(height: 20),
-              if (data.keywords.isNotEmpty)
-                Wrap(
-                  spacing: 10,
-                  runSpacing: 10,
-                  children: [
-                    for (final item in data.keywords)
-                      _KeywordChip(
-                        label: item,
-                        dark: true,
-                      ),
-                  ],
-                ),
-              const Spacer(),
-              _FooterLine(data: data),
-            ],
+          child: FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: Alignment.topLeft,
+            child: SizedBox(
+              width: 952,
+              child: _PosterBottomPanel(data: data, palette: palette),
+            ),
           ),
         ),
+      ],
+    );
+  }
+}
+
+class _PosterBottomPanel extends StatelessWidget {
+  const _PosterBottomPanel({
+    required this.data,
+    required this.palette,
+  });
+
+  final PosterExportData data;
+  final _PosterPalette palette;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Wrap(
+          spacing: 14,
+          runSpacing: 14,
+          children: [
+            for (final metric in data.metrics.take(5))
+              _MetricTile(
+                metric: metric,
+                palette: palette,
+                width: 420,
+              ),
+          ],
+        ),
+        if (data.projectLabel != null) ...[
+          const SizedBox(height: 22),
+          Text(
+            'Main Focus',
+            style: TextStyle(
+              color: Colors.white.withValues(alpha: 0.70),
+              fontSize: 18,
+              fontWeight: FontWeight.w600,
+              letterSpacing: 0.2,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            data.projectLabel!,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 34,
+              fontWeight: FontWeight.w700,
+              letterSpacing: -1.3,
+            ),
+          ),
+        ],
+        const SizedBox(height: 18),
+        Text(
+          '“${data.summary}”',
+          maxLines: 3,
+          overflow: TextOverflow.ellipsis,
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 24,
+            height: 1.34,
+            fontWeight: FontWeight.w500,
+            letterSpacing: -0.3,
+          ),
+        ),
+        if (data.keywords.isNotEmpty) ...[
+          const SizedBox(height: 16),
+          Wrap(
+            spacing: 10,
+            runSpacing: 10,
+            children: [
+              for (final item in data.keywords.take(4))
+                _KeywordChip(
+                  label: item,
+                  dark: true,
+                ),
+            ],
+          ),
+        ],
+        const SizedBox(height: 18),
+        _FooterLine(data: data),
       ],
     );
   }
@@ -471,84 +815,116 @@ class _MagazineLayout extends StatelessWidget {
               const SizedBox(width: 28),
               Expanded(
                 flex: 4,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.all(24),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.12),
-                        borderRadius: BorderRadius.circular(28),
-                        border: Border.all(
-                          color: Colors.white.withValues(alpha: 0.16),
+                child: LayoutBuilder(
+                  builder: (context, constraints) {
+                    return FittedBox(
+                      fit: BoxFit.scaleDown,
+                      alignment: Alignment.topLeft,
+                      child: SizedBox(
+                        width: constraints.maxWidth,
+                        child: _MagazineSidePanel(
+                          data: data,
+                          palette: palette,
                         ),
                       ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            data.policy.showStateScore
-                                ? '${data.stateScore}'
-                                : data.stateLabel,
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 96,
-                              fontWeight: FontWeight.w800,
-                              letterSpacing: -5,
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            data.stateLabel,
-                            style: TextStyle(
-                              color: Colors.white.withValues(alpha: 0.82),
-                              fontSize: 24,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                          const SizedBox(height: 24),
-                          for (final metric in data.metrics)
-                            Padding(
-                              padding: const EdgeInsets.only(bottom: 12),
-                              child: _MetricTile(
-                                metric: metric,
-                                palette: palette,
-                                width: double.infinity,
-                              ),
-                            ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 18),
-                    if (data.projectLabel != null)
-                      Text(
-                        data.projectLabel!,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 28,
-                          fontWeight: FontWeight.w700,
-                          letterSpacing: -1.1,
-                        ),
-                      ),
-                    if (data.projectLabel != null) const SizedBox(height: 16),
-                    if (data.keywords.isNotEmpty)
-                      Wrap(
-                        spacing: 10,
-                        runSpacing: 10,
-                        children: [
-                          for (final item in data.keywords)
-                            _KeywordChip(label: item, dark: true),
-                        ],
-                      ),
-                    const Spacer(),
-                    _FooterLine(data: data),
-                  ],
+                    );
+                  },
                 ),
               ),
             ],
           ),
         ),
+      ],
+    );
+  }
+}
+
+class _MagazineSidePanel extends StatelessWidget {
+  const _MagazineSidePanel({
+    required this.data,
+    required this.palette,
+  });
+
+  final PosterExportData data;
+  final _PosterPalette palette;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(24),
+          decoration: BoxDecoration(
+            color: Colors.white.withValues(alpha: 0.12),
+            borderRadius: BorderRadius.circular(28),
+            border: Border.all(
+              color: Colors.white.withValues(alpha: 0.16),
+            ),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                data.policy.showStateScore
+                    ? '${data.stateScore}'
+                    : data.stateLabel,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 96,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: -5,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                data.stateLabel,
+                style: TextStyle(
+                  color: Colors.white.withValues(alpha: 0.82),
+                  fontSize: 24,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const SizedBox(height: 20),
+              for (final metric in data.metrics.take(5))
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 10),
+                  child: _MetricTile(
+                    metric: metric,
+                    palette: palette,
+                    width: double.infinity,
+                  ),
+                ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 16),
+        if (data.projectLabel != null)
+          Text(
+            data.projectLabel!,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 28,
+              fontWeight: FontWeight.w700,
+              letterSpacing: -1.1,
+            ),
+          ),
+        if (data.projectLabel != null) const SizedBox(height: 14),
+        if (data.keywords.isNotEmpty)
+          Wrap(
+            spacing: 10,
+            runSpacing: 10,
+            children: [
+              for (final item in data.keywords.take(4))
+                _KeywordChip(label: item, dark: true),
+            ],
+          ),
+        const SizedBox(height: 16),
+        _FooterLine(data: data),
       ],
     );
   }
@@ -736,7 +1112,7 @@ class _FooterLine extends StatelessWidget {
     return Row(
       children: [
         Text(
-          'Generated by SkyeOS',
+          'Generated by SkyOS',
           style: TextStyle(
             color: textColor,
             fontSize: 14,
@@ -831,6 +1207,48 @@ class _HeroCoverArtwork extends StatelessWidget {
   Widget build(BuildContext context) {
     final width = compact ? 126.0 : 240.0;
     final height = compact ? 166.0 : 320.0;
+    final imagePath = asset.imagePath;
+    if (imagePath != null && File(imagePath).existsSync()) {
+      return ClipRRect(
+        borderRadius: BorderRadius.circular(compact ? 24 : 34),
+        child: Image.file(
+          File(imagePath),
+          width: width,
+          height: height,
+          fit: BoxFit.cover,
+          errorBuilder: (_, __, ___) => _GeneratedCoverArtwork(
+            width: width,
+            height: height,
+            asset: asset,
+            compact: compact,
+          ),
+        ),
+      );
+    }
+    return _GeneratedCoverArtwork(
+      width: width,
+      height: height,
+      asset: asset,
+      compact: compact,
+    );
+  }
+}
+
+class _GeneratedCoverArtwork extends StatelessWidget {
+  const _GeneratedCoverArtwork({
+    required this.width,
+    required this.height,
+    required this.asset,
+    required this.compact,
+  });
+
+  final double width;
+  final double height;
+  final PosterCoverAsset asset;
+  final bool compact;
+
+  @override
+  Widget build(BuildContext context) {
     return SizedBox(
       width: width,
       height: height,
@@ -1038,6 +1456,78 @@ class _CoverArtPainter extends CustomPainter {
           )
           ..close();
         canvas.drawPath(ribbon, paint);
+      case PosterArtKind.projectCard:
+        paint.color = Colors.white.withValues(alpha: 0.18);
+        canvas.drawRRect(
+          RRect.fromRectAndRadius(
+            Rect.fromLTWH(
+              size.width * 0.18,
+              size.height * 0.22,
+              size.width * 0.64,
+              size.height * 0.56,
+            ),
+            Radius.circular(compact ? 16 : 28),
+          ),
+          paint,
+        );
+        stroke.color = Colors.white.withValues(alpha: 0.52);
+        canvas.drawLine(
+          Offset(size.width * 0.30, size.height * 0.42),
+          Offset(size.width * 0.70, size.height * 0.42),
+          stroke,
+        );
+        canvas.drawLine(
+          Offset(size.width * 0.30, size.height * 0.58),
+          Offset(size.width * 0.58, size.height * 0.58),
+          stroke,
+        );
+      case PosterArtKind.galleryFrame:
+        paint.color = Colors.white.withValues(alpha: 0.16);
+        canvas.drawRRect(
+          RRect.fromRectAndRadius(
+            Rect.fromLTWH(
+              size.width * 0.14,
+              size.height * 0.18,
+              size.width * 0.72,
+              size.height * 0.64,
+            ),
+            Radius.circular(compact ? 18 : 30),
+          ),
+          paint,
+        );
+        stroke.color = Colors.white.withValues(alpha: 0.46);
+        final mountain = Path()
+          ..moveTo(size.width * 0.22, size.height * 0.70)
+          ..lineTo(size.width * 0.42, size.height * 0.48)
+          ..lineTo(size.width * 0.54, size.height * 0.62)
+          ..lineTo(size.width * 0.68, size.height * 0.44)
+          ..lineTo(size.width * 0.82, size.height * 0.70);
+        canvas.drawPath(mountain, stroke);
+      case PosterArtKind.uploadedImage:
+        paint.color = Colors.white.withValues(alpha: 0.18);
+        canvas.drawRRect(
+          RRect.fromRectAndRadius(
+            Rect.fromLTWH(
+              size.width * 0.18,
+              size.height * 0.18,
+              size.width * 0.64,
+              size.height * 0.64,
+            ),
+            Radius.circular(compact ? 20 : 32),
+          ),
+          paint,
+        );
+        stroke.color = Colors.white.withValues(alpha: 0.54);
+        canvas.drawLine(
+          Offset(size.width * 0.50, size.height * 0.32),
+          Offset(size.width * 0.50, size.height * 0.68),
+          stroke,
+        );
+        canvas.drawLine(
+          Offset(size.width * 0.32, size.height * 0.50),
+          Offset(size.width * 0.68, size.height * 0.50),
+          stroke,
+        );
     }
   }
 

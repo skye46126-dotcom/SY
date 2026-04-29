@@ -2,7 +2,10 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
+import '../../app/app.dart';
+import '../../services/export_share_service.dart';
 import '../../services/image_export_service.dart';
 import 'safe_pop.dart';
 
@@ -46,6 +49,15 @@ Future<void> showExportDocumentDialog(
               else
                 const _PreviewFallback(),
               const SizedBox(height: 16),
+              if (result.metadata['gallery_path'] != null) ...[
+                const Text('相册位置'),
+                const SizedBox(height: 6),
+                SelectableText(
+                  result.metadata['gallery_path'].toString(),
+                  style: Theme.of(dialogContext).textTheme.bodyMedium,
+                ),
+                const SizedBox(height: 14),
+              ],
               const Text('图片文件'),
               const SizedBox(height: 6),
               SelectableText(result.imagePath),
@@ -80,6 +92,35 @@ Future<void> showExportDocumentDialog(
         ),
       ),
       actions: [
+        TextButton(
+          onPressed: () async {
+            await Clipboard.setData(ClipboardData(text: result.imagePath));
+            if (!dialogContext.mounted) return;
+            ScaffoldMessenger.of(dialogContext).showSnackBar(
+              const SnackBar(content: Text('已复制文件路径')),
+            );
+          },
+          child: const Text('复制路径'),
+        ),
+        TextButton(
+          onPressed: () async {
+            try {
+              await ExportShareService(service: LifeOsScope.of(context))
+                  .shareFile(
+                filePath: result.imagePath,
+                title: result.title,
+                mimeType: 'image/png',
+                text: 'SkyOS export: ${result.title}',
+              );
+            } catch (error) {
+              if (!dialogContext.mounted) return;
+              ScaffoldMessenger.of(dialogContext).showSnackBar(
+                SnackBar(content: Text('打开分享面板失败：$error')),
+              );
+            }
+          },
+          child: const Text('分享'),
+        ),
         if (onDelete != null)
           TextButton(
             onPressed: () async {

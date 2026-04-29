@@ -37,6 +37,8 @@ class PosterCoverSelector {
   PosterCoverAsset resolve({
     required PosterSourceData source,
     required PosterCoverSource coverSource,
+    String? imagePath,
+    String? imageLabel,
   }) {
     switch (coverSource) {
       case PosterCoverSource.auto:
@@ -49,7 +51,42 @@ class PosterCoverSelector {
         return available.firstWhere((item) => item.id == 'amber_reset');
       case PosterCoverSource.calmSilver:
         return available.firstWhere((item) => item.id == 'calm_silver');
+      case PosterCoverSource.projectCover:
+        return PosterCoverAsset(
+          id: 'project_cover',
+          label: imageLabel ?? source.primaryProjectName ?? 'Project Cover',
+          helperText: '主项目封面来源',
+          themeKey: _autoSelect(source).themeKey,
+          artKind: PosterArtKind.projectCard,
+          imagePath: _normalizeImagePath(imagePath),
+          imageLabel: imageLabel ?? source.primaryProjectName,
+        );
+      case PosterCoverSource.galleryImage:
+        return PosterCoverAsset(
+          id: 'gallery_image',
+          label: imageLabel ?? 'Gallery Image',
+          helperText: '画廊图片来源',
+          themeKey: 'calm_silver',
+          artKind: PosterArtKind.galleryFrame,
+          imagePath: _normalizeImagePath(imagePath),
+          imageLabel: imageLabel,
+        );
+      case PosterCoverSource.localUpload:
+        return PosterCoverAsset(
+          id: 'local_upload',
+          label: imageLabel ?? 'Local Image',
+          helperText: '本地上传图片来源',
+          themeKey: 'focus_blue',
+          artKind: PosterArtKind.uploadedImage,
+          imagePath: _normalizeImagePath(imagePath),
+          imageLabel: imageLabel,
+        );
     }
+  }
+
+  String? _normalizeImagePath(String? value) {
+    final trimmed = value?.trim();
+    return trimmed == null || trimmed.isEmpty ? null : trimmed;
   }
 
   PosterCoverAsset _autoSelect(PosterSourceData source) {

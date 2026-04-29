@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../features/capture/capture_launch.dart';
 import '../features/capture/capture_page.dart';
 import '../features/management/management_page.dart';
 import '../features/projects/project_detail_page.dart';
@@ -18,6 +19,8 @@ import '../features/settings/dimension_manage_page.dart';
 import '../features/settings/export_center_page.dart';
 import '../features/settings/operating_settings_page.dart';
 import '../features/settings/poster_export_page.dart';
+import '../features/settings/data_package_export_page.dart';
+import '../features/settings/report_export_page.dart';
 import '../features/settings/settings_page.dart';
 import '../features/settings/tag_manage_page.dart';
 import '../features/today/today_page.dart';
@@ -41,7 +44,7 @@ class AppRouter {
     final name = settings.name ?? AppDestination.today.route;
     final uri = Uri.parse(name);
 
-    if (name == AppDestination.today.route) {
+    if (uri.path == AppDestination.today.route) {
       return _page(
         settings,
         const ShellScaffold(
@@ -51,17 +54,19 @@ class AppRouter {
       );
     }
 
-    if (name == AppDestination.capture.route) {
+    if (uri.path == AppDestination.capture.route) {
+      final launchConfig = CaptureLaunchConfig.fromRouteName(name) ??
+          settings.arguments as CaptureLaunchConfig?;
       return _page(
         settings,
-        const ShellScaffold(
+        ShellScaffold(
           destination: AppDestination.capture,
-          child: CapturePage(),
+          child: CapturePage(launchConfig: launchConfig),
         ),
       );
     }
 
-    if (name == AppDestination.management.route) {
+    if (uri.path == AppDestination.management.route) {
       return _page(
         settings,
         const ShellScaffold(
@@ -71,7 +76,7 @@ class AppRouter {
       );
     }
 
-    if (name == AppDestination.review.route) {
+    if (uri.path == AppDestination.review.route) {
       final initialKind =
           switch ((settings.arguments as ReviewPageRouteArgs?)?.windowKind) {
         'week' => ReviewWindowKind.week,
@@ -88,7 +93,7 @@ class AppRouter {
       );
     }
 
-    if (name == '/projects') {
+    if (uri.path == '/projects') {
       return _standalonePage(settings, const ProjectsPage());
     }
 
@@ -106,48 +111,56 @@ class AppRouter {
       );
     }
 
-    if (name == '/time-management') {
+    if (uri.path == '/time-management') {
       return _standalonePage(settings, const TimeManagementPage());
     }
 
-    if (name == '/cost-management') {
+    if (uri.path == '/cost-management') {
       return _standalonePage(settings, const CostManagementPage());
     }
 
-    if (name == '/settings') {
+    if (uri.path == '/settings') {
       return _standalonePage(settings, const SettingsPage());
     }
 
-    if (name == '/settings/operating') {
+    if (uri.path == '/settings/operating') {
       return _standalonePage(settings, const OperatingSettingsPage());
     }
 
-    if (name == '/settings/ai-services') {
+    if (uri.path == '/settings/ai-services') {
       return _standalonePage(settings, const AiServiceConfigsPage());
     }
 
-    if (name == '/settings/cloud-sync') {
+    if (uri.path == '/settings/cloud-sync') {
       return _standalonePage(settings, const CloudSyncConfigsPage());
     }
 
-    if (name == '/settings/tags') {
+    if (uri.path == '/settings/tags') {
       return _standalonePage(settings, const TagManagePage());
     }
 
-    if (name == '/settings/dimensions') {
+    if (uri.path == '/settings/dimensions') {
       return _standalonePage(settings, const DimensionManagePage());
     }
 
-    if (name == '/settings/backup') {
+    if (uri.path == '/settings/backup') {
       return _standalonePage(settings, const BackupPage());
     }
 
-    if (name == '/settings/export-center') {
+    if (uri.path == '/settings/export-center') {
       return _standalonePage(settings, const ExportCenterPage());
     }
 
-    if (name == '/settings/poster-export') {
+    if (uri.path == '/settings/poster-export') {
       return _standalonePage(settings, const PosterExportPage());
+    }
+
+    if (uri.path == '/settings/data-package-export') {
+      return _standalonePage(settings, const DataPackageExportPage());
+    }
+
+    if (uri.path == '/settings/report-export') {
+      return _standalonePage(settings, const ReportExportPage());
     }
 
     if (uri.pathSegments.length == 2 && uri.pathSegments.first == 'day') {
@@ -157,7 +170,7 @@ class AppRouter {
       );
     }
 
-    if (name == '/ai-chat') {
+    if (uri.path == '/ai-chat') {
       return _standalonePage(settings, const AiChatPage());
     }
 

@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?>
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+    <shortcut
+        android:shortcutId="capture_ai"
+        android:enabled="true"
+        android:icon="@mipmap/ic_launcher"
+        android:shortcutShortLabel="@string/shortcut_capture_ai_short"
+        android:shortcutLongLabel="@string/shortcut_capture_ai_long">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:targetPackage="com.example.life_os_app"
+            android:targetClass="com.example.life_os_app.MainActivity"
+            android:data="skyeos://capture?mode=ai" />
+    </shortcut>
+    <shortcut
+        android:shortcutId="capture_time"
+        android:enabled="true"
+        android:icon="@mipmap/ic_launcher"
+        android:shortcutShortLabel="@string/shortcut_capture_time_short"
+        android:shortcutLongLabel="@string/shortcut_capture_time_long">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:targetPackage="com.example.life_os_app"
+            android:targetClass="com.example.life_os_app.MainActivity"
+            android:data="skyeos://capture?type=time&amp;mode=manual" />
+    </shortcut>
+    <shortcut
+        android:shortcutId="capture_learning"
+        android:enabled="true"
+        android:icon="@mipmap/ic_launcher"
+        android:shortcutShortLabel="@string/shortcut_capture_learning_short"
+        android:shortcutLongLabel="@string/shortcut_capture_learning_long">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:targetPackage="com.example.life_os_app"
+            android:targetClass="com.example.life_os_app.MainActivity"
+            android:data="skyeos://capture?type=learning&amp;mode=manual" />
+    </shortcut>
+</shortcuts>

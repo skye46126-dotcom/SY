@@ -1,8 +1,17 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 
 import '../../app/app.dart';
+import '../../features/export/application/export_orchestrator.dart';
+import '../../features/export/domain/export_artifact.dart';
+import '../../features/export/domain/export_format.dart';
+import '../../features/export/domain/export_policy.dart';
+import '../../features/export/domain/export_range.dart';
+import '../../features/export/domain/export_request.dart';
 import '../../models/poster_models.dart';
 import '../../services/image_export_service.dart';
+import '../../services/native_image_picker.dart';
 import '../../services/poster_export_service.dart';
 import '../../shared/view_state.dart';
 import '../../shared/widgets/apple_dashboard.dart';
@@ -19,12 +28,20 @@ class PosterExportPage extends StatefulWidget {
 
 class _PosterExportPageState extends State<PosterExportPage> {
   final GlobalKey _posterBoundaryKey = GlobalKey();
-  final ImageExportService _imageExportService = const ImageExportService();
+  final TextEditingController _projectCoverPathController =
+      TextEditingController();
+  final TextEditingController _galleryImagePathController =
+      TextEditingController();
+  final TextEditingController _localUploadPathController =
+      TextEditingController();
+  final NativeImagePicker _imagePicker = const NativeImagePicker();
   PosterExportService? _posterService;
+  ExportOrchestrator? _exportOrchestrator;
   ViewState<PosterSourceData> _sourceState = ViewState.initial();
   PosterTimeRange _selectedRange = PosterTimeRange.today;
   PosterTemplateKind _selectedTemplate = PosterTemplateKind.poster;
   PosterCoverSource _selectedCoverSource = PosterCoverSource.auto;
+  ExportFormat _selectedFormat = ExportFormat.png;
   PosterPrivacyPolicy _policy = PosterPrivacyPolicy.preset(
     PosterPrivacyMode.publicShare,
   );
@@ -32,9 +49,19 @@ class _PosterExportPageState extends State<PosterExportPage> {
   bool _loaded = false;
 
   @override
+  void dispose() {
+    _projectCoverPathController.dispose();
+    _galleryImagePathController.dispose();
+    _localUploadPathController.dispose();
+    super.dispose();
+  }
+
+  @override
   void didChangeDependencies() {
     super.didChangeDependencies();
     _posterService ??= PosterExportService(LifeOsScope.of(context));
+    _exportOrchestrator ??=
+        ExportOrchestrator(service: LifeOsScope.of(context));
     if (_loaded) return;
     _loaded = true;
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -51,6 +78,8 @@ class _PosterExportPageState extends State<PosterExportPage> {
             template: _selectedTemplate,
             coverSource: _selectedCoverSource,
             policy: _policy,
+            coverImagePath: _selectedCoverImagePath,
+            coverImageLabel: _selectedCoverImageLabel(_sourceState.data!),
           )
         : null;
 
@@ -76,6 +105,11 @@ class _PosterExportPageState extends State<PosterExportPage> {
             backgroundColor: const Color(0xFFF4FBF7),
             foregroundColor: AppleDashboardPalette.success,
           ),
+          ApplePill(
+            label: _selectedFormat == ExportFormat.png ? 'PNG' : 'SVG',
+            backgroundColor: const Color(0xFFFFF4E8),
+            foregroundColor: AppleDashboardPalette.warning,
+          ),
         ],
       ),
       children: [
@@ -97,15 +131,22 @@ class _PosterExportPageState extends State<PosterExportPage> {
             previewData: previewData,
             selectedRange: _selectedRange,
             selectedTemplate: _selectedTemplate,
+            selectedFormat: _selectedFormat,
             selectedCoverSource: _selectedCoverSource,
+            coverImagePath: _selectedCoverImagePath,
             policy: _policy,
             onRangeChanged: _changeRange,
             onTemplateChanged: (value) {
               setState(() => _selectedTemplate = value);
             },
+            onFormatChanged: (value) {
+              setState(() => _selectedFormat = value);
+            },
             onCoverSourceChanged: (value) {
               setState(() => _selectedCoverSource = value);
             },
+            onCoverImagePathChanged: _setSelectedCoverImagePath,
+            onPickCoverImage: _pickSelectedCoverImage,
             onPolicyChanged: (policy) {
               setState(() => _policy = policy);
             },
@@ -146,22 +187,30 @@ class _PosterExportPageState extends State<PosterExportPage> {
       template: _selectedTemplate,
       coverSource: _selectedCoverSource,
       policy: _policy,
+      coverImagePath: _selectedCoverImagePath,
+      coverImageLabel: _selectedCoverImageLabel(source),
     );
     setState(() => _isExporting = true);
     try {
-      final result = await _imageExportService.exportBoundary(
-        boundaryKey: _posterBoundaryKey,
-        module: 'poster',
-        title:
-            'poster-${data.range.exportKey}-${data.template.exportKey}-${data.policy.mode.exportKey}',
-        pixelRatio: 1,
-        metadata: {
-          'page': 'poster_export',
-          'poster': data.toJson(),
-        },
+      final result = await _exportOrchestrator!.export(
+        ExportRequest.poster(
+          title:
+              'poster-${data.range.exportKey}-${data.template.exportKey}-${data.policy.mode.exportKey}',
+          format: _selectedFormat,
+          range: _mapRange(_selectedRange),
+          policy: ExportPolicy.fromPosterPolicy(_policy),
+          data: data,
+          boundaryKey: _posterBoundaryKey,
+          template: _selectedTemplate,
+          coverSource: _selectedCoverSource,
+        ),
       );
+      final artifact = result.primaryArtifact;
       if (!mounted) return;
-      await showExportDocumentDialog(context, result);
+      await showExportDocumentDialog(
+        context,
+        _artifactToImageDocument(artifact),
+      );
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -173,6 +222,100 @@ class _PosterExportPageState extends State<PosterExportPage> {
       }
     }
   }
+
+  ExportRange _mapRange(PosterTimeRange range) {
+    switch (range) {
+      case PosterTimeRange.today:
+        return ExportRange.today;
+      case PosterTimeRange.week:
+        return ExportRange.week;
+      case PosterTimeRange.month:
+        return ExportRange.month;
+    }
+  }
+
+  ExportedImageDocument _artifactToImageDocument(ExportArtifact artifact) {
+    return ExportedImageDocument(
+      module: artifact.module,
+      title: artifact.title,
+      exportedAt: artifact.createdAt,
+      directoryPath: File(artifact.filePath).parent.path,
+      imagePath: artifact.filePath,
+      metadataPath: artifact.metadataPath,
+      metadata: Map<String, dynamic>.from(artifact.metadata.toJson()),
+    );
+  }
+
+  String? get _selectedCoverImagePath {
+    switch (_selectedCoverSource) {
+      case PosterCoverSource.projectCover:
+        return _projectCoverPathController.text.trim();
+      case PosterCoverSource.galleryImage:
+        return _galleryImagePathController.text.trim();
+      case PosterCoverSource.localUpload:
+        return _localUploadPathController.text.trim();
+      case PosterCoverSource.auto:
+      case PosterCoverSource.focusBlue:
+      case PosterCoverSource.growthMint:
+      case PosterCoverSource.amberReset:
+      case PosterCoverSource.calmSilver:
+        return null;
+    }
+  }
+
+  String? _selectedCoverImageLabel(PosterSourceData source) {
+    switch (_selectedCoverSource) {
+      case PosterCoverSource.projectCover:
+        return source.primaryProjectName;
+      case PosterCoverSource.galleryImage:
+        return 'Gallery Image';
+      case PosterCoverSource.localUpload:
+        final path = _localUploadPathController.text.trim();
+        return path.isEmpty
+            ? 'Local Image'
+            : path.split(Platform.pathSeparator).last;
+      case PosterCoverSource.auto:
+      case PosterCoverSource.focusBlue:
+      case PosterCoverSource.growthMint:
+      case PosterCoverSource.amberReset:
+      case PosterCoverSource.calmSilver:
+        return null;
+    }
+  }
+
+  void _setSelectedCoverImagePath(String value) {
+    switch (_selectedCoverSource) {
+      case PosterCoverSource.projectCover:
+        _projectCoverPathController.text = value;
+        break;
+      case PosterCoverSource.galleryImage:
+        _galleryImagePathController.text = value;
+        break;
+      case PosterCoverSource.localUpload:
+        _localUploadPathController.text = value;
+        break;
+      case PosterCoverSource.auto:
+      case PosterCoverSource.focusBlue:
+      case PosterCoverSource.growthMint:
+      case PosterCoverSource.amberReset:
+      case PosterCoverSource.calmSilver:
+        return;
+    }
+    setState(() {});
+  }
+
+  Future<void> _pickSelectedCoverImage() async {
+    try {
+      final path = await _imagePicker.pickImage();
+      if (path == null || !mounted) return;
+      _setSelectedCoverImagePath(path);
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('选择图片失败：$error')),
+      );
+    }
+  }
 }
 
 class _PosterStudioSection extends StatelessWidget {
@@ -181,11 +324,16 @@ class _PosterStudioSection extends StatelessWidget {
     required this.previewData,
     required this.selectedRange,
     required this.selectedTemplate,
+    required this.selectedFormat,
     required this.selectedCoverSource,
+    required this.coverImagePath,
     required this.policy,
     required this.onRangeChanged,
     required this.onTemplateChanged,
+    required this.onFormatChanged,
     required this.onCoverSourceChanged,
+    required this.onCoverImagePathChanged,
+    required this.onPickCoverImage,
     required this.onPolicyChanged,
   });
 
@@ -193,11 +341,16 @@ class _PosterStudioSection extends StatelessWidget {
   final PosterExportData previewData;
   final PosterTimeRange selectedRange;
   final PosterTemplateKind selectedTemplate;
+  final ExportFormat selectedFormat;
   final PosterCoverSource selectedCoverSource;
+  final String? coverImagePath;
   final PosterPrivacyPolicy policy;
   final ValueChanged<PosterTimeRange> onRangeChanged;
   final ValueChanged<PosterTemplateKind> onTemplateChanged;
+  final ValueChanged<ExportFormat> onFormatChanged;
   final ValueChanged<PosterCoverSource> onCoverSourceChanged;
+  final ValueChanged<String> onCoverImagePathChanged;
+  final VoidCallback onPickCoverImage;
   final ValueChanged<PosterPrivacyPolicy> onPolicyChanged;
 
   @override
@@ -292,6 +445,20 @@ class _PosterStudioSection extends StatelessWidget {
               ),
               const SizedBox(height: 22),
               Text(
+                '输出格式',
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
+              const SizedBox(height: 10),
+              AppleSegmentedControl<ExportFormat>(
+                value: selectedFormat,
+                onChanged: onFormatChanged,
+                options: const [
+                  AppleSegmentOption(value: ExportFormat.png, label: 'PNG'),
+                  AppleSegmentOption(value: ExportFormat.svg, label: 'SVG'),
+                ],
+              ),
+              const SizedBox(height: 22),
+              Text(
                 '封面来源',
                 style: Theme.of(context).textTheme.titleMedium,
               ),
@@ -308,6 +475,23 @@ class _PosterStudioSection extends StatelessWidget {
                     ),
                 ],
               ),
+              if (selectedCoverSource.acceptsImagePath) ...[
+                const SizedBox(height: 14),
+                TextFormField(
+                  key: ValueKey(selectedCoverSource),
+                  initialValue: coverImagePath,
+                  decoration: InputDecoration(
+                    labelText: _coverPathLabel(selectedCoverSource),
+                    helperText: _coverPathHelper(selectedCoverSource),
+                    suffixIcon: IconButton(
+                      tooltip: '从相册选择',
+                      icon: const Icon(Icons.photo_library_outlined),
+                      onPressed: onPickCoverImage,
+                    ),
+                  ),
+                  onChanged: onCoverImagePathChanged,
+                ),
+              ],
               const SizedBox(height: 22),
               Text(
                 '隐私模式',
@@ -464,6 +648,40 @@ class _PosterStudioSection extends StatelessWidget {
       },
     );
   }
+
+  String _coverPathLabel(PosterCoverSource source) {
+    switch (source) {
+      case PosterCoverSource.projectCover:
+        return '项目封面路径';
+      case PosterCoverSource.galleryImage:
+        return '画廊图片路径';
+      case PosterCoverSource.localUpload:
+        return '本地图片路径';
+      case PosterCoverSource.auto:
+      case PosterCoverSource.focusBlue:
+      case PosterCoverSource.growthMint:
+      case PosterCoverSource.amberReset:
+      case PosterCoverSource.calmSilver:
+        return '图片路径';
+    }
+  }
+
+  String _coverPathHelper(PosterCoverSource source) {
+    switch (source) {
+      case PosterCoverSource.projectCover:
+        return '可填写项目封面图片的本地绝对路径，留空则使用项目封面图形。';
+      case PosterCoverSource.galleryImage:
+        return '填写画廊图片的本地绝对路径，留空则使用画廊图形。';
+      case PosterCoverSource.localUpload:
+        return '填写本地图片绝对路径，预览和 PNG 导出会读取该文件。';
+      case PosterCoverSource.auto:
+      case PosterCoverSource.focusBlue:
+      case PosterCoverSource.growthMint:
+      case PosterCoverSource.amberReset:
+      case PosterCoverSource.calmSilver:
+        return '';
+    }
+  }
 }
 
 class _SwitchRow extends StatelessWidget {
@@ -556,6 +774,12 @@ class _CoverOptionTile extends StatelessWidget {
         return const [Color(0xFFF7C36A), Color(0xFFD87D19)];
       case PosterCoverSource.calmSilver:
         return const [Color(0xFFDAE4F5), Color(0xFF8EA8D7)];
+      case PosterCoverSource.projectCover:
+        return const [Color(0xFF4F46E5), Color(0xFF0F766E)];
+      case PosterCoverSource.galleryImage:
+        return const [Color(0xFFCBD5E1), Color(0xFF64748B)];
+      case PosterCoverSource.localUpload:
+        return const [Color(0xFF111827), Color(0xFF2F6BFF)];
     }
   }
 }

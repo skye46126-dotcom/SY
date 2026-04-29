@@ -1,6 +1,12 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 
 import '../../app/app.dart';
+import '../../features/export/application/export_orchestrator.dart';
+import '../../features/export/domain/export_artifact.dart';
+import '../../features/export/domain/export_range.dart';
+import '../../features/export/domain/export_request.dart';
 import '../../models/config_models.dart';
 import '../../models/project_models.dart';
 import '../../models/record_models.dart';
@@ -64,7 +70,7 @@ class ProjectDetailPage extends StatefulWidget {
 
 class _ProjectDetailPageState extends State<ProjectDetailPage> {
   final GlobalKey _exportBoundaryKey = GlobalKey();
-  final ImageExportService _imageExportService = const ImageExportService();
+  ExportOrchestrator? _exportOrchestrator;
   ProjectDetailController? _controller;
   ViewState<ProjectMetricSnapshotSummaryModel?> _snapshotState =
       ViewState.initial();
@@ -75,6 +81,8 @@ class _ProjectDetailPageState extends State<ProjectDetailPage> {
   void didChangeDependencies() {
     super.didChangeDependencies();
     _controller ??= ProjectDetailController(LifeOsScope.of(context));
+    _exportOrchestrator ??=
+        ExportOrchestrator(service: LifeOsScope.of(context));
     if (_loaded) {
       return;
     }
@@ -305,17 +313,22 @@ class _ProjectDetailPageState extends State<ProjectDetailPage> {
 
     setState(() => _isExporting = true);
     try {
-      final result = await _imageExportService.exportBoundary(
-        boundaryKey: _exportBoundaryKey,
-        module: 'project',
-        title: 'project-${detail.name}-${detail.analysisEndDate}',
-        metadata: buildProjectExportMetadata(
-          detail: detail,
-          snapshot: _snapshotState.data,
+      final exportResult = await _exportOrchestrator!.export(
+        ExportRequest.snapshot(
+          title: 'project-${detail.name}-${detail.analysisEndDate}',
+          module: 'project',
+          range: ExportRange.month,
+          boundaryKey: _exportBoundaryKey,
+          metadata: buildProjectExportMetadata(
+            detail: detail,
+            snapshot: _snapshotState.data,
+          ),
         ),
       );
+      final artifact = exportResult.primaryArtifact;
       if (!mounted) return;
-      await showExportDocumentDialog(context, result);
+      await showExportDocumentDialog(
+          context, _artifactToImageDocument(artifact));
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -326,6 +339,18 @@ class _ProjectDetailPageState extends State<ProjectDetailPage> {
         setState(() => _isExporting = false);
       }
     }
+  }
+
+  ExportedImageDocument _artifactToImageDocument(ExportArtifact artifact) {
+    return ExportedImageDocument(
+      module: artifact.module,
+      title: artifact.title,
+      exportedAt: artifact.createdAt,
+      directoryPath: File(artifact.filePath).parent.path,
+      imagePath: artifact.filePath,
+      metadataPath: artifact.metadataPath,
+      metadata: Map<String, dynamic>.from(artifact.metadata.toJson()),
+    );
   }
 
   Future<void> _openProjectStateDialog(ProjectDetail? detail) async {

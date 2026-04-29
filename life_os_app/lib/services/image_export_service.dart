@@ -6,6 +6,8 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter/widgets.dart';
 import 'package:path_provider/path_provider.dart';
 
+import 'native_gallery_saver.dart';
+
 class ExportedImageDocument {
   const ExportedImageDocument({
     required this.module,
@@ -63,7 +65,11 @@ class ExportedImageDocument {
 }
 
 class ImageExportService {
-  const ImageExportService();
+  const ImageExportService({
+    this.gallerySaver = const NativeGallerySaver(),
+  });
+
+  final NativeGallerySaver gallerySaver;
 
   Future<String> preferredExportDirectoryPath({
     String? module,
@@ -112,10 +118,15 @@ class ImageExportService {
       await moduleDirectory.create(recursive: true);
 
       final baseName = '${_slug(title)}_${_timestamp(exportedAt)}';
+      final pngBytes = byteData.buffer.asUint8List();
       final imageFile = File('${moduleDirectory.path}/$baseName.png');
       await imageFile.writeAsBytes(
-        byteData.buffer.asUint8List(),
+        pngBytes,
         flush: true,
+      );
+      final galleryResult = await gallerySaver.savePng(
+        bytes: pngBytes,
+        fileName: '$baseName.png',
       );
 
       final metadataFile = File('${moduleDirectory.path}/$baseName.json');
@@ -127,60 +138,19 @@ class ImageExportService {
         'metadata_path': metadataFile.path,
         'directory_path': moduleDirectory.path,
         'pixel_ratio': ratio,
+        if (galleryResult != null) ...galleryResult.toJson(),
         ...metadata,
       };
       await metadataFile.writeAsString(
         const JsonEncoder.withIndent('  ').convert(payload),
         flush: true,
       );
-      final document = ExportedImageDocument.fromPayload(
+      return ExportedImageDocument.fromPayload(
         payload.cast<String, dynamic>(),
       );
-      await _upsertExportIndex(document);
-      return document;
     } finally {
       image.dispose();
     }
-  }
-
-  Future<List<ExportedImageDocument>> listExportedDocuments({
-    String? module,
-    int limit = 50,
-  }) async {
-    final indexed = await _readExportIndex();
-    final sanitized = indexed
-        .where((item) => module == null || item.module == _slug(module))
-        .where((item) => File(item.imagePath).existsSync())
-        .where((item) => File(item.metadataPath).existsSync())
-        .toList()
-      ..sort((a, b) => b.exportedAt.compareTo(a.exportedAt));
-
-    if (sanitized.length != indexed.length) {
-      await _writeExportIndex(sanitized);
-    }
-
-    if (sanitized.isNotEmpty) {
-      return sanitized.take(limit).toList();
-    }
-
-    return _scanExportDirectory(
-      module: module,
-      limit: limit,
-    );
-  }
-
-  Future<void> deleteExportedDocument(ExportedImageDocument document) async {
-    final imageFile = File(document.imagePath);
-    if (await imageFile.exists()) {
-      await imageFile.delete();
-    }
-    final metadataFile = File(document.metadataPath);
-    if (await metadataFile.exists()) {
-      await metadataFile.delete();
-    }
-    final indexed = await _readExportIndex();
-    indexed.removeWhere((item) => item.metadataPath == document.metadataPath);
-    await _writeExportIndex(indexed);
   }
 
   double _resolvePixelRatio(BuildContext context) {
@@ -199,89 +169,12 @@ class ImageExportService {
     if (Platform.isMacOS || Platform.isLinux || Platform.isWindows) {
       final downloads = await getDownloadsDirectory();
       if (downloads != null) {
-        return Directory('${downloads.path}/SkyeOS/exports');
+        return Directory('${downloads.path}/SkyOS/exports');
       }
     }
 
     final documents = await getApplicationDocumentsDirectory();
-    return Directory('${documents.path}/SkyeOS/exports');
-  }
-
-  Future<File> _resolveIndexFile() async {
-    final root = await _resolveExportRoot();
-    await root.create(recursive: true);
-    return File('${root.path}/export_index.json');
-  }
-
-  Future<List<ExportedImageDocument>> _readExportIndex() async {
-    final file = await _resolveIndexFile();
-    if (!await file.exists()) {
-      return const [];
-    }
-    try {
-      final raw = await file.readAsString();
-      final decoded = jsonDecode(raw);
-      final list = (decoded is List ? decoded : const []);
-      return list
-          .whereType<Map>()
-          .map((item) => ExportedImageDocument.fromPayload(
-                item.cast<String, dynamic>(),
-              ))
-          .toList();
-    } catch (_) {
-      return const [];
-    }
-  }
-
-  Future<void> _writeExportIndex(List<ExportedImageDocument> documents) async {
-    final file = await _resolveIndexFile();
-    final payload = documents.map((item) => item.toPayload()).toList();
-    await file.writeAsString(
-      const JsonEncoder.withIndent('  ').convert(payload),
-      flush: true,
-    );
-  }
-
-  Future<void> _upsertExportIndex(ExportedImageDocument document) async {
-    final indexed = await _readExportIndex();
-    indexed.removeWhere((item) => item.metadataPath == document.metadataPath);
-    indexed.insert(0, document);
-    await _writeExportIndex(indexed);
-  }
-
-  Future<List<ExportedImageDocument>> _scanExportDirectory({
-    String? module,
-    int limit = 50,
-  }) async {
-    final root = Directory(await preferredExportDirectoryPath(module: module));
-    if (!await root.exists()) {
-      return const [];
-    }
-    final metadataFiles = <File>[];
-    await for (final entity in root.list(recursive: true, followLinks: false)) {
-      if (entity is File &&
-          entity.path.endsWith('.json') &&
-          !entity.path.endsWith('export_index.json')) {
-        metadataFiles.add(entity);
-      }
-    }
-    final documents = <ExportedImageDocument>[];
-    for (final file in metadataFiles) {
-      try {
-        final payload = jsonDecode(await file.readAsString());
-        if (payload is Map) {
-          final document = ExportedImageDocument.fromPayload(
-              payload.cast<String, dynamic>());
-          if (File(document.imagePath).existsSync()) {
-            documents.add(document);
-          }
-        }
-      } catch (_) {
-        continue;
-      }
-    }
-    documents.sort((a, b) => b.exportedAt.compareTo(a.exportedAt));
-    return documents.take(limit).toList();
+    return Directory('${documents.path}/SkyOS/exports');
   }
 
   String _slug(String value) {

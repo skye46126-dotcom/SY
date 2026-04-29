@@ -1,6 +1,6 @@
 use std::collections::{HashMap, HashSet};
 
-use chrono::{Datelike, Duration, NaiveDate, NaiveDateTime, NaiveTime, TimeZone, Utc};
+use chrono::{Duration, NaiveDate, NaiveDateTime, NaiveTime, TimeZone, Utc};
 use chrono_tz::Tz;
 use rusqlite::{Connection, OptionalExtension, params};
 
@@ -300,9 +300,8 @@ fn commit_time_draft(
     source: &str,
 ) -> Result<AiCommittedRecord> {
     let occurred_on = resolve_item_date(draft, context_date)?;
-    let duration_minutes = resolve_duration_minutes(draft, 60)?;
     let (started_at, ended_at, resolved_duration) =
-        resolve_time_window(draft, &occurred_on, duration_minutes, "Asia/Shanghai")?;
+        resolve_required_time_window(draft, &occurred_on, "Asia/Shanghai")?;
     let input = CreateTimeRecordInput {
         user_id: user_id.to_string(),
         started_at,
@@ -525,9 +524,14 @@ fn commit_learning_draft(
     source: &str,
 ) -> Result<AiCommittedRecord> {
     let occurred_on = resolve_item_date(draft, context_date)?;
-    let duration_minutes = resolve_duration_minutes(draft, 60)?;
-    let (started_at, ended_at, resolved_duration) =
-        resolve_optional_time_window(draft, &occurred_on, duration_minutes, "Asia/Shanghai")?;
+    let explicit_duration = resolve_duration_minutes(draft)?;
+    let (started_at, ended_at, window_duration) =
+        resolve_optional_time_window(draft, &occurred_on, "Asia/Shanghai")?;
+    let resolved_duration = explicit_duration.or(window_duration).ok_or_else(|| {
+        LifeOsError::InvalidInput(
+            "learning draft requires explicit duration or complete time window".to_string(),
+        )
+    })?;
     let input = CreateLearningRecordInput {
         user_id: user_id.to_string(),
         occurred_on: occurred_on.clone(),
@@ -854,18 +858,24 @@ fn extract_first_decimal(value: &str) -> Option<f64> {
     number.parse().ok()
 }
 
-fn resolve_duration_minutes(draft: &AiParseDraft, fallback_minutes: i64) -> Result<i64> {
+fn resolve_duration_minutes(draft: &AiParseDraft) -> Result<Option<i64>> {
     if let Some(value) = first_value(draft, &["duration_minutes", "duration", "minutes"]) {
         if let Some(parsed) = parse_duration_text_minutes(value) {
-            return Ok(parsed.max(1));
+            return Ok(Some(parsed.max(1)));
         }
+        return Err(LifeOsError::InvalidInput(format!(
+            "invalid duration_minutes: {value}"
+        )));
     }
     if let Some(value) = first_value(draft, &["duration_hours", "hours"]) {
         if let Some(parsed) = extract_first_decimal(value) {
-            return Ok((parsed * 60.0).round() as i64);
+            return Ok(Some((parsed * 60.0).round().max(1.0) as i64));
         }
+        return Err(LifeOsError::InvalidInput(format!(
+            "invalid duration_hours: {value}"
+        )));
     }
-    Ok(fallback_minutes.max(1))
+    Ok(None)
 }
 
 fn parse_duration_text_minutes(value: &str) -> Option<i64> {
@@ -889,10 +899,9 @@ fn parse_duration_text_minutes(value: &str) -> Option<i64> {
     Some(number.round() as i64)
 }
 
-fn resolve_time_window(
+fn resolve_required_time_window(
     draft: &AiParseDraft,
     item_date: &str,
-    fallback_duration_minutes: i64,
     timezone: &str,
 ) -> Result<(String, String, i64)> {
     let tz: Tz = timezone
@@ -901,30 +910,17 @@ fn resolve_time_window(
     let base_date = NaiveDate::parse_from_str(item_date, "%Y-%m-%d")
         .map_err(|error| LifeOsError::InvalidInput(format!("invalid item_date: {error}")))?;
 
-    let start = parse_date_time_value(
-        first_value(draft, &["started_at", "start_at", "start_time", "start"]),
-        base_date,
-        &tz,
-    )?;
-    let end = parse_date_time_value(
-        first_value(draft, &["ended_at", "end_at", "end_time", "end"]),
-        base_date,
-        &tz,
-    )?;
-
-    let default_start = tz
-        .with_ymd_and_hms(
-            base_date.year(),
-            base_date.month(),
-            base_date.day(),
-            9,
-            0,
-            0,
-        )
-        .single()
-        .ok_or_else(|| LifeOsError::InvalidInput("failed to construct local start".to_string()))?;
-    let start = start.unwrap_or(default_start);
-    let mut end = end.unwrap_or_else(|| start + Duration::minutes(fallback_duration_minutes));
+    let start_raw = first_value(draft, &["started_at", "start_at", "start_time", "start"]);
+    let end_raw = first_value(draft, &["ended_at", "end_at", "end_time", "end"]);
+    if start_raw.is_none() || end_raw.is_none() {
+        return Err(LifeOsError::InvalidInput(
+            "time draft requires explicit start_time and end_time".to_string(),
+        ));
+    }
+    let start = parse_date_time_value(start_raw, base_date, &tz)?
+        .ok_or_else(|| LifeOsError::InvalidInput("start_time is required".to_string()))?;
+    let mut end = parse_date_time_value(end_raw, base_date, &tz)?
+        .ok_or_else(|| LifeOsError::InvalidInput("end_time is required".to_string()))?;
     if end <= start {
         end += Duration::days(1);
     }
@@ -942,18 +938,22 @@ fn resolve_time_window(
 fn resolve_optional_time_window(
     draft: &AiParseDraft,
     item_date: &str,
-    fallback_duration_minutes: i64,
     timezone: &str,
-) -> Result<(Option<String>, Option<String>, i64)> {
-    let has_explicit_time = first_value(draft, &["started_at", "start_at", "start_time", "start"])
-        .is_some()
-        || first_value(draft, &["ended_at", "end_at", "end_time", "end"]).is_some();
-    if !has_explicit_time {
-        return Ok((None, None, fallback_duration_minutes.max(1)));
+) -> Result<(Option<String>, Option<String>, Option<i64>)> {
+    let has_start =
+        first_value(draft, &["started_at", "start_at", "start_time", "start"]).is_some();
+    let has_end = first_value(draft, &["ended_at", "end_at", "end_time", "end"]).is_some();
+    if !has_start && !has_end {
+        return Ok((None, None, None));
+    }
+    if has_start != has_end {
+        return Err(LifeOsError::InvalidInput(
+            "time window requires both start_time and end_time".to_string(),
+        ));
     }
     let (started_at, ended_at, duration_minutes) =
-        resolve_time_window(draft, item_date, fallback_duration_minutes, timezone)?;
-    Ok((Some(started_at), Some(ended_at), duration_minutes))
+        resolve_required_time_window(draft, item_date, timezone)?;
+    Ok((Some(started_at), Some(ended_at), Some(duration_minutes)))
 }
 
 fn parse_date_time_value(

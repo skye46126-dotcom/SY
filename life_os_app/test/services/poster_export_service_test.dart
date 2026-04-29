@@ -20,6 +20,21 @@ void main() {
       expect(finance.value, 'Positive');
     });
 
+    test('public summary does not leak exact money values', () {
+      final data = service.buildPosterData(
+        source: _source(
+          summaryText: '净收入为正，约 ¥1161.00，支出 320.00 元。',
+        ),
+        template: PosterTemplateKind.poster,
+        coverSource: PosterCoverSource.auto,
+        policy: PosterPrivacyPolicy.preset(PosterPrivacyMode.publicShare),
+      );
+
+      expect(data.summary, isNot(contains('1161')));
+      expect(data.summary, isNot(contains('320')));
+      expect(data.summary, contains('现金流'));
+    });
+
     test('private policy shows exact project name and exact balance', () {
       final data = service.buildPosterData(
         source: _source(),
@@ -68,13 +83,14 @@ void main() {
 
 PosterSourceData _source({
   double? aiRatio = 0.42,
+  String summaryText = 'Today was focused and steady.',
 }) {
   return PosterSourceData(
     range: PosterTimeRange.today,
     anchorDate: DateTime(2026, 4, 27),
     dateLabel: 'Apr 27, 2026',
     periodLabel: 'Daily Status',
-    summaryText: 'Today was focused and steady.',
+    summaryText: summaryText,
     financeStateLabel: 'Positive',
     netIncomeCents: 54000,
     incomeCents: 86000,

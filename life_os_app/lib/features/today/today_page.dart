@@ -1,10 +1,15 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 
 import '../../app/app.dart';
+import '../../features/export/application/export_orchestrator.dart';
+import '../../features/export/domain/export_artifact.dart';
+import '../../features/export/domain/export_range.dart';
+import '../../features/export/domain/export_request.dart';
 import '../../models/overview_models.dart';
 import '../../models/project_models.dart';
 import '../../models/record_models.dart';
-import '../../models/snapshot_models.dart';
 import '../../models/tag_models.dart';
 import '../../services/export_metadata_builders.dart';
 import '../../services/image_export_service.dart';
@@ -31,7 +36,7 @@ class TodayPage extends StatefulWidget {
 
 class _TodayPageState extends State<TodayPage> {
   final GlobalKey _exportBoundaryKey = GlobalKey();
-  final ImageExportService _imageExportService = const ImageExportService();
+  ExportOrchestrator? _exportOrchestrator;
   TodayController? _controller;
   bool _hasLoaded = false;
   bool _isExporting = false;
@@ -40,6 +45,8 @@ class _TodayPageState extends State<TodayPage> {
   void didChangeDependencies() {
     super.didChangeDependencies();
     _controller ??= TodayController(LifeOsScope.of(context));
+    _exportOrchestrator ??=
+        ExportOrchestrator(service: LifeOsScope.of(context));
     if (_hasLoaded) {
       return;
     }
@@ -125,35 +132,30 @@ class _TodayPageState extends State<TodayPage> {
               overview: data?.overview,
               summary: data?.summary,
             ),
-            _AdaptiveColumns(
-              children: [
-                _TodayCashflowCard(
-                  overview: data?.overview,
-                  summary: data?.summary,
-                  message: state.message,
-                ),
-                _TodayTimeStructureCard(overview: data?.overview),
-              ],
-            ),
-            _TodayGoalProgressCard(goalProgress: data?.goalProgress),
-            _AdaptiveColumns(
-              children: [
-                _TodayHealthCard(
-                  overview: data?.overview,
-                  summary: data?.summary,
-                  snapshot: data?.snapshot,
-                ),
-                _TodayAlertsCard(alerts: data?.alerts),
-              ],
-            ),
-            _TodayRecentRecordsCard(
-              records: data?.recentRecords,
+            _TodayCashflowCard(
+              overview: data?.overview,
+              summary: data?.summary,
               message: state.message,
-              onEdit: _editRecord,
-              onCopy: _copyRecord,
-              onDelete: _deleteRecord,
-              onViewAll: () =>
-                  Navigator.of(context).pushNamed('/day/${runtime.todayDate}'),
+            ),
+            _AdaptiveColumns(
+              children: [
+                _TodayTimeStructureCard(overview: data?.overview),
+                _TodayGoalProgressCard(goalProgress: data?.goalProgress),
+              ],
+            ),
+            _AdaptiveColumns(
+              children: [
+                _TodayAlertsCard(alerts: data?.alerts),
+                _TodayRecentRecordsCard(
+                  records: data?.recentRecords,
+                  message: state.message,
+                  onEdit: _editRecord,
+                  onCopy: _copyRecord,
+                  onDelete: _deleteRecord,
+                  onViewAll: () => Navigator.of(context)
+                      .pushNamed('/day/${runtime.todayDate}'),
+                ),
+              ],
             ),
           ],
         );
@@ -183,22 +185,27 @@ class _TodayPageState extends State<TodayPage> {
     setState(() => _isExporting = true);
     try {
       final runtime = LifeOsScope.runtimeOf(context);
-      final result = await _imageExportService.exportBoundary(
-        boundaryKey: _exportBoundaryKey,
-        module: 'today',
-        title: 'today-${runtime.todayDate}',
-        metadata: buildTodayExportMetadata(
-          overview: data.overview,
-          summary: data.summary,
-          alerts: data.alerts,
-          recentRecordCount: data.recentRecords.length,
-          anchorDate: runtime.todayDate,
-          timezone: runtime.timezone,
-          snapshot: data.snapshot,
+      final exportResult = await _exportOrchestrator!.export(
+        ExportRequest.snapshot(
+          title: 'today-${runtime.todayDate}',
+          module: 'today',
+          range: ExportRange.today,
+          boundaryKey: _exportBoundaryKey,
+          metadata: buildTodayExportMetadata(
+            overview: data.overview,
+            summary: data.summary,
+            alerts: data.alerts,
+            recentRecordCount: data.recentRecords.length,
+            anchorDate: runtime.todayDate,
+            timezone: runtime.timezone,
+            snapshot: data.snapshot,
+          ),
         ),
       );
+      final artifact = exportResult.primaryArtifact;
       if (!mounted) return;
-      await showExportDocumentDialog(context, result);
+      await showExportDocumentDialog(
+          context, _artifactToImageDocument(artifact));
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -209,6 +216,18 @@ class _TodayPageState extends State<TodayPage> {
         setState(() => _isExporting = false);
       }
     }
+  }
+
+  ExportedImageDocument _artifactToImageDocument(ExportArtifact artifact) {
+    return ExportedImageDocument(
+      module: artifact.module,
+      title: artifact.title,
+      exportedAt: artifact.createdAt,
+      directoryPath: File(artifact.filePath).parent.path,
+      imagePath: artifact.filePath,
+      metadataPath: artifact.metadataPath,
+      metadata: Map<String, dynamic>.from(artifact.metadata.toJson()),
+    );
   }
 
   Future<void> _deleteRecord(RecentRecordItem record) async {
@@ -411,11 +430,11 @@ class _AdaptiveColumns extends StatelessWidget {
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        if (constraints.maxWidth < 860) {
+        if (constraints.maxWidth < 600) {
           return Column(
             children: [
               for (var index = 0; index < children.length; index++) ...[
-                if (index > 0) const SizedBox(height: 20),
+                if (index > 0) const SizedBox(height: 14),
                 children[index],
               ],
             ],
@@ -427,7 +446,7 @@ class _AdaptiveColumns extends StatelessWidget {
           children: [
             for (var index = 0; index < children.length; index++) ...[
               Expanded(child: children[index]),
-              if (index < children.length - 1) const SizedBox(width: 20),
+              if (index < children.length - 1) const SizedBox(width: 14),
             ],
           ],
         );
@@ -459,32 +478,6 @@ class _TodaySummaryCard extends StatelessWidget {
       );
     }
 
-    final metrics = [
-      _SummaryMetric(
-        label: '收入',
-        value: _currency(overview!.totalIncomeCents),
-        caption: '现金结余 ${_currency(overview!.netIncomeCents)}',
-      ),
-      _SummaryMetric(
-        label: '时长',
-        value: _hours(overview!.totalTimeMinutes),
-        caption:
-            '工作 ${_hours(overview!.totalWorkMinutes)} · 学习 ${_hours(overview!.totalLearningMinutes)}',
-      ),
-      _SummaryMetric(
-        label: '被动覆盖率',
-        value: _ratioFromBps(summary!.passiveCoverRatioBps),
-        caption: summary!.freedomCents == null
-            ? '覆盖必要支出'
-            : '自由度 ${_currency(summary!.freedomCents!)}',
-      ),
-      _SummaryMetric(
-        label: '实际时薪',
-        value: _hourlyRate(summary!.actualHourlyRateCents),
-        caption: '目标 ${_hourlyRate(summary!.idealHourlyRateCents)}',
-      ),
-    ];
-
     return AppleDashboardCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -513,7 +506,8 @@ class _TodaySummaryCard extends StatelessWidget {
                       summary!.headline,
                       style: Theme.of(context).textTheme.bodyLarge?.copyWith(
                             color: AppleDashboardPalette.secondaryText,
-                            height: 1.5,
+                            fontSize: 15,
+                            height: 1.45,
                           ),
                     ),
                   ],
@@ -521,10 +515,10 @@ class _TodaySummaryCard extends StatelessWidget {
               ),
             ],
           ),
-          const SizedBox(height: 18),
+          const SizedBox(height: 14),
           Wrap(
             spacing: 10,
-            runSpacing: 10,
+            runSpacing: 8,
             children: _buildTodayPills(summary!).map((pill) {
               return ApplePill(
                 label: pill.label,
@@ -532,30 +526,6 @@ class _TodaySummaryCard extends StatelessWidget {
                 foregroundColor: pill.foregroundColor,
               );
             }).toList(),
-          ),
-          const SizedBox(height: 22),
-          LayoutBuilder(
-            builder: (context, constraints) {
-              final compact = constraints.maxWidth < 760;
-              if (compact) {
-                return Column(
-                  children: [
-                    for (var index = 0; index < metrics.length; index++) ...[
-                      if (index > 0) const SizedBox(height: 12),
-                      _SummaryMetricTile(metric: metrics[index]),
-                    ],
-                  ],
-                );
-              }
-              return Row(
-                children: [
-                  for (var index = 0; index < metrics.length; index++) ...[
-                    Expanded(child: _SummaryMetricTile(metric: metrics[index])),
-                    if (index < metrics.length - 1) const SizedBox(width: 12),
-                  ],
-                ],
-              );
-            },
           ),
         ],
       ),
@@ -581,18 +551,21 @@ class _TodayKpiStrip extends StatelessWidget {
         title: '收入',
         value:
             overview == null ? '暂无数据' : _currency(overview!.totalIncomeCents),
-        caption: overview == null
-            ? '等待经营数据'
-            : '现金结余 ${_currency(overview!.netIncomeCents)}',
+        caption: overview == null ? '等待经营数据' : '总收入',
+      ),
+      _KpiItem(
+        icon: Icons.bar_chart_rounded,
+        color: AppleDashboardPalette.success,
+        title: '净收入',
+        value: overview == null ? '暂无数据' : _currency(overview!.netIncomeCents),
+        caption: overview == null ? '等待经营数据' : '收入 - 支出',
       ),
       _KpiItem(
         icon: Icons.schedule_rounded,
-        color: AppleDashboardPalette.success,
-        title: '时长',
-        value: overview == null ? '暂无数据' : _hours(overview!.totalTimeMinutes),
-        caption: overview == null
-            ? '等待经营数据'
-            : '工作 ${_hours(overview!.totalWorkMinutes)}',
+        color: const Color(0xFF7967FF),
+        title: '工作时长',
+        value: overview == null ? '暂无数据' : _hours(overview!.totalWorkMinutes),
+        caption: overview == null ? '等待经营数据' : '深度工作',
       ),
       _KpiItem(
         icon: Icons.bolt_rounded,
@@ -607,29 +580,17 @@ class _TodayKpiStrip extends StatelessWidget {
       ),
     ];
 
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final compact = constraints.maxWidth < 860;
-        if (compact) {
-          return Column(
-            children: [
-              for (var index = 0; index < items.length; index++) ...[
-                if (index > 0) const SizedBox(height: 16),
-                _KpiCard(item: items[index]),
-              ],
-            ],
-          );
-        }
-
-        return Row(
-          children: [
-            for (var index = 0; index < items.length; index++) ...[
-              Expanded(child: _KpiCard(item: items[index])),
-              if (index < items.length - 1) const SizedBox(width: 16),
-            ],
+    return AppleDashboardSection(
+      title: '今日概览',
+      child: Column(
+        children: [
+          for (var index = 0; index < items.length; index++) ...[
+            if (index > 0)
+              const Divider(height: 18, color: AppleDashboardPalette.border),
+            _KpiListRow(item: items[index]),
           ],
-        );
-      },
+        ],
+      ),
     );
   }
 }
@@ -687,10 +648,10 @@ class _TodayCashflowCard extends StatelessWidget {
               ),
             ],
           ),
-          const SizedBox(height: 18),
+          const SizedBox(height: 12),
           Wrap(
             spacing: 10,
-            runSpacing: 10,
+            runSpacing: 8,
             children: [
               ApplePill(
                 label: '实际时薪 ${_hourlyRate(summary?.actualHourlyRateCents)}',
@@ -767,21 +728,21 @@ class _TodayTimeStructureCard extends StatelessWidget {
               ),
             ),
           ),
-          const SizedBox(height: 18),
+          const SizedBox(height: 14),
           _LegendRow(
             label: '工作',
             color: AppleDashboardPalette.primary,
             value:
                 '${_hours(work)} · ${(work / total * 100).toStringAsFixed(1)}%',
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 10),
           _LegendRow(
             label: '学习',
             color: AppleDashboardPalette.warning,
             value:
                 '${_hours(learning)} · ${(learning / total * 100).toStringAsFixed(1)}%',
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 10),
           _LegendRow(
             label: '其他',
             color: const Color(0xFF39C2BD),
@@ -819,115 +780,10 @@ class _TodayGoalProgressCard extends StatelessWidget {
       child: Column(
         children: [
           for (var index = 0; index < goalProgress!.items.length; index++) ...[
-            if (index > 0) const SizedBox(height: 18),
+            if (index > 0) const SizedBox(height: 14),
             _GoalProgressRow(item: goalProgress!.items[index]),
           ],
         ],
-      ),
-    );
-  }
-}
-
-class _TodayHealthCard extends StatelessWidget {
-  const _TodayHealthCard({
-    required this.overview,
-    required this.summary,
-    required this.snapshot,
-  });
-
-  final TodayOverview? overview;
-  final TodaySummaryModel? summary;
-  final MetricSnapshotSummaryModel? snapshot;
-
-  @override
-  Widget build(BuildContext context) {
-    if (overview == null) {
-      return const AppleDashboardSection(
-        title: '经营健康度',
-        child: SectionMessageView(
-          icon: Icons.favorite_outline_rounded,
-          title: '健康度暂不可用',
-          description: '当前没有可展示的经营快照。',
-        ),
-      );
-    }
-
-    final chartBars = [
-      _BarDatum(
-        label: '产出收入',
-        value: overview!.totalIncomeCents / 100,
-        color: AppleDashboardPalette.primary,
-        valueLabel: _currency(overview!.totalIncomeCents),
-      ),
-      _BarDatum(
-        label: '成本',
-        value: overview!.totalExpenseCents / 100,
-        color: AppleDashboardPalette.success,
-        valueLabel: _currency(overview!.totalExpenseCents),
-      ),
-    ];
-
-    return AppleDashboardSection(
-      title: '经营健康度',
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          final compact = constraints.maxWidth < 620;
-          final chart = SizedBox(
-            height: 210,
-            child: _VerticalBarChart(
-              bars: chartBars,
-              showGrid: true,
-            ),
-          );
-          final badges = Column(
-            children: [
-              _HealthBadge(
-                icon: Icons.trending_up_rounded,
-                iconColor: AppleDashboardPalette.success,
-                label: '现金结余',
-                value: _currency(overview!.netIncomeCents),
-                note: overview!.netIncomeCents >= 0 ? '现金流状态稳定' : '需要关注现金支出',
-              ),
-              const SizedBox(height: 12),
-              _HealthBadge(
-                icon: Icons.timelapse_rounded,
-                iconColor: AppleDashboardPalette.warning,
-                label: '实际时薪',
-                value: _hourlyRate(summary?.actualHourlyRateCents),
-                note: '理想 ${_hourlyRate(summary?.idealHourlyRateCents)}',
-              ),
-              const SizedBox(height: 12),
-              _HealthBadge(
-                icon: Icons.shield_rounded,
-                iconColor: AppleDashboardPalette.primary,
-                label: '被动覆盖率',
-                value: _ratioFromBps(summary?.passiveCoverRatioBps),
-                note: snapshot?.freedomCents == null
-                    ? '覆盖必要支出'
-                    : '自由度 ${_currency(snapshot!.freedomCents!)}',
-              ),
-            ],
-          );
-
-          if (compact) {
-            return Column(
-              children: [
-                chart,
-                const SizedBox(height: 18),
-                badges,
-              ],
-            );
-          }
-
-          return Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(child: chart),
-              const SizedBox(width: 18),
-              Expanded(child: badges),
-            ],
-          );
-        },
       ),
     );
   }
@@ -1129,65 +985,6 @@ class _TodayRecentRecordsCard extends StatelessWidget {
   }
 }
 
-class _SummaryMetric {
-  const _SummaryMetric({
-    required this.label,
-    required this.value,
-    required this.caption,
-  });
-
-  final String label;
-  final String value;
-  final String caption;
-}
-
-class _SummaryMetricTile extends StatelessWidget {
-  const _SummaryMetricTile({
-    required this.metric,
-  });
-
-  final _SummaryMetric metric;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: const Color(0xFFF8FAFD),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: AppleDashboardPalette.border),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            metric.label,
-            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: AppleDashboardPalette.secondaryText,
-                ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            metric.value,
-            style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                  color: AppleDashboardPalette.text,
-                  fontSize: 18,
-                  fontWeight: FontWeight.w700,
-                ),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            metric.caption,
-            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: AppleDashboardPalette.secondaryText,
-                ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
 class _KpiItem {
   const _KpiItem({
     required this.icon,
@@ -1204,8 +1001,8 @@ class _KpiItem {
   final String caption;
 }
 
-class _KpiCard extends StatelessWidget {
-  const _KpiCard({
+class _KpiListRow extends StatelessWidget {
+  const _KpiListRow({
     required this.item,
   });
 
@@ -1213,42 +1010,49 @@ class _KpiCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return AppleDashboardCard(
-      child: Row(
-        children: [
-          AppleIconCircle(icon: item.icon, color: item.color, size: 44),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  item.title,
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        color: AppleDashboardPalette.secondaryText,
-                      ),
+    return Row(
+      children: [
+        AppleIconCircle(icon: item.icon, color: item.color, size: 38),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Text(
+            item.title,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                  color: AppleDashboardPalette.secondaryText,
+                  fontSize: 15,
+                  fontWeight: FontWeight.w600,
                 ),
-                const SizedBox(height: 6),
-                Text(
-                  item.value,
-                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                        color: AppleDashboardPalette.text,
-                        fontSize: 18,
-                        fontWeight: FontWeight.w700,
-                      ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  item.caption,
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        color: AppleDashboardPalette.secondaryText,
-                      ),
-                ),
-              ],
-            ),
           ),
-        ],
-      ),
+        ),
+        const SizedBox(width: 12),
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: [
+            Text(
+              item.value,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                    color: AppleDashboardPalette.text,
+                    fontSize: 18,
+                    fontWeight: FontWeight.w800,
+                  ),
+            ),
+            const SizedBox(height: 2),
+            Text(
+              item.caption,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: AppleDashboardPalette.secondaryText,
+                    fontSize: 13,
+                  ),
+            ),
+          ],
+        ),
+      ],
     );
   }
 }
@@ -1270,11 +1074,9 @@ class _BarDatum {
 class _VerticalBarChart extends StatelessWidget {
   const _VerticalBarChart({
     required this.bars,
-    this.showGrid = true,
   });
 
   final List<_BarDatum> bars;
-  final bool showGrid;
 
   @override
   Widget build(BuildContext context) {
@@ -1283,23 +1085,22 @@ class _VerticalBarChart extends StatelessWidget {
     });
 
     return SizedBox(
-      height: 230,
+      height: 196,
       child: Stack(
         children: [
-          if (showGrid)
-            Positioned.fill(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: List.generate(
-                  4,
-                  (_) => const Divider(
-                    height: 1,
-                    thickness: 1,
-                    color: Color(0xFFEFF2F8),
-                  ),
+          Positioned.fill(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: List.generate(
+                4,
+                (_) => const Divider(
+                  height: 1,
+                  thickness: 1,
+                  color: Color(0xFFEFF2F8),
                 ),
               ),
             ),
+          ),
           Row(
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
@@ -1315,16 +1116,16 @@ class _VerticalBarChart extends StatelessWidget {
                               fontWeight: FontWeight.w600,
                             ),
                       ),
-                      const SizedBox(height: 10),
+                      const SizedBox(height: 8),
                       Container(
                         width: 34,
-                        height: 144 * (bars[index].value / max).clamp(0.0, 1.0),
+                        height: 116 * (bars[index].value / max).clamp(0.0, 1.0),
                         decoration: BoxDecoration(
                           color: bars[index].color,
                           borderRadius: BorderRadius.circular(14),
                         ),
                       ),
-                      const SizedBox(height: 12),
+                      const SizedBox(height: 8),
                       Text(
                         bars[index].label,
                         style: Theme.of(context).textTheme.bodyMedium?.copyWith(
@@ -1423,9 +1224,9 @@ class _GoalProgressRow extends StatelessWidget {
             ),
           ],
         ),
-        const SizedBox(height: 10),
-        AppleProgressBar(value: progress, height: 11),
         const SizedBox(height: 8),
+        AppleProgressBar(value: progress, height: 9),
+        const SizedBox(height: 5),
         Text(
           _goalStatus(item.status),
           style: Theme.of(context).textTheme.bodyMedium?.copyWith(
@@ -1433,72 +1234,6 @@ class _GoalProgressRow extends StatelessWidget {
               ),
         ),
       ],
-    );
-  }
-}
-
-class _HealthBadge extends StatelessWidget {
-  const _HealthBadge({
-    required this.icon,
-    required this.iconColor,
-    required this.label,
-    required this.value,
-    required this.note,
-  });
-
-  final IconData icon;
-  final Color iconColor;
-  final String label;
-  final String value;
-  final String note;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: const Color(0xFFF8FAFD),
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: AppleDashboardPalette.border),
-      ),
-      child: Row(
-        children: [
-          AppleIconCircle(icon: icon, color: iconColor, size: 38),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  label,
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        color: AppleDashboardPalette.secondaryText,
-                      ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  value,
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        color: AppleDashboardPalette.text,
-                        fontWeight: FontWeight.w700,
-                      ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(width: 12),
-          Flexible(
-            child: Text(
-              note,
-              textAlign: TextAlign.right,
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: AppleDashboardPalette.secondaryText,
-                  ),
-            ),
-          ),
-        ],
-      ),
     );
   }
 }
@@ -1558,9 +1293,6 @@ String _hours(int minutes) => '${(minutes / 60).toStringAsFixed(1)}h';
 
 String _hourlyRate(int? cents) =>
     cents == null ? '暂无数据' : '¥${(cents / 100).toStringAsFixed(2)}';
-
-String _ratioFromBps(int? bps) =>
-    bps == null ? '暂无数据' : '${(bps / 100).toStringAsFixed(1)}%';
 
 String _goalStatus(String status) {
   switch (status) {

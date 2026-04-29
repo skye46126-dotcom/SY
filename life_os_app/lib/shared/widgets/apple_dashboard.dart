@@ -38,97 +38,77 @@ class AppleDashboardPage extends StatelessWidget {
       decoration: const BoxDecoration(
         color: AppleDashboardPalette.background,
       ),
-      child: Stack(
-        children: [
-          const Positioned(
-            top: -100,
-            right: -40,
-            child: _BackdropGlow(
-              size: 260,
-              colors: [Color(0x1A6D9CFF), Color(0x006D9CFF)],
-            ),
-          ),
-          const Positioned(
-            left: -60,
-            top: 240,
-            child: _BackdropGlow(
-              size: 220,
-              colors: [Color(0x0E8BE3C2), Color(0x008BE3C2)],
-            ),
-          ),
-          SafeArea(
-            bottom: false,
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.fromLTRB(18, 16, 18, 28),
-              child: Center(
-                child: RepaintBoundary(
-                  key: exportBoundaryKey,
-                  child: DecoratedBox(
-                    decoration: const BoxDecoration(
-                      color: AppleDashboardPalette.background,
-                    ),
-                    child: ConstrainedBox(
-                      constraints: const BoxConstraints(maxWidth: 1120),
-                      child: Column(
+      child: SafeArea(
+        bottom: false,
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.fromLTRB(14, 12, 14, 22),
+          child: Center(
+            child: RepaintBoundary(
+              key: exportBoundaryKey,
+              child: DecoratedBox(
+                decoration: const BoxDecoration(
+                  color: AppleDashboardPalette.background,
+                ),
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 880),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Row(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      title,
-                                      style: Theme.of(context)
-                                          .textTheme
-                                          .headlineMedium
-                                          ?.copyWith(
-                                            color: AppleDashboardPalette.text,
-                                            fontSize: 34,
-                                            fontWeight: FontWeight.w800,
-                                            letterSpacing: -1.2,
-                                          ),
-                                    ),
-                                    if (subtitle != null) ...[
-                                      const SizedBox(height: 8),
-                                      Text(
-                                        subtitle!,
-                                        style: Theme.of(context)
-                                            .textTheme
-                                            .bodyMedium
-                                            ?.copyWith(
-                                              color: AppleDashboardPalette
-                                                  .secondaryText,
-                                              fontSize: 15,
-                                            ),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  title,
+                                  style: Theme.of(context)
+                                      .textTheme
+                                      .headlineMedium
+                                      ?.copyWith(
+                                        color: AppleDashboardPalette.text,
+                                        fontSize: 30,
+                                        fontWeight: FontWeight.w800,
+                                        letterSpacing: 0,
                                       ),
-                                    ],
-                                  ],
                                 ),
-                              ),
-                              if (trailing != null) ...[
-                                const SizedBox(width: 16),
-                                trailing!,
+                                if (subtitle != null) ...[
+                                  const SizedBox(height: 6),
+                                  Text(
+                                    subtitle!,
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .bodyMedium
+                                        ?.copyWith(
+                                          color: AppleDashboardPalette
+                                              .secondaryText,
+                                          fontSize: 14,
+                                        ),
+                                  ),
+                                ],
                               ],
-                            ],
+                            ),
                           ),
-                          if (controls != null) ...[
-                            const SizedBox(height: 18),
-                            controls!,
+                          if (trailing != null) ...[
+                            const SizedBox(width: 12),
+                            trailing!,
                           ],
-                          const SizedBox(height: 20),
-                          ..._withSpacing(children),
                         ],
                       ),
-                    ),
+                      if (controls != null) ...[
+                        const SizedBox(height: 14),
+                        controls!,
+                      ],
+                      const SizedBox(height: 14),
+                      ..._withSpacing(children),
+                    ],
                   ),
                 ),
               ),
             ),
           ),
-        ],
+        ),
       ),
     );
   }
@@ -136,7 +116,7 @@ class AppleDashboardPage extends StatelessWidget {
   List<Widget> _withSpacing(List<Widget> items) {
     return [
       for (var index = 0; index < items.length; index++) ...[
-        if (index > 0) const SizedBox(height: 20),
+        if (index > 0) const SizedBox(height: 14),
         items[index],
       ],
     ];
@@ -147,7 +127,7 @@ class AppleDashboardCard extends StatelessWidget {
   const AppleDashboardCard({
     super.key,
     required this.child,
-    this.padding = const EdgeInsets.all(22),
+    this.padding = const EdgeInsets.all(16),
   });
 
   final Widget child;
@@ -156,16 +136,17 @@ class AppleDashboardCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
+      width: double.infinity,
       padding: padding,
       decoration: BoxDecoration(
         color: AppleDashboardPalette.surface,
-        borderRadius: BorderRadius.circular(24),
+        borderRadius: BorderRadius.circular(22),
         border: Border.all(color: AppleDashboardPalette.border),
         boxShadow: const [
           BoxShadow(
             color: AppleDashboardPalette.shadow,
-            blurRadius: 28,
-            offset: Offset(0, 12),
+            blurRadius: 22,
+            offset: Offset(0, 8),
           ),
         ],
       ),
@@ -181,7 +162,7 @@ class AppleDashboardSection extends StatelessWidget {
     this.trailing,
     this.subtitle,
     required this.child,
-    this.padding = const EdgeInsets.all(22),
+    this.padding = const EdgeInsets.all(16),
   });
 
   final String title;
@@ -207,7 +188,7 @@ class AppleDashboardSection extends StatelessWidget {
                       title,
                       style: Theme.of(context).textTheme.titleLarge?.copyWith(
                             color: AppleDashboardPalette.text,
-                            fontSize: 18,
+                            fontSize: 17,
                             fontWeight: FontWeight.w700,
                           ),
                     ),
@@ -226,7 +207,7 @@ class AppleDashboardSection extends StatelessWidget {
               if (trailing != null) trailing!,
             ],
           ),
-          const SizedBox(height: 18),
+          const SizedBox(height: 12),
           child,
         ],
       ),
@@ -299,7 +280,7 @@ class ApplePill extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
         color: backgroundColor,
         borderRadius: BorderRadius.circular(999),
@@ -308,6 +289,7 @@ class ApplePill extends StatelessWidget {
         label,
         style: Theme.of(context).textTheme.bodyMedium?.copyWith(
               color: foregroundColor,
+              fontSize: 13,
               fontWeight: FontWeight.w700,
             ),
       ),
@@ -386,7 +368,7 @@ class AppleListRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final row = Padding(
-      padding: const EdgeInsets.symmetric(vertical: 14),
+      padding: const EdgeInsets.symmetric(vertical: 9),
       child: Row(
         children: [
           leading,
@@ -399,7 +381,7 @@ class AppleListRow extends StatelessWidget {
                   title,
                   style: Theme.of(context).textTheme.titleMedium?.copyWith(
                         color: AppleDashboardPalette.text,
-                        fontSize: 16,
+                        fontSize: 15,
                         fontWeight: FontWeight.w600,
                       ),
                 ),
@@ -452,8 +434,8 @@ class AppleCircleButton extends StatelessWidget {
         borderRadius: BorderRadius.circular(999),
         onTap: onPressed,
         child: Ink(
-          width: 46,
-          height: 46,
+          width: 42,
+          height: 42,
           decoration: BoxDecoration(
             color:
                 enabled ? Colors.white : Colors.white.withValues(alpha: 0.72),
@@ -472,7 +454,7 @@ class AppleCircleButton extends StatelessWidget {
             color: enabled
                 ? AppleDashboardPalette.text
                 : AppleDashboardPalette.secondaryText,
-            size: 22,
+            size: 20,
           ),
         ),
       ),
@@ -501,7 +483,7 @@ class _AppleSegmentItem<T> extends StatelessWidget {
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 180),
           curve: Curves.easeOutCubic,
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(18),
             gradient: selected
@@ -514,8 +496,8 @@ class _AppleSegmentItem<T> extends StatelessWidget {
                 ? const [
                     BoxShadow(
                       color: Color(0x1E2F6BFF),
-                      blurRadius: 18,
-                      offset: Offset(0, 8),
+                      blurRadius: 12,
+                      offset: Offset(0, 5),
                     ),
                   ]
                 : null,
@@ -531,30 +513,6 @@ class _AppleSegmentItem<T> extends StatelessWidget {
                       : AppleDashboardPalette.secondaryText,
                 ),
           ),
-        ),
-      ),
-    );
-  }
-}
-
-class _BackdropGlow extends StatelessWidget {
-  const _BackdropGlow({
-    required this.size,
-    required this.colors,
-  });
-
-  final double size;
-  final List<Color> colors;
-
-  @override
-  Widget build(BuildContext context) {
-    return IgnorePointer(
-      child: Container(
-        width: size,
-        height: size,
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          gradient: RadialGradient(colors: colors),
         ),
       ),
     );

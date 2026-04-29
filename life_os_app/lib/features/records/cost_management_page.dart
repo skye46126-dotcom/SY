@@ -1,12 +1,19 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 
 import '../../app/app.dart';
+import '../../features/export/application/export_orchestrator.dart';
+import '../../features/export/domain/export_artifact.dart';
+import '../../features/export/domain/export_range.dart';
+import '../../features/export/domain/export_request.dart';
 import '../../models/config_models.dart';
 import '../../models/cost_models.dart';
 import '../../services/export_metadata_builders.dart';
 import '../../services/image_export_service.dart';
 import '../../shared/view_state.dart';
 import '../../shared/widgets/export_document_dialog.dart';
+import '../../shared/widgets/more_action_menu.dart';
 import '../../shared/widgets/module_page.dart';
 import '../../shared/widgets/safe_pop.dart';
 import '../../shared/widgets/section_card.dart';
@@ -21,7 +28,7 @@ class CostManagementPage extends StatefulWidget {
 
 class _CostManagementPageState extends State<CostManagementPage> {
   final GlobalKey _exportBoundaryKey = GlobalKey();
-  final ImageExportService _imageExportService = const ImageExportService();
+  ExportOrchestrator? _exportOrchestrator;
   ViewState<MonthlyCostBaselineModel> _baselineState = ViewState.initial();
   ViewState<List<RecurringCostRuleModel>> _recurringState = ViewState.initial();
   ViewState<List<CapexCostModel>> _capexState = ViewState.initial();
@@ -87,6 +94,8 @@ class _CostManagementPageState extends State<CostManagementPage> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
+    _exportOrchestrator ??=
+        ExportOrchestrator(service: LifeOsScope.of(context));
     if (_loaded) return;
     _loaded = true;
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -118,29 +127,40 @@ class _CostManagementPageState extends State<CostManagementPage> {
       subtitle: 'Cost Management',
       exportBoundaryKey: _exportBoundaryKey,
       actions: [
-        OutlinedButton(
-          onPressed: canExport && !_isExporting ? _exportCostDocument : null,
-          child: Text(_isExporting ? '正在导出' : '导出图片文档'),
-        ),
-        OutlinedButton(
-          onPressed: _previousMonth,
-          child: const Text('上月'),
-        ),
-        OutlinedButton(
-          onPressed: _nextMonth,
-          child: const Text('下月'),
-        ),
-        ElevatedButton(
-          onPressed: _editBaseline,
-          child: const Text('编辑月基线'),
-        ),
-        OutlinedButton(
-          onPressed: _createRecurringRule,
-          child: const Text('新增周期规则'),
-        ),
-        OutlinedButton(
-          onPressed: _createCapex,
-          child: const Text('新增 CAPEX'),
+        MoreActionMenu(
+          items: [
+            MoreActionMenuItem(
+              label: _isExporting ? '正在导出' : '导出图片文档',
+              icon: Icons.ios_share_rounded,
+              enabled: canExport && !_isExporting,
+              onPressed: _exportCostDocument,
+            ),
+            MoreActionMenuItem(
+              label: '上月',
+              icon: Icons.chevron_left_rounded,
+              onPressed: _previousMonth,
+            ),
+            MoreActionMenuItem(
+              label: '下月',
+              icon: Icons.chevron_right_rounded,
+              onPressed: _nextMonth,
+            ),
+            MoreActionMenuItem(
+              label: '编辑月基线',
+              icon: Icons.edit_calendar_rounded,
+              onPressed: _editBaseline,
+            ),
+            MoreActionMenuItem(
+              label: '新增周期规则',
+              icon: Icons.repeat_rounded,
+              onPressed: _createRecurringRule,
+            ),
+            MoreActionMenuItem(
+              label: '新增 CAPEX',
+              icon: Icons.add_chart_rounded,
+              onPressed: _createCapex,
+            ),
+          ],
         ),
       ],
       children: [
@@ -349,21 +369,27 @@ class _CostManagementPageState extends State<CostManagementPage> {
     try {
       final runtime = LifeOsScope.runtimeOf(context);
       final month = _selectedMonth ?? runtime.todayDate.substring(0, 7);
-      final result = await _imageExportService.exportBoundary(
-        boundaryKey: _exportBoundaryKey,
-        module: 'cost',
-        title: 'cost-$month-$_rateWindowType',
-        metadata: buildCostExportMetadata(
-          month: month,
-          rateWindowType: _rateWindowType,
-          baseline: _baselineState.data,
-          rate: _rateState.data,
-          recurringRules: _recurringState.data ?? const [],
-          capexItems: _capexState.data ?? const [],
+      final exportResult = await _exportOrchestrator!.export(
+        ExportRequest.snapshot(
+          title: 'cost-$month-$_rateWindowType',
+          module: 'cost',
+          range:
+              _rateWindowType == 'year' ? ExportRange.year : ExportRange.month,
+          boundaryKey: _exportBoundaryKey,
+          metadata: buildCostExportMetadata(
+            month: month,
+            rateWindowType: _rateWindowType,
+            baseline: _baselineState.data,
+            rate: _rateState.data,
+            recurringRules: _recurringState.data ?? const [],
+            capexItems: _capexState.data ?? const [],
+          ),
         ),
       );
+      final artifact = exportResult.primaryArtifact;
       if (!mounted) return;
-      await showExportDocumentDialog(context, result);
+      await showExportDocumentDialog(
+          context, _artifactToImageDocument(artifact));
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -374,6 +400,18 @@ class _CostManagementPageState extends State<CostManagementPage> {
         setState(() => _isExporting = false);
       }
     }
+  }
+
+  ExportedImageDocument _artifactToImageDocument(ExportArtifact artifact) {
+    return ExportedImageDocument(
+      module: artifact.module,
+      title: artifact.title,
+      exportedAt: artifact.createdAt,
+      directoryPath: File(artifact.filePath).parent.path,
+      imagePath: artifact.filePath,
+      metadataPath: artifact.metadataPath,
+      metadata: Map<String, dynamic>.from(artifact.metadata.toJson()),
+    );
   }
 
   Future<void> _editBaseline() async {

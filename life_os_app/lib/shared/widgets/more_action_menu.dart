@@ -55,37 +55,38 @@ class MoreActionMenu extends StatelessWidget {
       context: rootContext,
       useRootNavigator: true,
       showDragHandle: true,
+      isScrollControlled: true,
       backgroundColor: const Color(0xFFF7F9FD),
       builder: (context) {
         final textTheme = Theme.of(context).textTheme;
         return SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(20, 4, 20, 24),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('更多操作', style: textTheme.titleLarge),
-                const SizedBox(height: 8),
-                Text(
-                  '低频操作统一收纳在这里，避免顶部筛选区持续拥挤。',
-                  style: textTheme.bodyMedium,
-                ),
-                const SizedBox(height: 16),
-                for (final item in availableItems)
-                  ListTile(
-                    contentPadding: EdgeInsets.zero,
-                    enabled: item.enabled && item.onPressed != null,
-                    leading: Icon(item.icon),
-                    title: Text(item.label),
-                    onTap: item.enabled && item.onPressed != null
-                        ? () {
-                            Navigator.of(context).pop();
-                            item.onPressed!();
-                          }
-                        : null,
-                  ),
-              ],
+          child: ConstrainedBox(
+            constraints: BoxConstraints(
+              maxHeight: MediaQuery.sizeOf(context).height * 0.78,
+            ),
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.fromLTRB(20, 4, 20, 24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('更多操作', style: textTheme.titleLarge),
+                  const SizedBox(height: 12),
+                  for (final item in availableItems)
+                    ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      enabled: item.enabled && item.onPressed != null,
+                      leading: Icon(item.icon),
+                      title: Text(item.label),
+                      onTap: item.enabled && item.onPressed != null
+                          ? () {
+                              Navigator.of(context).pop();
+                              item.onPressed!();
+                            }
+                          : null,
+                    ),
+                ],
+              ),
             ),
           ),
         );

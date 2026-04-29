@@ -117,6 +117,7 @@ void main() {
             detail: '2h',
           ),
         ],
+        reviewNotes: const [],
         timeTagMetrics: const [],
         expenseTagMetrics: const [],
       ),

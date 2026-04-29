@@ -8,6 +8,48 @@ import '../../shared/widgets/safe_pop.dart';
 import '../../shared/widgets/section_card.dart';
 import '../../shared/widgets/state_views.dart';
 
+const _customModelValue = '__custom_model__';
+
+const _aiProviderPresets = [
+  _AiProviderPreset(
+    value: 'deepseek',
+    label: 'DeepSeek',
+    defaultBaseUrl: 'https://api.deepseek.com',
+    defaultModel: 'deepseek-chat',
+    models: [
+      'deepseek-chat',
+      'deepseek-reasoner',
+    ],
+  ),
+  _AiProviderPreset(
+    value: 'siliconflow',
+    label: 'SiliconFlow',
+    defaultBaseUrl: 'https://api.siliconflow.cn/v1',
+    defaultModel: 'deepseek-ai/DeepSeek-V3',
+    models: [
+      'deepseek-ai/DeepSeek-V3',
+      'Qwen/Qwen2.5-72B-Instruct',
+      'Qwen/Qwen3-235B-A22B',
+      'THUDM/GLM-4-9B-0414',
+    ],
+  ),
+  _AiProviderPreset(
+    value: 'custom',
+    label: 'OpenAI 兼容',
+    defaultBaseUrl: 'https://api.openai.com/v1',
+    defaultModel: 'gpt-4o-mini',
+    models: [
+      'gpt-4o-mini',
+      'gpt-4o',
+      'gpt-4.1-mini',
+      'gpt-4.1',
+      'o4-mini',
+      'deepseek-chat',
+      'qwen-plus',
+    ],
+  ),
+];
+
 class AiServiceConfigsPage extends StatefulWidget {
   const AiServiceConfigsPage({super.key});
 
@@ -78,9 +120,11 @@ class _AiServiceConfigsPageState extends State<AiServiceConfigsPage> {
                       leading: Icon(
                         item.isActive ? Icons.check_circle : Icons.tune,
                       ),
-                      title: Text('${item.provider} · ${item.model ?? '-'}'),
+                      title: Text(
+                        '${_providerLabelFor(item.provider)} · ${item.model ?? '-'}',
+                      ),
                       subtitle: Text(
-                        '${item.parserMode} · ${item.baseUrl ?? '-'}',
+                        item.baseUrl ?? '-',
                       ),
                       trailing: PopupMenuButton<String>(
                         onSelected: (value) {
@@ -130,7 +174,7 @@ class _AiServiceConfigsPageState extends State<AiServiceConfigsPage> {
           'api_key_encrypted': item.apiKeyEncrypted,
           'model': item.model,
           'system_prompt': item.systemPrompt,
-          'parser_mode': _toRustParserMode(item.parserMode),
+          'parser_mode': 'Llm',
           'temperature_milli': item.temperatureMilli,
           'is_active': true,
         },
@@ -158,18 +202,39 @@ class _AiServiceConfigsPageState extends State<AiServiceConfigsPage> {
     final rootContext = Navigator.of(context, rootNavigator: true).context;
     final runtime = LifeOsScope.runtimeOf(rootContext);
     final service = LifeOsScope.of(rootContext);
-    final provider =
-        TextEditingController(text: existing?.provider ?? 'deepseek');
-    final baseUrl = TextEditingController(text: existing?.baseUrl ?? '');
-    final model = TextEditingController(text: existing?.model ?? '');
+    var selectedProvider = _providerPresetFor(existing?.provider).value;
+    var providerPreset = _providerPresetFor(selectedProvider);
+    final baseUrl = TextEditingController(
+      text: existing?.baseUrl ?? providerPreset.defaultBaseUrl ?? '',
+    );
+    final model = TextEditingController(
+      text: existing?.model ?? providerPreset.defaultModel,
+    );
+    var selectedModelOption = providerPreset.models.contains(model.text)
+        ? model.text
+        : _customModelValue;
     final apiKey = TextEditingController(text: existing?.apiKeyEncrypted ?? '');
-    final parserMode = TextEditingController(
-        text: _displayParserMode(existing?.parserMode ?? 'auto'));
     final temperature = TextEditingController(
         text: existing?.temperatureMilli?.toString() ?? '');
     final systemPrompt =
         TextEditingController(text: existing?.systemPrompt ?? '');
     bool isActive = existing?.isActive ?? true;
+    ViewState<String> testState = ViewState.initial();
+
+    Map<String, Object?> inputPayload() => {
+          'user_id': runtime.userId,
+          'provider': selectedProvider,
+          'base_url': baseUrl.text.trim().isEmpty ? null : baseUrl.text.trim(),
+          'api_key_encrypted':
+              apiKey.text.trim().isEmpty ? null : apiKey.text.trim(),
+          'model': model.text.trim().isEmpty ? null : model.text.trim(),
+          'system_prompt':
+              systemPrompt.text.trim().isEmpty ? null : systemPrompt.text,
+          'parser_mode': 'Llm',
+          'temperature_milli': int.tryParse(temperature.text.trim()),
+          'is_active': isActive,
+        };
+
     try {
       final confirmed = await showDialog<bool>(
         context: rootContext,
@@ -179,26 +244,71 @@ class _AiServiceConfigsPageState extends State<AiServiceConfigsPage> {
               title: Text(existing == null ? '新增 AI 配置' : '编辑 AI 配置'),
               content: SingleChildScrollView(
                 child: Column(
+                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    TextField(
-                        controller: provider,
-                        decoration:
-                            const InputDecoration(labelText: 'Provider')),
+                    DropdownButtonFormField<String>(
+                      initialValue: selectedProvider,
+                      isExpanded: true,
+                      decoration: const InputDecoration(labelText: 'Provider'),
+                      items: [
+                        for (final preset in _aiProviderPresets)
+                          DropdownMenuItem(
+                            value: preset.value,
+                            child: Text(preset.label),
+                          ),
+                      ],
+                      onChanged: (value) {
+                        if (value == null) return;
+                        setDialogState(() {
+                          selectedProvider = value;
+                          providerPreset = _providerPresetFor(value);
+                          baseUrl.text = providerPreset.defaultBaseUrl ?? '';
+                          model.text = providerPreset.defaultModel;
+                          selectedModelOption = providerPreset.defaultModel;
+                        });
+                      },
+                    ),
                     TextField(
                         controller: baseUrl,
                         decoration:
                             const InputDecoration(labelText: 'Base URL')),
-                    TextField(
-                        controller: model,
-                        decoration: const InputDecoration(labelText: 'Model')),
+                    DropdownButtonFormField<String>(
+                      key: ValueKey(
+                        'model-$selectedProvider-$selectedModelOption',
+                      ),
+                      initialValue: selectedModelOption,
+                      isExpanded: true,
+                      decoration: const InputDecoration(labelText: 'Model'),
+                      items: [
+                        for (final option in providerPreset.models)
+                          DropdownMenuItem(
+                            value: option,
+                            child: Text(option),
+                          ),
+                        const DropdownMenuItem(
+                          value: _customModelValue,
+                          child: Text('自定义模型'),
+                        ),
+                      ],
+                      onChanged: (value) {
+                        if (value == null) return;
+                        setDialogState(() {
+                          selectedModelOption = value;
+                          if (value != _customModelValue) {
+                            model.text = value;
+                          }
+                        });
+                      },
+                    ),
+                    if (selectedModelOption == _customModelValue)
+                      TextField(
+                          controller: model,
+                          decoration:
+                              const InputDecoration(labelText: '自定义模型')),
                     TextField(
                         controller: apiKey,
                         decoration:
                             const InputDecoration(labelText: 'API Key')),
-                    TextField(
-                        controller: parserMode,
-                        decoration:
-                            const InputDecoration(labelText: 'Parser Mode')),
                     TextField(
                         controller: temperature,
                         decoration: const InputDecoration(
@@ -214,6 +324,67 @@ class _AiServiceConfigsPageState extends State<AiServiceConfigsPage> {
                           setDialogState(() => isActive = value),
                       title: const Text('激活'),
                     ),
+                    const SizedBox(height: 12),
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: OutlinedButton.icon(
+                        onPressed: testState.status == ViewStatus.loading
+                            ? null
+                            : () async {
+                                setDialogState(
+                                  () => testState = ViewState.loading(),
+                                );
+                                try {
+                                  final result = await service.invokeRaw(
+                                    method: 'test_ai_service_config',
+                                    payload: {'input': inputPayload()},
+                                  );
+                                  final data = (result as Map?)
+                                          ?.cast<String, dynamic>() ??
+                                      const {};
+                                  final modelName =
+                                      data['model']?.toString() ?? model.text;
+                                  setDialogState(
+                                    () => testState =
+                                        ViewState.ready('连接成功 · $modelName'),
+                                  );
+                                } catch (error) {
+                                  setDialogState(
+                                    () => testState =
+                                        ViewState.error(error.toString()),
+                                  );
+                                }
+                              },
+                        icon: testState.status == ViewStatus.loading
+                            ? const SizedBox(
+                                width: 16,
+                                height: 16,
+                                child:
+                                    CircularProgressIndicator(strokeWidth: 2),
+                              )
+                            : const Icon(Icons.network_check_rounded),
+                        label: const Text('检测连接'),
+                      ),
+                    ),
+                    if (testState.status != ViewStatus.initial) ...[
+                      const SizedBox(height: 8),
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: Text(
+                          testState.status == ViewStatus.loading
+                              ? '正在检测当前配置'
+                              : testState.message ?? testState.data ?? '',
+                          style: Theme.of(dialogContext)
+                              .textTheme
+                              .bodySmall
+                              ?.copyWith(
+                                color: testState.status == ViewStatus.error
+                                    ? Theme.of(dialogContext).colorScheme.error
+                                    : null,
+                              ),
+                        ),
+                      ),
+                    ],
                   ],
                 ),
               ),
@@ -238,56 +409,43 @@ class _AiServiceConfigsPageState extends State<AiServiceConfigsPage> {
             : 'update_ai_service_config',
         payload: {
           if (existing != null) 'config_id': existing.id,
-          'input': {
-            'user_id': runtime.userId,
-            'provider': provider.text,
-            'base_url': baseUrl.text.isEmpty ? null : baseUrl.text,
-            'api_key_encrypted': apiKey.text.isEmpty ? null : apiKey.text,
-            'model': model.text.isEmpty ? null : model.text,
-            'system_prompt':
-                systemPrompt.text.isEmpty ? null : systemPrompt.text,
-            'parser_mode': parserMode.text.isEmpty
-                ? null
-                : _toRustParserMode(parserMode.text),
-            'temperature_milli': int.tryParse(temperature.text),
-            'is_active': isActive,
-          },
+          'input': inputPayload(),
         },
       );
       if (!mounted) return;
       await _load();
     } finally {
-      provider.dispose();
       baseUrl.dispose();
       model.dispose();
       apiKey.dispose();
-      parserMode.dispose();
       temperature.dispose();
       systemPrompt.dispose();
     }
   }
 
-  String _toRustParserMode(String value) {
-    switch (value.trim().toLowerCase()) {
-      case 'rule':
-        return 'Rule';
-      case 'llm':
-        return 'Llm';
-      case 'vcp':
-        return 'Vcp';
-      default:
-        return 'Auto';
+  _AiProviderPreset _providerPresetFor(String? value) {
+    final normalized = value?.trim().toLowerCase();
+    for (final preset in _aiProviderPresets) {
+      if (preset.value == normalized) return preset;
     }
+    return _aiProviderPresets.first;
   }
 
-  String _displayParserMode(String value) {
-    final lower = value.toLowerCase();
-    if (lower == 'auto' ||
-        lower == 'rule' ||
-        lower == 'llm' ||
-        lower == 'vcp') {
-      return lower;
-    }
-    return value;
-  }
+  String _providerLabelFor(String value) => _providerPresetFor(value).label;
+}
+
+class _AiProviderPreset {
+  const _AiProviderPreset({
+    required this.value,
+    required this.label,
+    required this.defaultModel,
+    required this.models,
+    this.defaultBaseUrl,
+  });
+
+  final String value;
+  final String label;
+  final String? defaultBaseUrl;
+  final String defaultModel;
+  final List<String> models;
 }

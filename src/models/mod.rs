@@ -10,6 +10,7 @@ mod project;
 mod project_query;
 mod record_query;
 mod review;
+mod review_note;
 mod snapshot;
 mod sync;
 mod tag;
@@ -17,9 +18,12 @@ mod time_record;
 mod user;
 
 pub use ai::{
-    AiCommitFailure, AiCommitInput, AiCommitOptions, AiCommitResult, AiCommittedRecord,
-    AiDraftKind, AiParseDraft, AiParseInput, AiParseResult, AiProvider, AiServiceConfig,
-    CreateAiServiceConfigInput, ParseContext, ParserMode,
+    AiCaptureCommitInput, AiCaptureCommitResult, AiCommitFailure, AiCommitInput, AiCommitOptions,
+    AiCommitResult, AiCommittedRecord, AiDraftKind, AiParseDraft, AiParseInput, AiParseResult,
+    AiProvider, AiServiceConfig, CreateAiServiceConfigInput, DraftDimensionBinding, DraftField,
+    DraftFieldSource, DraftIntent, DraftLinks, DraftProjectLink, DraftStatus, DraftTagLink,
+    DraftValidation, ParseContext, ParsePipelineResult, ParserMode, ReviewableDraft,
+    TypedDraftKind,
 };
 pub(crate) use common::{
     normalize_code, normalize_optional_string, normalize_required_string, parse_date,
@@ -50,6 +54,7 @@ pub use review::{
     ProjectProgressItem, ReviewReport, ReviewTagMetric, ReviewWindow, ReviewWindowKind,
     TimeCategoryAllocation,
 };
+pub use review_note::{CreateReviewNoteInput, IgnoredContext, ReviewNote, ReviewNoteDraft};
 pub use snapshot::{MetricSnapshotSummary, ProjectMetricSnapshotSummary, SnapshotWindow};
 pub use sync::{
     BackupRecord, BackupResult, BackupType, CloudSyncConfig, CreateCloudSyncConfigInput,

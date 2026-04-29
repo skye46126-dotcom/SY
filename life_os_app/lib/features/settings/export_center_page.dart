@@ -1,8 +1,18 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../app/app.dart';
+import '../../features/export/application/export_orchestrator.dart';
+import '../../features/export/domain/export_format.dart';
+import '../../features/export/domain/export_history_item.dart';
+import '../../features/export/domain/export_request.dart';
+import '../../features/export/domain/export_type.dart';
+import '../../features/export/infrastructure/export_archive_service.dart';
 import '../../models/project_models.dart';
 import '../../models/sync_models.dart';
+import '../../services/export_share_service.dart';
 import '../../services/image_export_service.dart';
 import '../../shared/view_state.dart';
 import '../../shared/widgets/export_document_dialog.dart';
@@ -15,13 +25,13 @@ class ExportCenterData {
     required this.exportDirectoryPath,
     required this.latestBackup,
     required this.projects,
-    required this.exportedDocuments,
+    required this.exportHistory,
   });
 
   final String exportDirectoryPath;
   final BackupResultModel? latestBackup;
   final List<ProjectOverview> projects;
-  final List<ExportedImageDocument> exportedDocuments;
+  final List<ExportHistoryItem> exportHistory;
 }
 
 class ExportCenterPage extends StatefulWidget {
@@ -32,15 +42,21 @@ class ExportCenterPage extends StatefulWidget {
 }
 
 class _ExportCenterPageState extends State<ExportCenterPage> {
-  final ImageExportService _imageExportService = const ImageExportService();
+  final ExportArchiveService _archiveService = const ExportArchiveService();
+  ExportOrchestrator? _exportOrchestrator;
   ViewState<ExportCenterData> _state = ViewState.initial();
   ViewState<BackupResultModel> _backupActionState = ViewState.initial();
   String? _selectedProjectId;
+  String _historyQuery = '';
+  ExportType? _historyTypeFilter;
+  ExportFormat? _historyFormatFilter;
   bool _loaded = false;
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
+    _exportOrchestrator ??=
+        ExportOrchestrator(service: LifeOsScope.of(context));
     if (_loaded) return;
     _loaded = true;
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -55,14 +71,13 @@ class _ExportCenterPageState extends State<ExportCenterPage> {
       final runtime = LifeOsScope.runtimeOf(context);
       final service = LifeOsScope.of(context);
       final exportDirectoryPath =
-          await _imageExportService.preferredExportDirectoryPath();
+          await _archiveService.preferredExportRootPath();
       final latestBackup = await service.getLatestBackup(
         userId: runtime.userId,
         backupType: 'manual',
       );
       final projects = await service.getProjects(userId: runtime.userId);
-      final exportedDocuments =
-          await _imageExportService.listExportedDocuments(limit: 60);
+      final exportHistory = await _archiveService.listHistory(limit: 100);
       if (!mounted) return;
       setState(() {
         _selectedProjectId = _resolveProjectSelection(
@@ -74,7 +89,7 @@ class _ExportCenterPageState extends State<ExportCenterPage> {
             exportDirectoryPath: exportDirectoryPath,
             latestBackup: latestBackup,
             projects: projects,
-            exportedDocuments: exportedDocuments,
+            exportHistory: exportHistory,
           ),
         );
       });
@@ -92,6 +107,7 @@ class _ExportCenterPageState extends State<ExportCenterPage> {
         .where((item) => item.id == _selectedProjectId)
         .cast<ProjectOverview?>()
         .firstWhere((item) => item != null, orElse: () => null);
+    final historyItems = _filteredHistory(data?.exportHistory ?? const []);
 
     return ModulePage(
       title: '导出中心',
@@ -219,7 +235,7 @@ class _ExportCenterPageState extends State<ExportCenterPage> {
                             title: '可读归档',
                             icon: Icons.article_outlined,
                             description:
-                                '下一阶段补 Markdown / PDF 报告，让图片与文本归档形成完整输出。',
+                                '导出 Markdown / TXT / PDF 可读报告，用于复盘和归档。',
                           ),
                         ];
                         if (compact) {
@@ -248,8 +264,8 @@ class _ExportCenterPageState extends State<ExportCenterPage> {
                 ),
         ),
         SectionCard(
-          eyebrow: 'Image Docs',
-          title: '已接入的图片文档导出',
+          eyebrow: 'Exports',
+          title: '导出入口',
           child: _state.status == ViewStatus.loading
               ? const SectionLoadingView(label: '正在读取图片导出入口')
               : _state.status == ViewStatus.error
@@ -270,6 +286,26 @@ class _ExportCenterPageState extends State<ExportCenterPage> {
                           builder: (context, constraints) {
                             final compact = constraints.maxWidth < 920;
                             final cards = [
+                              _ExportModuleCard(
+                                title: '数据包导出',
+                                icon: Icons.inventory_2_outlined,
+                                description:
+                                    '导出 JSON / CSV / ZIP 数据包，适合迁移、分析和结构化归档。',
+                                note: '使用 export_seed_data 生成原始种子数据。',
+                                primaryLabel: '打开数据包导出',
+                                onPrimaryTap: () => Navigator.of(context)
+                                    .pushNamed('/settings/data-package-export'),
+                              ),
+                              _ExportModuleCard(
+                                title: '报告导出',
+                                icon: Icons.article_outlined,
+                                description:
+                                    '导出 Markdown / TXT / PDF 报告，适合周期复盘和阅读归档。',
+                                note: '基于 TodaySummary / ReviewReport 生成。',
+                                primaryLabel: '打开报告导出',
+                                onPrimaryTap: () => Navigator.of(context)
+                                    .pushNamed('/settings/report-export'),
+                              ),
                               _ExportModuleCard(
                                 title: '状态海报',
                                 icon: Icons.style_outlined,
@@ -376,7 +412,7 @@ class _ExportCenterPageState extends State<ExportCenterPage> {
         ),
         SectionCard(
           eyebrow: 'History',
-          title: '图片文档归档',
+          title: '统一导出归档',
           child: _state.status == ViewStatus.loading
               ? const SectionLoadingView(label: '正在读取导出归档')
               : _state.status == ViewStatus.error
@@ -385,61 +421,91 @@ class _ExportCenterPageState extends State<ExportCenterPage> {
                       title: '导出归档暂不可用',
                       description: _state.message ?? '请稍后重试。',
                     )
-                  : data == null || data.exportedDocuments.isEmpty
+                  : data == null || data.exportHistory.isEmpty
                       ? const SectionMessageView(
-                          icon: Icons.image_not_supported_outlined,
-                          title: '还没有图片导出记录',
-                          description:
-                              '从 Today、Review、Project、Cost 或 Day Detail 页面导出后，这里会自动出现历史文档。',
+                          icon: Icons.folder_open_outlined,
+                          title: '还没有导出记录',
+                          description: '数据包、报告、页面文档和海报导出完成后，都会出现在这里。',
                         )
                       : Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
+                            _HistoryFilterBar(
+                              query: _historyQuery,
+                              typeFilter: _historyTypeFilter,
+                              formatFilter: _historyFormatFilter,
+                              onQueryChanged: (value) {
+                                setState(() => _historyQuery = value);
+                              },
+                              onTypeChanged: (value) {
+                                setState(() => _historyTypeFilter = value);
+                              },
+                              onFormatChanged: (value) {
+                                setState(() => _historyFormatFilter = value);
+                              },
+                            ),
+                            const SizedBox(height: 14),
+                            _HistoryStatsRow(
+                              allItems: data.exportHistory,
+                              filteredItems: historyItems,
+                              typeLabel: _typeLabel,
+                              formatLabel: _formatLabel,
+                            ),
+                            const SizedBox(height: 14),
                             Wrap(
                               spacing: 8,
                               runSpacing: 8,
                               children: _moduleSummaryPills(
-                                data.exportedDocuments,
+                                historyItems,
                               ),
                             ),
                             const SizedBox(height: 16),
-                            for (final item in data.exportedDocuments.take(20))
-                              Container(
-                                margin: const EdgeInsets.only(bottom: 12),
-                                decoration: BoxDecoration(
-                                  color: Colors.white.withValues(alpha: 0.42),
-                                  borderRadius: BorderRadius.circular(18),
-                                  border: Border.all(
-                                    color: Colors.white.withValues(alpha: 0.58),
+                            if (historyItems.isEmpty)
+                              const SectionMessageView(
+                                icon: Icons.search_off_rounded,
+                                title: '没有匹配的导出记录',
+                                description: '调整搜索关键词、类型或格式筛选后再查看。',
+                              )
+                            else
+                              for (final item in historyItems.take(40))
+                                Container(
+                                  margin: const EdgeInsets.only(bottom: 12),
+                                  decoration: BoxDecoration(
+                                    color: Colors.white.withValues(alpha: 0.42),
+                                    borderRadius: BorderRadius.circular(18),
+                                    border: Border.all(
+                                      color:
+                                          Colors.white.withValues(alpha: 0.58),
+                                    ),
+                                  ),
+                                  child: ListTile(
+                                    contentPadding: const EdgeInsets.symmetric(
+                                      horizontal: 16,
+                                      vertical: 8,
+                                    ),
+                                    title: Text(item.title),
+                                    subtitle: Text(
+                                      '${_moduleLabel(item.module)} · ${_formatLabel(item.format)} · ${_formatDateTime(item.createdAt)}',
+                                    ),
+                                    trailing: Wrap(
+                                      spacing: 8,
+                                      children: [
+                                        TextButton(
+                                          onPressed: () =>
+                                              _openExportPreview(item),
+                                          child:
+                                              Text(_previewActionLabel(item)),
+                                        ),
+                                        TextButton(
+                                          onPressed: () =>
+                                              _deleteExportedDocument(item),
+                                          child: const Text('删除'),
+                                        ),
+                                      ],
+                                    ),
+                                    onTap: () => _openExportPreview(item),
                                   ),
                                 ),
-                                child: ListTile(
-                                  contentPadding: const EdgeInsets.symmetric(
-                                    horizontal: 16,
-                                    vertical: 8,
-                                  ),
-                                  title: Text(item.title),
-                                  subtitle: Text(
-                                    '${_moduleLabel(item.module)} · ${_formatDateTime(item.exportedAt)}',
-                                  ),
-                                  trailing: Wrap(
-                                    spacing: 8,
-                                    children: [
-                                      TextButton(
-                                        onPressed: () =>
-                                            _openExportPreview(item),
-                                        child: const Text('预览'),
-                                      ),
-                                      TextButton(
-                                        onPressed: () =>
-                                            _deleteExportedDocument(item),
-                                        child: const Text('删除'),
-                                      ),
-                                    ],
-                                  ),
-                                  onTap: () => _openExportPreview(item),
-                                ),
-                              ),
                           ],
                         ),
         ),
@@ -531,6 +597,16 @@ class _ExportCenterPageState extends State<ExportCenterPage> {
                     ),
                     const SizedBox(height: 10),
                     const _FormatLine(
+                      title: 'JSON / CSV / ZIP',
+                      description: '保存原始结构化数据种子和数据包。',
+                    ),
+                    const SizedBox(height: 10),
+                    const _FormatLine(
+                      title: 'Markdown / TXT / PDF',
+                      description: '保存可读报告，用于复盘、阅读和归档。',
+                    ),
+                    const SizedBox(height: 10),
+                    const _FormatLine(
                       title: 'JSON 元数据',
                       description: '与图片同名，记录页面窗口、核心指标和导出时间。',
                     ),
@@ -551,9 +627,25 @@ class _ExportCenterPageState extends State<ExportCenterPage> {
     setState(() => _backupActionState = ViewState.loading());
     try {
       final runtime = LifeOsScope.runtimeOf(context);
-      final result = await LifeOsScope.of(context).createBackup(
-        userId: runtime.userId,
+      final exportResult = await _exportOrchestrator!.export(
+        ExportRequest.backup(
+          title: 'backup-manual',
+          userId: runtime.userId,
+          backupType: 'manual',
+        ),
+      );
+      final artifact = exportResult.primaryArtifact;
+      final result = BackupResultModel(
+        id: artifact.id,
         backupType: 'manual',
+        filePath: artifact.filePath,
+        fileSizeBytes:
+            (artifact.metadata.toJson()['file_size_bytes'] as num?)?.toInt() ??
+                0,
+        checksum: artifact.metadata.toJson()['checksum'] as String?,
+        success: (artifact.metadata.toJson()['success'] as bool?) ?? true,
+        errorMessage: artifact.metadata.toJson()['error_message'] as String?,
+        createdAt: artifact.createdAt.toIso8601String(),
       );
       if (!mounted) return;
       setState(() => _backupActionState = ViewState.ready(result));
@@ -564,24 +656,178 @@ class _ExportCenterPageState extends State<ExportCenterPage> {
     }
   }
 
-  Future<void> _openExportPreview(ExportedImageDocument document) async {
-    await showExportDocumentDialog(
-      context,
-      document,
-      onDelete: () => _deleteExportedDocument(document, showDialogAfter: false),
+  Future<void> _openExportPreview(ExportHistoryItem document) async {
+    if (document.previewPath != null) {
+      await showExportDocumentDialog(
+        context,
+        _historyItemToImageDocument(document),
+        onDelete: () =>
+            _deleteExportedDocument(document, showDialogAfter: false),
+      );
+      return;
+    }
+    if (_canPreviewAsText(document.format)) {
+      await _openTextExportPreview(document);
+      return;
+    }
+    if (!mounted) return;
+    final file = File(document.filePath);
+    final size = await file.exists() ? await file.length() : 0;
+    if (!mounted) return;
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(document.title),
+        content: SizedBox(
+          width: 560,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('类型：${document.type.key} · ${document.format.key}'),
+              const SizedBox(height: 8),
+              Text('大小：${_fileSize(size)}'),
+              const SizedBox(height: 12),
+              const Text('文件路径'),
+              const SizedBox(height: 6),
+              SelectableText(document.filePath),
+              if (document.metadataPath.isNotEmpty) ...[
+                const SizedBox(height: 12),
+                const Text('元数据路径'),
+                const SizedBox(height: 6),
+                SelectableText(document.metadataPath),
+              ],
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => _copyExportPath(dialogContext, document.filePath),
+            child: const Text('复制路径'),
+          ),
+          TextButton(
+            onPressed: () => _shareHistoryItem(dialogContext, document),
+            child: const Text('分享'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('关闭'),
+          ),
+        ],
+      ),
     );
   }
 
+  Future<void> _openTextExportPreview(ExportHistoryItem document) async {
+    final file = File(document.filePath);
+    final exists = await file.exists();
+    final size = exists ? await file.length() : 0;
+    final content =
+        exists ? await file.readAsString() : '文件不存在：${document.filePath}';
+    const maxPreviewChars = 120000;
+    final clipped = content.length > maxPreviewChars;
+    final preview = clipped
+        ? '${content.substring(0, maxPreviewChars)}\n\n...预览已截断'
+        : content;
+    if (!mounted) return;
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(document.title),
+        content: SizedBox(
+          width: 760,
+          height: 620,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                '${_typeLabel(document.type)} · ${_formatLabel(document.format)} · ${_fileSize(size)}',
+              ),
+              const SizedBox(height: 8),
+              SelectableText(document.filePath),
+              const SizedBox(height: 12),
+              Expanded(
+                child: Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF8FAFC),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: const Color(0xFFE2E8F0)),
+                  ),
+                  child: SingleChildScrollView(
+                    child: SelectableText(
+                      preview,
+                      style: const TextStyle(
+                        fontFamily: 'monospace',
+                        fontSize: 12,
+                        height: 1.45,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => _copyExportPath(dialogContext, document.filePath),
+            child: const Text('复制路径'),
+          ),
+          TextButton(
+            onPressed: () => _shareHistoryItem(dialogContext, document),
+            child: const Text('分享'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('关闭'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _copyExportPath(BuildContext context, String filePath) async {
+    await Clipboard.setData(ClipboardData(text: filePath));
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('已复制文件路径')),
+    );
+  }
+
+  Future<void> _shareHistoryItem(
+    BuildContext context,
+    ExportHistoryItem item,
+  ) async {
+    try {
+      await ExportShareService(service: LifeOsScope.of(this.context)).shareFile(
+        filePath: item.filePath,
+        title: item.title,
+        mimeType: _mimeType(item.format),
+        text: 'SkyOS export: ${item.title}',
+      );
+    } catch (error) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('打开分享面板失败：$error')),
+      );
+    }
+  }
+
   Future<void> _deleteExportedDocument(
-    ExportedImageDocument document, {
+    ExportHistoryItem document, {
     bool showDialogAfter = true,
   }) async {
     try {
-      await _imageExportService.deleteExportedDocument(document);
+      await _archiveService.deleteHistoryItem(document);
       if (!mounted) return;
       if (showDialogAfter) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('已删除导出：${document.fileName}')),
+          SnackBar(
+            content: Text(
+                '已删除导出：${document.filePath.split(Platform.pathSeparator).last}'),
+          ),
         );
       }
       await _load();
@@ -613,7 +859,63 @@ class _ExportCenterPageState extends State<ExportCenterPage> {
     return '${mb.toStringAsFixed(1)} MB';
   }
 
-  List<Widget> _moduleSummaryPills(List<ExportedImageDocument> documents) {
+  ExportedImageDocument _historyItemToImageDocument(ExportHistoryItem item) {
+    return ExportedImageDocument(
+      module: item.module,
+      title: item.title,
+      exportedAt: item.createdAt,
+      directoryPath: File(item.filePath).parent.path,
+      imagePath: item.previewPath ?? item.filePath,
+      metadataPath: item.metadataPath,
+      metadata: Map<String, dynamic>.from(item.metadata.toJson()),
+    );
+  }
+
+  List<ExportHistoryItem> _filteredHistory(List<ExportHistoryItem> items) {
+    final query = _historyQuery.trim().toLowerCase();
+    return items.where((item) {
+      if (_historyTypeFilter != null && item.type != _historyTypeFilter) {
+        return false;
+      }
+      if (_historyFormatFilter != null && item.format != _historyFormatFilter) {
+        return false;
+      }
+      if (query.isEmpty) return true;
+      final haystack = [
+        item.title,
+        item.module,
+        item.type.key,
+        item.format.key,
+        item.filePath,
+      ].join(' ').toLowerCase();
+      return haystack.contains(query);
+    }).toList();
+  }
+
+  bool _canPreviewAsText(ExportFormat format) {
+    switch (format) {
+      case ExportFormat.json:
+      case ExportFormat.csv:
+      case ExportFormat.markdown:
+      case ExportFormat.txt:
+      case ExportFormat.svg:
+        return true;
+      case ExportFormat.sqlite:
+      case ExportFormat.zip:
+      case ExportFormat.pdf:
+      case ExportFormat.png:
+        return false;
+    }
+  }
+
+  String _previewActionLabel(ExportHistoryItem item) {
+    if (item.previewPath != null || _canPreviewAsText(item.format)) {
+      return '预览';
+    }
+    return '详情';
+  }
+
+  List<Widget> _moduleSummaryPills(List<ExportHistoryItem> documents) {
     final counts = <String, int>{};
     for (final item in documents) {
       counts.update(item.module, (value) => value + 1, ifAbsent: () => 1);
@@ -647,8 +949,75 @@ class _ExportCenterPageState extends State<ExportCenterPage> {
         return 'Day Detail';
       case 'poster':
         return 'Poster';
+      case 'data_package':
+        return 'Data Package';
+      case 'report':
+        return 'Report';
+      case 'backup':
+        return 'Backup';
       default:
         return module;
+    }
+  }
+
+  String _typeLabel(ExportType type) {
+    switch (type) {
+      case ExportType.backup:
+        return '备份';
+      case ExportType.dataPackage:
+        return '数据包';
+      case ExportType.report:
+        return '报告';
+      case ExportType.snapshot:
+        return '页面文档';
+      case ExportType.poster:
+        return '海报';
+    }
+  }
+
+  String _formatLabel(ExportFormat format) {
+    switch (format) {
+      case ExportFormat.sqlite:
+        return 'SQLite';
+      case ExportFormat.json:
+        return 'JSON';
+      case ExportFormat.csv:
+        return 'CSV';
+      case ExportFormat.zip:
+        return 'ZIP';
+      case ExportFormat.markdown:
+        return 'Markdown';
+      case ExportFormat.txt:
+        return 'TXT';
+      case ExportFormat.pdf:
+        return 'PDF';
+      case ExportFormat.png:
+        return 'PNG';
+      case ExportFormat.svg:
+        return 'SVG';
+    }
+  }
+
+  String _mimeType(ExportFormat format) {
+    switch (format) {
+      case ExportFormat.sqlite:
+        return 'application/vnd.sqlite3';
+      case ExportFormat.json:
+        return 'application/json';
+      case ExportFormat.csv:
+        return 'text/csv';
+      case ExportFormat.zip:
+        return 'application/zip';
+      case ExportFormat.markdown:
+        return 'text/markdown';
+      case ExportFormat.txt:
+        return 'text/plain';
+      case ExportFormat.pdf:
+        return 'application/pdf';
+      case ExportFormat.png:
+        return 'image/png';
+      case ExportFormat.svg:
+        return 'image/svg+xml';
     }
   }
 
@@ -659,6 +1028,156 @@ class _ExportCenterPageState extends State<ExportCenterPage> {
     final hour = value.hour.toString().padLeft(2, '0');
     final minute = value.minute.toString().padLeft(2, '0');
     return '$year-$month-$day $hour:$minute';
+  }
+}
+
+class _HistoryFilterBar extends StatelessWidget {
+  const _HistoryFilterBar({
+    required this.query,
+    required this.typeFilter,
+    required this.formatFilter,
+    required this.onQueryChanged,
+    required this.onTypeChanged,
+    required this.onFormatChanged,
+  });
+
+  final String query;
+  final ExportType? typeFilter;
+  final ExportFormat? formatFilter;
+  final ValueChanged<String> onQueryChanged;
+  final ValueChanged<ExportType?> onTypeChanged;
+  final ValueChanged<ExportFormat?> onFormatChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final compact = constraints.maxWidth < 760;
+        final search = TextField(
+          decoration: const InputDecoration(
+            labelText: '搜索历史',
+            prefixIcon: Icon(Icons.search_rounded),
+          ),
+          onChanged: onQueryChanged,
+        );
+        final filters = Wrap(
+          spacing: 10,
+          runSpacing: 10,
+          children: [
+            DropdownButton<ExportType?>(
+              value: typeFilter,
+              hint: const Text('全部类型'),
+              items: const [
+                DropdownMenuItem<ExportType?>(
+                  value: null,
+                  child: Text('全部类型'),
+                ),
+                DropdownMenuItem(
+                  value: ExportType.dataPackage,
+                  child: Text('数据包'),
+                ),
+                DropdownMenuItem(
+                  value: ExportType.report,
+                  child: Text('报告'),
+                ),
+                DropdownMenuItem(
+                  value: ExportType.poster,
+                  child: Text('海报'),
+                ),
+                DropdownMenuItem(
+                  value: ExportType.snapshot,
+                  child: Text('页面文档'),
+                ),
+                DropdownMenuItem(
+                  value: ExportType.backup,
+                  child: Text('备份'),
+                ),
+              ],
+              onChanged: onTypeChanged,
+            ),
+            DropdownButton<ExportFormat?>(
+              value: formatFilter,
+              hint: const Text('全部格式'),
+              items: const [
+                DropdownMenuItem<ExportFormat?>(
+                  value: null,
+                  child: Text('全部格式'),
+                ),
+                DropdownMenuItem(value: ExportFormat.png, child: Text('PNG')),
+                DropdownMenuItem(value: ExportFormat.svg, child: Text('SVG')),
+                DropdownMenuItem(value: ExportFormat.pdf, child: Text('PDF')),
+                DropdownMenuItem(
+                    value: ExportFormat.markdown, child: Text('Markdown')),
+                DropdownMenuItem(value: ExportFormat.txt, child: Text('TXT')),
+                DropdownMenuItem(value: ExportFormat.json, child: Text('JSON')),
+                DropdownMenuItem(value: ExportFormat.csv, child: Text('CSV')),
+                DropdownMenuItem(value: ExportFormat.zip, child: Text('ZIP')),
+                DropdownMenuItem(
+                    value: ExportFormat.sqlite, child: Text('SQLite')),
+              ],
+              onChanged: onFormatChanged,
+            ),
+          ],
+        );
+        if (compact) {
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              search,
+              const SizedBox(height: 12),
+              filters,
+            ],
+          );
+        }
+        return Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            Expanded(child: search),
+            const SizedBox(width: 16),
+            filters,
+          ],
+        );
+      },
+    );
+  }
+}
+
+class _HistoryStatsRow extends StatelessWidget {
+  const _HistoryStatsRow({
+    required this.allItems,
+    required this.filteredItems,
+    required this.typeLabel,
+    required this.formatLabel,
+  });
+
+  final List<ExportHistoryItem> allItems;
+  final List<ExportHistoryItem> filteredItems;
+  final String Function(ExportType type) typeLabel;
+  final String Function(ExportFormat format) formatLabel;
+
+  @override
+  Widget build(BuildContext context) {
+    final typeCounts = <ExportType, int>{};
+    final formatCounts = <ExportFormat, int>{};
+    for (final item in filteredItems) {
+      typeCounts.update(item.type, (value) => value + 1, ifAbsent: () => 1);
+      formatCounts.update(item.format, (value) => value + 1, ifAbsent: () => 1);
+    }
+    final typeEntries = typeCounts.entries.toList()
+      ..sort((a, b) => typeLabel(a.key).compareTo(typeLabel(b.key)));
+    final formatEntries = formatCounts.entries.toList()
+      ..sort((a, b) => formatLabel(a.key).compareTo(formatLabel(b.key)));
+    return Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      children: [
+        _Badge(label: '匹配 ${filteredItems.length} / ${allItems.length}'),
+        for (final entry in typeEntries)
+          _Badge(label: '${typeLabel(entry.key)} ${entry.value}'),
+        for (final entry in formatEntries)
+          _Badge(label: '${formatLabel(entry.key)} ${entry.value}'),
+      ],
+    );
   }
 }
 

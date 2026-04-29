@@ -1,13 +1,13 @@
 use chrono::{Datelike, Local};
 use life_os_core::{
-    AiCommitInput, AiCommitOptions, AiDraftKind, AiParseDraft, AiParseInput, AiService,
-    BackupService, BackupType, CapexCostInput, CostService, CreateAiServiceConfigInput,
+    AiCaptureCommitInput, AiCommitInput, AiCommitOptions, AiDraftKind, AiParseDraft, AiParseInput,
+    AiService, BackupService, BackupType, CapexCostInput, CostService, CreateAiServiceConfigInput,
     CreateCloudSyncConfigInput, CreateExpenseRecordInput, CreateIncomeRecordInput,
     CreateLearningRecordInput, CreateProjectInput, CreateTagInput, CreateTimeRecordInput, Database,
     DemoDataService, DimensionOptionInput, MonthlyCostBaselineInput, ProjectAllocation,
     ProjectService, RecordKind, RecordService, RecurringCostRuleInput, RemoteBackupFile,
-    RemoteDownloadResult, RemoteUploadResult, ReviewService, SnapshotService, SnapshotWindow,
-    cloud::CloudSyncTransport,
+    RemoteDownloadResult, RemoteUploadResult, ReviewNoteDraft, ReviewService, SnapshotService,
+    SnapshotWindow, cloud::CloudSyncTransport,
 };
 use rusqlite::params;
 use std::collections::BTreeMap;
@@ -42,6 +42,7 @@ fn migrations_seed_dimensions_and_default_user() {
         "ai_service_configs",
         "cloud_sync_configs",
         "review_snapshots",
+        "review_notes",
         "dimension_options",
         "metric_snapshot_projects",
     ];
@@ -55,6 +56,56 @@ fn migrations_seed_dimensions_and_default_user() {
             .expect("check table exists");
         assert_eq!(exists, 1, "missing table {table_name}");
     }
+}
+
+#[test]
+fn ai_capture_commit_persists_records_and_review_notes() {
+    let directory = tempdir().expect("tempdir");
+    let database_path = directory.path().join("life_os.db");
+    let record_service = RecordService::new(&database_path);
+    let user = record_service.init_database().expect("init database");
+
+    let mut payload = BTreeMap::new();
+    payload.insert("date".to_string(), "2026-04-29".to_string());
+    payload.insert("description".to_string(), "优化代码功能开发".to_string());
+    payload.insert("category".to_string(), "work".to_string());
+    payload.insert("start_time".to_string(), "17:00".to_string());
+    payload.insert("end_time".to_string(), "21:00".to_string());
+    payload.insert("ai_ratio".to_string(), "40".to_string());
+    payload.insert("efficiency_score".to_string(), "8".to_string());
+    let draft = AiParseDraft::new(AiDraftKind::Time, payload, 0.86, "test", None);
+    let mut note = ReviewNoteDraft::new(
+        "GPT 辅助确实很顺",
+        "GPT 辅助感受",
+        "ai_usage",
+        "GPT 辅助确实很顺",
+        "ai_capture",
+        Some(0.8),
+    );
+    note.occurred_on = Some("2026-04-29".to_string());
+
+    let result = AiService::new(&database_path)
+        .commit_capture(&AiCaptureCommitInput {
+            user_id: user.id.clone(),
+            request_id: None,
+            context_date: Some("2026-04-29".to_string()),
+            drafts: vec![draft],
+            review_notes: vec![note],
+            options: AiCommitOptions::default(),
+        })
+        .expect("commit ai capture");
+
+    assert_eq!(result.committed.len(), 1);
+    assert_eq!(result.committed_notes.len(), 1);
+    assert!(result.failures.is_empty());
+    assert!(result.note_failures.is_empty());
+
+    let report = ReviewService::new(&database_path)
+        .get_daily_review(&user.id, "2026-04-29", "Asia/Shanghai")
+        .expect("daily review");
+    assert_eq!(report.total_work_minutes, 240);
+    assert_eq!(report.review_notes.len(), 1);
+    assert_eq!(report.review_notes[0].note_type, "ai_usage");
 }
 
 #[test]
@@ -1735,6 +1786,35 @@ fn ai_service_rule_parse_config_and_commit_flow() {
             .items
             .iter()
             .any(|item| item.kind == AiDraftKind::Learning)
+    );
+
+    let parse_v2 = ai_service
+        .parse_input_v2(&AiParseInput {
+            user_id: user.id.clone(),
+            raw_text: "2026-04-25 09:00-11:00 Core Upgrade Rust 工作 AI 30 效率 8 价值 9 状态 7"
+                .to_string(),
+            context_date: Some("2026-04-25".to_string()),
+            parser_mode_override: Some(life_os_core::ParserMode::Rule),
+        })
+        .expect("parse input v2");
+    assert_eq!(parse_v2.items.len(), 1);
+    let draft = &parse_v2.items[0];
+    assert_eq!(draft.kind, life_os_core::TypedDraftKind::TimeRecord);
+    assert_eq!(draft.intent, life_os_core::DraftIntent::Record);
+    assert!(draft.fields.contains_key("duration_minutes"));
+    assert!(
+        draft
+            .note
+            .as_deref()
+            .is_some_and(|note| note.contains("Core Upgrade"))
+    );
+    assert!(
+        matches!(
+            draft.validation.status,
+            life_os_core::DraftStatus::CommitReady | life_os_core::DraftStatus::NeedsReview
+        ),
+        "unexpected v2 draft status: {:?}",
+        draft.validation.status
     );
 
     let commit_result = ai_service
