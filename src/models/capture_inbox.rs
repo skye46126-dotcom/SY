@@ -3,8 +3,8 @@ use serde_json::Value;
 
 use crate::error::{LifeOsError, Result};
 use crate::models::{
-    ParsePipelineResult, ParserMode, normalize_code, normalize_optional_string,
-    normalize_required_string, parse_date,
+    AiCaptureCommitResult, ParsePipelineResult, ParserMode, normalize_code,
+    normalize_optional_string, normalize_required_string, parse_date,
 };
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -135,4 +135,60 @@ impl ProcessCaptureInboxInput {
 pub struct CaptureInboxProcessResult {
     pub entry: CaptureInboxEntry,
     pub draft_envelope: ParsePipelineResult,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct ProcessCaptureInboxAndCommitInput {
+    pub user_id: String,
+    pub inbox_id: String,
+    pub parser_mode_override: Option<ParserMode>,
+}
+
+impl ProcessCaptureInboxAndCommitInput {
+    pub fn validate(&self) -> Result<()> {
+        normalize_required_string("user_id", &self.user_id)?;
+        normalize_required_string("inbox_id", &self.inbox_id)?;
+        Ok(())
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct CaptureInboxAutoCommitResult {
+    pub process_result: CaptureInboxProcessResult,
+    pub commit_result: Option<AiCaptureCommitResult>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct PrepareCaptureSessionInput {
+    pub user_id: String,
+    pub inbox_id: Option<String>,
+    pub route_hint: Option<String>,
+    pub record_type_hint: Option<String>,
+    pub mode_hint: Option<String>,
+    pub parser_mode_override: Option<ParserMode>,
+    pub prefill_text: Option<String>,
+}
+
+impl PrepareCaptureSessionInput {
+    pub fn validate(&self) -> Result<()> {
+        normalize_required_string("user_id", &self.user_id)?;
+        Ok(())
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct CaptureSessionProfile {
+    pub user_id: String,
+    pub inbox_id: Option<String>,
+    pub source: Option<String>,
+    pub entry_point: Option<String>,
+    pub route: String,
+    pub mode: String,
+    pub record_type: Option<String>,
+    pub parser_mode: ParserMode,
+    pub context_date: Option<String>,
+    pub prefill_text: Option<String>,
+    pub focus_input: bool,
+    pub auto_commit_capable: bool,
+    pub defaults_applied: Vec<String>,
 }

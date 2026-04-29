@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 
 import '../../app/app.dart';
+import '../../app/app_runtime.dart';
 import '../../features/export/application/export_orchestrator.dart';
 import '../../features/export/domain/export_artifact.dart';
 import '../../features/export/domain/export_range.dart';
@@ -38,8 +39,10 @@ class _TodayPageState extends State<TodayPage> {
   final GlobalKey _exportBoundaryKey = GlobalKey();
   ExportOrchestrator? _exportOrchestrator;
   TodayController? _controller;
+  AppRuntimeController? _runtime;
   bool _hasLoaded = false;
   bool _isExporting = false;
+  int _lastSeenRecordsVersion = -1;
 
   @override
   void didChangeDependencies() {
@@ -47,6 +50,13 @@ class _TodayPageState extends State<TodayPage> {
     _controller ??= TodayController(LifeOsScope.of(context));
     _exportOrchestrator ??=
         ExportOrchestrator(service: LifeOsScope.of(context));
+    final runtime = LifeOsScope.runtimeOf(context);
+    if (!identical(_runtime, runtime)) {
+      _runtime?.removeListener(_handleRuntimeChanged);
+      _runtime = runtime;
+      _runtime?.addListener(_handleRuntimeChanged);
+      _lastSeenRecordsVersion = runtime.recordsVersion;
+    }
     if (_hasLoaded) {
       return;
     }
@@ -64,8 +74,25 @@ class _TodayPageState extends State<TodayPage> {
 
   @override
   void dispose() {
+    _runtime?.removeListener(_handleRuntimeChanged);
     _controller?.dispose();
     super.dispose();
+  }
+
+  void _handleRuntimeChanged() {
+    final runtime = _runtime;
+    if (runtime == null || !mounted) {
+      return;
+    }
+    if (_lastSeenRecordsVersion == runtime.recordsVersion) {
+      return;
+    }
+    _lastSeenRecordsVersion = runtime.recordsVersion;
+    _controller?.load(
+      userId: runtime.userId,
+      anchorDate: runtime.todayDate,
+      timezone: runtime.timezone,
+    );
   }
 
   @override

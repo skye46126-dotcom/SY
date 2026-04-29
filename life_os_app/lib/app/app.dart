@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 
 import '../features/today/today_page.dart';
 import '../services/launch_route_bridge.dart';
+import '../services/quick_capture_shell_bridge.dart';
+import '../services/startup_trace.dart';
 import '../shared/view_state.dart';
 import '../shared/widgets/module_page.dart';
 import '../shared/widgets/state_views.dart';
@@ -63,12 +65,14 @@ class _LifeOsAppState extends State<LifeOsApp> {
   late final AppRuntimeController _runtime;
   late final GlobalKey<NavigatorState> _navigatorKey;
   late final LaunchRouteBridge _launchRouteBridge;
+  late final QuickCaptureShellBridge _quickCaptureShellBridge;
   StreamSubscription<String>? _launchRouteSubscription;
   String? _pendingLaunchRoute;
 
   @override
   void initState() {
     super.initState();
+    StartupTrace.mark('app.init_state');
     _navigatorKey = GlobalKey<NavigatorState>();
     _service = AppService(
       api: widget.api ??
@@ -79,10 +83,15 @@ class _LifeOsAppState extends State<LifeOsApp> {
     _runtime = AppRuntimeController(_service);
     _runtime.addListener(_applyPendingLaunchRoute);
     _launchRouteBridge = LaunchRouteBridge();
+    _quickCaptureShellBridge = QuickCaptureShellBridge(
+      service: _service,
+      runtime: _runtime,
+    );
     _launchRouteSubscription = _launchRouteBridge.routes.listen(
       _handleIncomingLaunchRoute,
     );
     _launchRouteBridge.consumeLaunchRoute().then(_handleIncomingLaunchRoute);
+    StartupTrace.mark('runtime.initialize.requested');
     _runtime.initialize();
   }
 
@@ -92,6 +101,7 @@ class _LifeOsAppState extends State<LifeOsApp> {
     if (launchRouteSubscription != null) {
       unawaited(launchRouteSubscription.cancel());
     }
+    unawaited(_quickCaptureShellBridge.dispose());
     unawaited(_launchRouteBridge.dispose());
     _runtime.removeListener(_applyPendingLaunchRoute);
     _runtime.dispose();
@@ -102,13 +112,14 @@ class _LifeOsAppState extends State<LifeOsApp> {
     if (route == null) {
       return;
     }
+    StartupTrace.mark('launch.route.received $route');
     _pendingLaunchRoute = route;
     _applyPendingLaunchRoute();
   }
 
   void _applyPendingLaunchRoute() {
     final route = _pendingLaunchRoute;
-    if (route == null || _runtime.state.status != ViewStatus.data) {
+    if (route == null) {
       return;
     }
     final navigator = _navigatorKey.currentState;
@@ -119,11 +130,13 @@ class _LifeOsAppState extends State<LifeOsApp> {
       return;
     }
     _pendingLaunchRoute = null;
+    StartupTrace.mark('launch.route.applied $route');
     navigator.pushNamedAndRemoveUntil(route, (existing) => false);
   }
 
   @override
   Widget build(BuildContext context) {
+    StartupTrace.mark('app.build');
     return LifeOsScope(
       service: _service,
       runtime: _runtime,
@@ -148,6 +161,7 @@ class _RootGate extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    StartupTrace.mark('root_gate.build');
     return AnimatedBuilder(
       animation: runtime,
       builder: (context, _) {

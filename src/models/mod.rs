@@ -21,14 +21,15 @@ mod user;
 pub use ai::{
     AiCaptureCommitInput, AiCaptureCommitResult, AiCommitFailure, AiCommitInput, AiCommitOptions,
     AiCommitResult, AiCommittedRecord, AiDraftKind, AiParseDraft, AiParseInput, AiParseResult,
-    AiProvider, AiServiceConfig, CreateAiServiceConfigInput, DraftDimensionBinding, DraftField,
-    DraftFieldSource, DraftIntent, DraftLinks, DraftProjectLink, DraftStatus, DraftTagLink,
-    DraftValidation, ParseContext, ParsePipelineResult, ParserMode, ReviewableDraft,
-    TypedDraftKind,
+    AiProvider, AiServiceConfig, CommitCaptureDraftEnvelopeInput, CommitReviewableDraftInput,
+    CreateAiServiceConfigInput, DraftDimensionBinding, DraftField, DraftFieldSource, DraftIntent,
+    DraftLinks, DraftProjectLink, DraftStatus, DraftTagLink, DraftValidation, ParseContext,
+    ParsePipelineResult, ParserMode, ReviewableDraft, TypedDraftKind,
 };
 pub use capture_inbox::{
-    CaptureInboxEntry, CaptureInboxProcessResult, CaptureInboxStatus, CreateCaptureInboxEntryInput,
-    ProcessCaptureInboxInput,
+    CaptureInboxAutoCommitResult, CaptureInboxEntry, CaptureInboxProcessResult, CaptureInboxStatus,
+    CaptureSessionProfile, CreateCaptureInboxEntryInput, PrepareCaptureSessionInput,
+    ProcessCaptureInboxAndCommitInput, ProcessCaptureInboxInput,
 };
 pub(crate) use common::{
     normalize_code, normalize_optional_string, normalize_required_string, parse_date,

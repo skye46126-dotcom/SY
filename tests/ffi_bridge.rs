@@ -300,6 +300,182 @@ fn ffi_bridge_can_enqueue_and_process_capture_inbox() {
 }
 
 #[test]
+fn ffi_bridge_can_commit_capture_draft_envelope() {
+    let directory = tempdir().expect("tempdir");
+    let database_path = directory.path().join("life_os.db");
+    let database_path = database_path.to_string_lossy().to_string();
+
+    let user = bridge_call(&database_path, "init_database", json!({}));
+    let user_id = user["id"].as_str().expect("user id").to_string();
+
+    let entry = bridge_call(
+        &database_path,
+        "enqueue_capture_inbox",
+        json!({
+            "user_id": user_id,
+            "source": "quick_settings",
+            "entry_point": "quick_capture",
+            "raw_text": "今天学习 Rust FFI 1小时，效率 8，AI 30",
+            "context_date": "2026-04-25",
+            "route_hint": "/capture?mode=ai",
+            "record_type_hint": "learning",
+            "mode_hint": "ai",
+            "parser_mode_hint": "Rule"
+        }),
+    );
+    let inbox_id = entry["id"].as_str().expect("inbox id").to_string();
+
+    let processed = bridge_call(
+        &database_path,
+        "process_capture_inbox",
+        json!({
+            "user_id": user["id"],
+            "inbox_id": inbox_id,
+        }),
+    );
+
+    let items = processed["draft_envelope"]["items"]
+        .as_array()
+        .expect("items")
+        .iter()
+        .map(|item| {
+            let mut next = item.clone();
+            if let Some(object) = next.as_object_mut() {
+                object.insert("user_confirmed".to_string(), Value::Bool(false));
+            }
+            next
+        })
+        .collect::<Vec<_>>();
+
+    let committed = bridge_call(
+        &database_path,
+        "commit_capture_draft_envelope",
+        json!({
+            "user_id": user["id"],
+            "inbox_id": inbox_id,
+            "request_id": processed["draft_envelope"]["request_id"],
+            "context_date": "2026-04-25",
+            "items": items,
+            "review_notes": processed["draft_envelope"]["review_notes"],
+            "options": {
+                "source": "external",
+                "auto_create_tags": false,
+                "strict_reference_resolution": false
+            }
+        }),
+    );
+
+    assert_eq!(committed["committed"].as_array().map(Vec::len), Some(1));
+    assert_eq!(committed["failures"].as_array().map(Vec::len), Some(0));
+
+    let loaded = bridge_call(
+        &database_path,
+        "get_capture_inbox",
+        json!({
+            "user_id": user["id"],
+            "inbox_id": entry["id"],
+        }),
+    );
+    assert_eq!(loaded["status"].as_str(), Some("committed"));
+}
+
+#[test]
+fn ffi_bridge_can_process_and_auto_commit_capture_inbox() {
+    let directory = tempdir().expect("tempdir");
+    let database_path = directory.path().join("life_os.db");
+    let database_path = database_path.to_string_lossy().to_string();
+
+    let user = bridge_call(&database_path, "init_database", json!({}));
+    let user_id = user["id"].as_str().expect("user id").to_string();
+
+    let entry = bridge_call(
+        &database_path,
+        "enqueue_capture_inbox",
+        json!({
+            "user_id": user_id,
+            "source": "quick_settings",
+            "entry_point": "quick_capture",
+            "raw_text": "今天学习 Rust FFI 1小时，效率 8，AI 30",
+            "context_date": "2026-04-25",
+            "route_hint": "/capture?mode=ai",
+            "record_type_hint": "learning",
+            "mode_hint": "ai",
+            "parser_mode_hint": "Rule"
+        }),
+    );
+
+    let result = bridge_call(
+        &database_path,
+        "process_capture_inbox_and_commit",
+        json!({
+            "user_id": user["id"],
+            "inbox_id": entry["id"],
+        }),
+    );
+
+    assert_eq!(
+        result["commit_result"]["committed"]
+            .as_array()
+            .map(Vec::len),
+        Some(1)
+    );
+    assert_eq!(
+        result["process_result"]["entry"]["id"].as_str(),
+        entry["id"].as_str()
+    );
+
+    let loaded = bridge_call(
+        &database_path,
+        "get_capture_inbox",
+        json!({
+            "user_id": user["id"],
+            "inbox_id": entry["id"],
+        }),
+    );
+    assert_eq!(loaded["status"].as_str(), Some("committed"));
+}
+
+#[test]
+fn ffi_bridge_can_prepare_capture_session_profile() {
+    let directory = tempdir().expect("tempdir");
+    let database_path = directory.path().join("life_os.db");
+    let database_path = database_path.to_string_lossy().to_string();
+
+    let user = bridge_call(&database_path, "init_database", json!({}));
+    let user_id = user["id"].as_str().expect("user id").to_string();
+
+    let entry = bridge_call(
+        &database_path,
+        "enqueue_capture_inbox",
+        json!({
+            "user_id": user_id,
+            "source": "quick_settings",
+            "entry_point": "quick_capture",
+            "raw_text": "今天学习 Rust FFI 1小时，效率 8，AI 30",
+            "context_date": "2026-04-25",
+            "route_hint": "/capture?mode=ai&type=learning"
+        }),
+    );
+
+    let profile = bridge_call(
+        &database_path,
+        "prepare_capture_session",
+        json!({
+            "user_id": user["id"],
+            "inbox_id": entry["id"]
+        }),
+    );
+
+    assert_eq!(profile["mode"].as_str(), Some("ai"));
+    assert_eq!(profile["record_type"].as_str(), Some("learning"));
+    assert_eq!(
+        profile["route"].as_str(),
+        Some("/capture?mode=ai&type=learning")
+    );
+    assert!(profile["focus_input"].as_bool().unwrap_or(false));
+}
+
+#[test]
 fn ffi_bridge_exports_data_package_files_from_rust() {
     let directory = tempdir().expect("tempdir");
     let database_path = directory.path().join("life_os.db");

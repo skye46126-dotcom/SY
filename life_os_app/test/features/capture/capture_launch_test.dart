@@ -32,5 +32,14 @@ void main() {
       expect(config.mode, CaptureLaunchMode.manual);
       expect(config.focusAiInput, isFalse);
     });
+
+    test('parses voice launch mode', () {
+      final config = CaptureLaunchConfig.fromRouteName('/capture?mode=voice');
+
+      expect(config, isNotNull);
+      expect(config!.mode, CaptureLaunchMode.voice);
+      expect(config.focusAiInput, isTrue);
+      expect(config.autoStartVoiceCapture, isTrue);
+    });
   });
 }

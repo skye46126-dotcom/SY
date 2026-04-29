@@ -3,6 +3,7 @@ import 'capture_controller.dart';
 enum CaptureLaunchMode {
   manual,
   ai,
+  voice,
 }
 
 class CaptureLaunchConfig {
@@ -16,7 +17,10 @@ class CaptureLaunchConfig {
   final CaptureLaunchMode mode;
   final String? prefillText;
 
-  bool get focusAiInput => mode == CaptureLaunchMode.ai;
+  bool get focusAiInput =>
+      mode == CaptureLaunchMode.ai || mode == CaptureLaunchMode.voice;
+
+  bool get autoStartVoiceCapture => mode == CaptureLaunchMode.voice;
 
   static CaptureLaunchConfig? fromRouteName(String? routeName) {
     if (routeName == null || routeName.trim().isEmpty) {
@@ -51,6 +55,7 @@ class CaptureLaunchConfig {
   static CaptureLaunchMode _parseMode(String? raw) {
     return switch (raw?.trim().toLowerCase()) {
       'ai' => CaptureLaunchMode.ai,
+      'voice' => CaptureLaunchMode.voice,
       _ => CaptureLaunchMode.manual,
     };
   }

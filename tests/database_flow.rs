@@ -1,7 +1,8 @@
 use chrono::{Datelike, Local};
 use life_os_core::{
     AiCaptureCommitInput, AiCommitInput, AiCommitOptions, AiDraftKind, AiParseDraft, AiParseInput,
-    AiService, BackupService, BackupType, CapexCostInput, CaptureService, CostService,
+    AiService, BackupService, BackupType, CapexCostInput, CaptureService,
+    CommitCaptureDraftEnvelopeInput, CommitReviewableDraftInput, CostService,
     CreateAiServiceConfigInput, CreateCaptureInboxEntryInput, CreateCloudSyncConfigInput,
     CreateExpenseRecordInput, CreateIncomeRecordInput, CreateLearningRecordInput,
     CreateProjectInput, CreateTagInput, CreateTimeRecordInput, Database, DemoDataService,
@@ -109,6 +110,169 @@ fn capture_inbox_can_enqueue_and_process_to_draft_ready() {
         .list_capture_inbox(&user.id, None, 10)
         .expect("list capture inbox");
     assert_eq!(queued.len(), 1);
+}
+
+#[test]
+fn capture_inbox_can_commit_processed_draft_envelope() {
+    let directory = tempdir().expect("tempdir");
+    let database_path = directory.path().join("life_os.db");
+    let record_service = RecordService::new(&database_path);
+    let user = record_service.init_database().expect("init database");
+    let capture_service = CaptureService::new(&database_path);
+
+    let entry = capture_service
+        .enqueue_capture_inbox(&CreateCaptureInboxEntryInput {
+            user_id: user.id.clone(),
+            source: "launcher_shortcut".to_string(),
+            entry_point: "quick_capture".to_string(),
+            raw_text: "今天学习 Rust FFI 1小时，效率 8，AI 30".to_string(),
+            context_date: Some("2026-04-25".to_string()),
+            route_hint: Some("/capture?mode=ai".to_string()),
+            record_type_hint: Some("learning".to_string()),
+            mode_hint: Some("ai".to_string()),
+            parser_mode_hint: Some(life_os_core::ParserMode::Rule),
+            device_context: None,
+        })
+        .expect("enqueue capture inbox");
+
+    let processed = capture_service
+        .process_capture_inbox(&ProcessCaptureInboxInput {
+            user_id: user.id.clone(),
+            inbox_id: entry.id.clone(),
+            parser_mode_override: None,
+        })
+        .expect("process capture inbox");
+    let draft_envelope = processed.draft_envelope;
+    let request_id = draft_envelope.request_id.clone();
+    let items = draft_envelope
+        .items
+        .into_iter()
+        .map(|draft| CommitReviewableDraftInput {
+            draft,
+            user_confirmed: false,
+        })
+        .collect();
+    let review_notes = draft_envelope.review_notes;
+
+    let committed = capture_service
+        .commit_capture_draft_envelope(&CommitCaptureDraftEnvelopeInput {
+            user_id: user.id.clone(),
+            inbox_id: Some(entry.id.clone()),
+            request_id: Some(request_id),
+            context_date: Some("2026-04-25".to_string()),
+            items,
+            review_notes,
+            options: AiCommitOptions::default(),
+        })
+        .expect("commit draft envelope");
+
+    assert_eq!(committed.committed.len(), 1);
+    assert!(committed.failures.is_empty());
+
+    let loaded = capture_service
+        .get_capture_inbox(&user.id, &entry.id)
+        .expect("load capture inbox")
+        .expect("capture inbox entry should exist");
+    assert_eq!(loaded.status.as_str(), "committed");
+}
+
+#[test]
+fn capture_inbox_can_process_and_auto_commit_ready_items() {
+    let directory = tempdir().expect("tempdir");
+    let database_path = directory.path().join("life_os.db");
+    let record_service = RecordService::new(&database_path);
+    let user = record_service.init_database().expect("init database");
+    let capture_service = CaptureService::new(&database_path);
+
+    let entry = capture_service
+        .enqueue_capture_inbox(&CreateCaptureInboxEntryInput {
+            user_id: user.id.clone(),
+            source: "quick_settings".to_string(),
+            entry_point: "quick_capture".to_string(),
+            raw_text: "今天学习 Rust FFI 1小时，效率 8，AI 30".to_string(),
+            context_date: Some("2026-04-25".to_string()),
+            route_hint: Some("/capture?mode=ai".to_string()),
+            record_type_hint: Some("learning".to_string()),
+            mode_hint: Some("ai".to_string()),
+            parser_mode_hint: Some(life_os_core::ParserMode::Rule),
+            device_context: None,
+        })
+        .expect("enqueue capture inbox");
+
+    let result = capture_service
+        .process_capture_inbox_and_commit(&life_os_core::ProcessCaptureInboxAndCommitInput {
+            user_id: user.id.clone(),
+            inbox_id: entry.id.clone(),
+            parser_mode_override: None,
+        })
+        .expect("process and auto commit");
+
+    assert_eq!(result.process_result.entry.id, entry.id);
+    assert!(result.commit_result.is_some());
+    assert_eq!(
+        result
+            .commit_result
+            .as_ref()
+            .and_then(|commit| Some(commit.committed.len())),
+        Some(1)
+    );
+
+    let loaded = capture_service
+        .get_capture_inbox(&user.id, &entry.id)
+        .expect("load capture inbox")
+        .expect("capture inbox entry should exist");
+    assert_eq!(loaded.status.as_str(), "committed");
+}
+
+#[test]
+fn capture_session_profile_resolves_defaults_from_inbox() {
+    let directory = tempdir().expect("tempdir");
+    let database_path = directory.path().join("life_os.db");
+    let record_service = RecordService::new(&database_path);
+    let user = record_service.init_database().expect("init database");
+    let capture_service = CaptureService::new(&database_path);
+
+    let entry = capture_service
+        .enqueue_capture_inbox(&CreateCaptureInboxEntryInput {
+            user_id: user.id.clone(),
+            source: "quick_settings".to_string(),
+            entry_point: "quick_capture".to_string(),
+            raw_text: "今天学习 Rust FFI 1小时，效率 8，AI 30".to_string(),
+            context_date: Some("2026-04-25".to_string()),
+            route_hint: Some("/capture?mode=ai&type=learning".to_string()),
+            record_type_hint: None,
+            mode_hint: None,
+            parser_mode_hint: None,
+            device_context: None,
+        })
+        .expect("enqueue capture inbox");
+
+    let profile = capture_service
+        .prepare_capture_session(&life_os_core::PrepareCaptureSessionInput {
+            user_id: user.id.clone(),
+            inbox_id: Some(entry.id.clone()),
+            route_hint: None,
+            record_type_hint: None,
+            mode_hint: None,
+            parser_mode_override: None,
+            prefill_text: None,
+        })
+        .expect("prepare capture session");
+
+    assert_eq!(profile.route, "/capture?mode=ai&type=learning");
+    assert_eq!(profile.mode, "ai");
+    assert_eq!(profile.record_type.as_deref(), Some("learning"));
+    assert_eq!(
+        profile.prefill_text.as_deref(),
+        Some("今天学习 Rust FFI 1小时，效率 8，AI 30")
+    );
+    assert!(profile.focus_input);
+    assert!(
+        profile
+            .defaults_applied
+            .iter()
+            .any(|item| item == "parser_mode")
+    );
 }
 
 #[test]

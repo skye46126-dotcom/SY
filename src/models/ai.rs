@@ -95,11 +95,17 @@ impl ParserMode {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
 pub enum AiDraftKind {
+    #[serde(alias = "Time")]
     Time,
+    #[serde(alias = "Income")]
     Income,
+    #[serde(alias = "Expense")]
     Expense,
+    #[serde(alias = "Learning")]
     Learning,
+    #[serde(alias = "Unknown")]
     Unknown,
 }
 
@@ -602,6 +608,64 @@ pub struct ParsePipelineResult {
     pub review_notes: Vec<ReviewNoteDraft>,
     pub ignored_context: Vec<IgnoredContext>,
     pub warnings: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct CommitReviewableDraftInput {
+    #[serde(flatten)]
+    pub draft: ReviewableDraft,
+    #[serde(default)]
+    pub user_confirmed: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct CommitCaptureDraftEnvelopeInput {
+    pub user_id: String,
+    pub inbox_id: Option<String>,
+    pub request_id: Option<String>,
+    pub context_date: Option<String>,
+    pub items: Vec<CommitReviewableDraftInput>,
+    pub review_notes: Vec<ReviewNoteDraft>,
+    pub options: AiCommitOptions,
+}
+
+impl CommitCaptureDraftEnvelopeInput {
+    pub fn validate(&self) -> Result<()> {
+        normalize_required_string("user_id", &self.user_id)?;
+        if let Some(context_date) = &self.context_date {
+            parse_date("context_date", context_date)?;
+        }
+        let _ = self.options.normalized_source()?;
+        for note in &self.review_notes {
+            note.validate()?;
+        }
+        if self.items.is_empty() && self.review_notes.is_empty() {
+            return Err(LifeOsError::InvalidInput(
+                "items or review_notes must not be empty".to_string(),
+            ));
+        }
+        Ok(())
+    }
+
+    pub fn resolved_request_id(&self) -> String {
+        self.request_id
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(ToString::to_string)
+            .unwrap_or_else(|| Uuid::now_v7().to_string())
+    }
+
+    pub fn resolved_context_date(&self) -> String {
+        self.context_date
+            .as_deref()
+            .and_then(|value| {
+                parse_date("context_date", value)
+                    .ok()
+                    .map(|_| value.trim().to_string())
+            })
+            .unwrap_or_else(|| Local::now().date_naive().to_string())
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]

@@ -246,7 +246,7 @@ class CaptureController extends ChangeNotifier {
     }
   }
 
-  Future<void> commitAiDrafts({
+  Future<bool> commitAiDrafts({
     required String userId,
     required Map<String, Object?> draftEnvelope,
   }) async {
@@ -295,10 +295,13 @@ class CaptureController extends ChangeNotifier {
       lastAiCommitSummary =
           '已入库：$committed 条；复盘素材：$notes 条；需确认跳过：$needsReview 条；失败：$failures 条';
       submitState = ViewState.ready(null);
+      notifyListeners();
+      return failures == 0;
     } catch (error) {
       submitState = ViewState.error(error.toString());
+      notifyListeners();
+      return false;
     }
-    notifyListeners();
   }
 
   Map<String, Object?> _legacyDraftFromReviewable(Map<String, Object?> item) {

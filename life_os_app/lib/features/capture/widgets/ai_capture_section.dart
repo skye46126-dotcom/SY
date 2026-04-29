@@ -103,6 +103,8 @@ class AiCaptureSection extends StatelessWidget {
               ),
             ],
           ),
+          const SizedBox(height: 10),
+          const _CaptureInputHints(),
           const SizedBox(height: 16),
           switch (aiState.status) {
             ViewStatus.loading => const _LlmParsingView(),
@@ -288,6 +290,12 @@ class _DraftListPreview extends StatelessWidget {
         if (warnings.isNotEmpty) ...[
           const SizedBox(height: 8),
           _WarningBox(warnings: warnings),
+        ],
+        if (needsReviewItems.isNotEmpty || blockedItems.isNotEmpty) ...[
+          const SizedBox(height: 8),
+          const _LightHintBar(
+            message: '优先补红框字段；需确认条目可逐条放行，阻塞条目不会拖住其他入库。',
+          ),
         ],
         const SizedBox(height: 12),
         if (readyItems.isNotEmpty) ...[
@@ -875,36 +883,66 @@ class _DraftItemCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              _Pill(label: _kindLabel(kind), color: _kindColor(kind)),
-              const SizedBox(width: 8),
-              _Pill(label: _statusLabel(status), color: _statusColor(status)),
-              if (canApprove) ...[
-                const SizedBox(width: 8),
-                _Pill(
-                  label: userConfirmed ? '已允许提交' : '待确认',
-                  color: userConfirmed
-                      ? const Color(0xFF2563EB)
-                      : const Color(0xFFD97706),
-                ),
-              ],
-              const Spacer(),
-              if (onConvertToNote != null)
-                IconButton(
-                  onPressed: onConvertToNote,
-                  tooltip: '转复盘',
-                  icon: const Icon(Icons.notes_rounded, size: 18),
-                ),
-              if (onIgnore != null)
-                IconButton(
-                  onPressed: onIgnore,
-                  tooltip: '忽略',
-                  icon: const Icon(Icons.visibility_off_rounded, size: 18),
-                ),
-              Text('#${index + 1}',
-                  style: Theme.of(context).textTheme.labelSmall),
-            ],
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final compact = constraints.maxWidth < 420;
+              final pills = Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  _Pill(label: _kindLabel(kind), color: _kindColor(kind)),
+                  _Pill(
+                    label: _statusLabel(status),
+                    color: _statusColor(status),
+                  ),
+                  if (canApprove)
+                    _Pill(
+                      label: userConfirmed ? '已允许提交' : '待确认',
+                      color: userConfirmed
+                          ? const Color(0xFF2563EB)
+                          : const Color(0xFFD97706),
+                    ),
+                ],
+              );
+              final actions = Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (onConvertToNote != null)
+                    IconButton(
+                      onPressed: onConvertToNote,
+                      tooltip: '转复盘',
+                      icon: const Icon(Icons.notes_rounded, size: 18),
+                    ),
+                  if (onIgnore != null)
+                    IconButton(
+                      onPressed: onIgnore,
+                      tooltip: '忽略',
+                      icon: const Icon(Icons.visibility_off_rounded, size: 18),
+                    ),
+                  Text(
+                    '#${index + 1}',
+                    style: Theme.of(context).textTheme.labelSmall,
+                  ),
+                ],
+              );
+              if (compact) {
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    pills,
+                    const SizedBox(height: 6),
+                    Align(alignment: Alignment.centerRight, child: actions),
+                  ],
+                );
+              }
+              return Row(
+                children: [
+                  Expanded(child: pills),
+                  const SizedBox(width: 8),
+                  actions,
+                ],
+              );
+            },
           ),
           if (canApprove) ...[
             const SizedBox(height: 8),
@@ -1296,6 +1334,8 @@ class _WarningBox extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final preview = warnings.take(2).join('\n');
+    final hiddenCount = warnings.length > 2 ? warnings.length - 2 : 0;
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(10),
@@ -1304,10 +1344,91 @@ class _WarningBox extends StatelessWidget {
         borderRadius: BorderRadius.circular(8),
         border: Border.all(color: const Color(0xFFFFCC80)),
       ),
-      child: Text(
-        warnings.join('\n'),
-        style: Theme.of(context).textTheme.bodySmall,
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Padding(
+            padding: EdgeInsets.only(top: 2),
+            child: Icon(Icons.info_outline_rounded, size: 16),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              hiddenCount > 0
+                  ? '$preview\n其余 $hiddenCount 条已折叠到分区结果中。'
+                  : preview,
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+          ),
+        ],
       ),
+    );
+  }
+}
+
+class _CaptureInputHints extends StatelessWidget {
+  const _CaptureInputHints();
+
+  @override
+  Widget build(BuildContext context) {
+    return Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      children: const [
+        _HintChip(label: '时间段：09:00-11:00'),
+        _HintChip(label: '时长：背单词 50 分钟'),
+        _HintChip(label: '金额：午饭 18 元'),
+        _HintChip(label: '反思单独一行'),
+      ],
+    );
+  }
+}
+
+class _HintChip extends StatelessWidget {
+  const _HintChip({required this.label});
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: const Color(0xFFF3F6FF),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: const Color(0xFFD8E2FF)),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        child: Text(
+          label,
+          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: const Color(0xFF4C6FE7),
+                fontWeight: FontWeight.w600,
+              ),
+        ),
+      ),
+    );
+  }
+}
+
+class _LightHintBar extends StatelessWidget {
+  const _LightHintBar({required this.message});
+
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        const Icon(Icons.subdirectory_arrow_right_rounded, size: 16),
+        const SizedBox(width: 6),
+        Expanded(
+          child: Text(
+            message,
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+        ),
+      ],
     );
   }
 }

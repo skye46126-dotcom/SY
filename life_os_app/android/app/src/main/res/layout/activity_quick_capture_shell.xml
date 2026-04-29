@@ -1,0 +1,72 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@drawable/widget_quick_capture_bg"
+    android:orientation="vertical"
+    android:padding="20dp">
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="@string/quick_capture_shell_eyebrow"
+        android:textAllCaps="true"
+        android:textColor="#CCFFFFFF"
+        android:textSize="11sp" />
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="6dp"
+        android:text="@string/quick_capture_shell_title"
+        android:textColor="#FFFFFFFF"
+        android:textSize="24sp"
+        android:textStyle="bold" />
+
+    <TextView
+        android:id="@+id/quick_capture_status"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:text="@string/quick_capture_ready"
+        android:textColor="#E6FFFFFF"
+        android:textSize="13sp" />
+
+    <EditText
+        android:id="@+id/quick_capture_input"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_marginTop="16dp"
+        android:layout_weight="1"
+        android:background="@drawable/widget_quick_capture_chip"
+        android:gravity="top|start"
+        android:hint="@string/quick_capture_input_hint"
+        android:inputType="textMultiLine|textCapSentences"
+        android:minLines="8"
+        android:padding="14dp"
+        android:textColor="#FF0F172A"
+        android:textColorHint="#990F172A" />
+
+    <ProgressBar
+        android:id="@+id/quick_capture_progress"
+        style="?android:attr/progressBarStyleHorizontal"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="16dp"
+        android:indeterminate="true"
+        android:visibility="gone" />
+
+    <Button
+        android:id="@+id/quick_capture_submit"
+        android:layout_width="match_parent"
+        android:layout_height="48dp"
+        android:layout_marginTop="16dp"
+        android:text="@string/quick_capture_submit" />
+
+    <Button
+        android:id="@+id/quick_capture_open_full"
+        android:layout_width="match_parent"
+        android:layout_height="48dp"
+        android:layout_marginTop="10dp"
+        android:text="@string/quick_capture_open_full" />
+</LinearLayout>

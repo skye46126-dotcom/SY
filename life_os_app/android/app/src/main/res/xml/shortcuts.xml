@@ -9,8 +9,8 @@
         <intent
             android:action="android.intent.action.VIEW"
             android:targetPackage="com.example.life_os_app"
-            android:targetClass="com.example.life_os_app.MainActivity"
-            android:data="skyeos://capture?mode=ai" />
+            android:targetClass="com.example.life_os_app.QuickCaptureShellActivity"
+            android:data="skyeos://native-shell?mode=ai" />
     </shortcut>
     <shortcut
         android:shortcutId="capture_time"
@@ -21,7 +21,7 @@
         <intent
             android:action="android.intent.action.VIEW"
             android:targetPackage="com.example.life_os_app"
-            android:targetClass="com.example.life_os_app.MainActivity"
+            android:targetClass="com.example.life_os_app.QuickCaptureActivity"
             android:data="skyeos://capture?type=time&amp;mode=manual" />
     </shortcut>
     <shortcut
@@ -33,7 +33,7 @@
         <intent
             android:action="android.intent.action.VIEW"
             android:targetPackage="com.example.life_os_app"
-            android:targetClass="com.example.life_os_app.MainActivity"
+            android:targetClass="com.example.life_os_app.QuickCaptureActivity"
             android:data="skyeos://capture?type=learning&amp;mode=manual" />
     </shortcut>
 </shortcuts>

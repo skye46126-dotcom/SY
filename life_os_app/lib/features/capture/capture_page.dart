@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 
 import '../../app/app.dart';
 import '../../models/config_models.dart';
+import '../../services/native_voice_capture.dart';
+import '../../services/startup_trace.dart';
 import '../../shared/widgets/module_page.dart';
 import 'capture_launch.dart';
 import 'capture_controller.dart';
@@ -30,6 +32,8 @@ class _CapturePageState extends State<CapturePage> {
   final Set<String> _selectedTagIds = {};
   bool _metadataLoaded = false;
   bool _launchConfigApplied = false;
+  bool _voiceCaptureStarted = false;
+  bool _bootstrapMarked = false;
   CaptureType? _lastAppliedType;
 
   @override
@@ -44,25 +48,6 @@ class _CapturePageState extends State<CapturePage> {
     super.didChangeDependencies();
     _controller ??= CaptureController(LifeOsScope.of(context));
     _applyLaunchConfig();
-    if (!_metadataLoaded) {
-      _metadataLoaded = true;
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!mounted) return;
-        _controller!
-            .loadMetadata(
-          userId: LifeOsScope.runtimeOf(context).userId,
-        )
-            .then((_) {
-          if (!mounted) return;
-          _applyDefaults(
-            type: _controller!.selectedType,
-            metadata: _controller!.metadata,
-            anchorDate: LifeOsScope.runtimeOf(context).todayDate,
-            force: true,
-          );
-        });
-      });
-    }
   }
 
   @override
@@ -88,11 +73,23 @@ class _CapturePageState extends State<CapturePage> {
     }
 
     final runtime = LifeOsScope.runtimeOf(context);
+    final runtimeReady = runtime.isReady;
     final date = runtime.todayDate;
 
     return AnimatedBuilder(
-      animation: controller,
+      animation: Listenable.merge([controller, runtime]),
       builder: (context, _) {
+        _ensureMetadataLoaded(runtime, controller);
+        if (!runtimeReady) {
+          if (!_bootstrapMarked) {
+            _bootstrapMarked = true;
+            StartupTrace.mark('capture.bootstrap.visible');
+          }
+          return _CaptureBootstrapView(
+            launchConfig: widget.launchConfig,
+          );
+        }
+        StartupTrace.mark('capture.page.ready');
         _applyDefaults(
           type: controller.selectedType,
           metadata: controller.metadata,
@@ -170,6 +167,7 @@ class _CapturePageState extends State<CapturePage> {
                   if (!mounted || !success) {
                     return;
                   }
+                  runtime.markRecordsChanged();
                   _resetAfterSubmit(
                     type: controller.selectedType,
                     metadata: controller.metadata,
@@ -198,10 +196,17 @@ class _CapturePageState extends State<CapturePage> {
                 if (draft == null) {
                   return;
                 }
-                controller.commitAiDrafts(
+                controller
+                    .commitAiDrafts(
                   userId: runtime.userId,
                   draftEnvelope: draft,
-                );
+                )
+                    .then((success) {
+                  if (!mounted || !success) {
+                    return;
+                  }
+                  runtime.markRecordsChanged();
+                });
               },
               optionResolver: controller.optionsFor,
               sourceSuggestions: controller.incomeSourceSuggestions,
@@ -238,6 +243,77 @@ class _CapturePageState extends State<CapturePage> {
         }
         _aiInputFocusNode.requestFocus();
       });
+    }
+    if (config.autoStartVoiceCapture && !_voiceCaptureStarted) {
+      _voiceCaptureStarted = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) {
+          return;
+        }
+        _startVoiceCapture();
+      });
+    }
+  }
+
+  void _ensureMetadataLoaded(
+    dynamic runtime,
+    CaptureController controller,
+  ) {
+    if (_metadataLoaded || !runtime.isReady) {
+      return;
+    }
+    _metadataLoaded = true;
+    StartupTrace.mark('capture.metadata.load.start');
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      controller
+          .loadMetadata(
+        userId: runtime.userId,
+      )
+          .then((_) {
+        if (!mounted) return;
+        StartupTrace.mark('capture.metadata.load.ready');
+        _applyDefaults(
+          type: controller.selectedType,
+          metadata: controller.metadata,
+          anchorDate: runtime.todayDate,
+          force: true,
+        );
+      });
+    });
+  }
+
+  Future<void> _startVoiceCapture() async {
+    final controller = _controller;
+    if (controller == null) {
+      return;
+    }
+    try {
+      final transcript = await NativeVoiceCapture.capture(
+        prompt: '开始语音快录',
+      );
+      if (!mounted) {
+        return;
+      }
+      if (transcript == null) {
+        _aiInputFocusNode.requestFocus();
+        return;
+      }
+      _aiInputController.text = transcript;
+      _aiInputFocusNode.requestFocus();
+      final runtime = LifeOsScope.runtimeOf(context);
+      await controller.parseAiInput(
+        userId: runtime.userId,
+        rawInput: transcript,
+        contextDate: runtime.todayDate,
+      );
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('语音快录启动失败：$error')),
+      );
     }
   }
 
@@ -370,5 +446,55 @@ class _CapturePageState extends State<CapturePage> {
     final nextHour = normalized ~/ 60;
     final nextMinute = normalized % 60;
     return '${nextHour.toString().padLeft(2, '0')}:${nextMinute.toString().padLeft(2, '0')}';
+  }
+}
+
+class _CaptureBootstrapView extends StatelessWidget {
+  const _CaptureBootstrapView({
+    required this.launchConfig,
+  });
+
+  final CaptureLaunchConfig? launchConfig;
+
+  @override
+  Widget build(BuildContext context) {
+    final prefillText = launchConfig?.prefillText?.trim();
+    return ModulePage(
+      title: '快速录入中心',
+      subtitle: 'Capture Bootstrap',
+      children: [
+        const LinearProgressIndicator(),
+        const SizedBox(height: 16),
+        Text(
+          launchConfig?.mode == CaptureLaunchMode.voice
+              ? '正在准备语音快录环境'
+              : '正在准备快录环境',
+          style: Theme.of(context).textTheme.titleMedium,
+        ),
+        const SizedBox(height: 8),
+        Text(
+          '应用会先显示快录壳，再异步初始化数据库与录入元数据。',
+          style: Theme.of(context).textTheme.bodyMedium,
+        ),
+        if (prefillText != null && prefillText.isNotEmpty) ...[
+          const SizedBox(height: 16),
+          Text(
+            '待录入内容',
+            style: Theme.of(context).textTheme.labelLarge,
+          ),
+          const SizedBox(height: 8),
+          DecoratedBox(
+            decoration: BoxDecoration(
+              color: Theme.of(context).colorScheme.surfaceContainerHighest,
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.all(12),
+              child: Text(prefillText),
+            ),
+          ),
+        ],
+      ],
+    );
   }
 }

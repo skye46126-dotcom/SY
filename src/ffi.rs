@@ -7,11 +7,12 @@ use serde_json::Value;
 use crate::error::LifeOsError;
 use crate::models::{
     AiCaptureCommitInput, AiCommitInput, AiParseInput, CapexCostInput, CaptureInboxStatus,
-    CreateAiServiceConfigInput, CreateCaptureInboxEntryInput, CreateCloudSyncConfigInput,
-    CreateExpenseRecordInput, CreateIncomeRecordInput, CreateLearningRecordInput,
-    CreateProjectInput, CreateReviewNoteInput, CreateTagInput, CreateTimeRecordInput,
-    DimensionOptionInput, MonthlyCostBaselineInput, ProcessCaptureInboxInput, RecordKind,
-    RecurringCostRuleInput, UpdateOperatingSettingsInput,
+    CommitCaptureDraftEnvelopeInput, CreateAiServiceConfigInput, CreateCaptureInboxEntryInput,
+    CreateCloudSyncConfigInput, CreateExpenseRecordInput, CreateIncomeRecordInput,
+    CreateLearningRecordInput, CreateProjectInput, CreateReviewNoteInput, CreateTagInput,
+    CreateTimeRecordInput, DimensionOptionInput, MonthlyCostBaselineInput,
+    PrepareCaptureSessionInput, ProcessCaptureInboxAndCommitInput, ProcessCaptureInboxInput,
+    RecordKind, RecurringCostRuleInput, UpdateOperatingSettingsInput,
 };
 use crate::services::{
     AiService, BackupService, CaptureService, CostService, DataPackageExportInput, DemoDataService,
@@ -546,6 +547,27 @@ fn invoke_inner(
             let request: ProcessCaptureInboxInput = parse_payload(payload_json)?;
             let data = CaptureService::new(database_path)
                 .process_capture_inbox(&request)
+                .map_err(BridgeInvokeError::from_core)?;
+            Ok(success_response(data))
+        }
+        "process_capture_inbox_and_commit" => {
+            let request: ProcessCaptureInboxAndCommitInput = parse_payload(payload_json)?;
+            let data = CaptureService::new(database_path)
+                .process_capture_inbox_and_commit(&request)
+                .map_err(BridgeInvokeError::from_core)?;
+            Ok(success_response(data))
+        }
+        "prepare_capture_session" => {
+            let request: PrepareCaptureSessionInput = parse_payload(payload_json)?;
+            let data = CaptureService::new(database_path)
+                .prepare_capture_session(&request)
+                .map_err(BridgeInvokeError::from_core)?;
+            Ok(success_response(data))
+        }
+        "commit_capture_draft_envelope" => {
+            let request: CommitCaptureDraftEnvelopeInput = parse_payload(payload_json)?;
+            let data = CaptureService::new(database_path)
+                .commit_capture_draft_envelope(&request)
                 .map_err(BridgeInvokeError::from_core)?;
             Ok(success_response(data))
         }

@@ -149,7 +149,13 @@ class NativeRustApi implements RustApi {
 
   @override
   Future<UserProfileModel> initDatabase() async {
-    final data = _call('init_database', const {});
+    final data = await Isolate.run(
+      () => _callWithLibrary(
+        databasePath: databasePath,
+        method: 'init_database',
+        payload: const {},
+      ),
+    );
     return UserProfileModel.fromJson((data as Map).cast<String, dynamic>());
   }
 

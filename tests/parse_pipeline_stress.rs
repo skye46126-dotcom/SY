@@ -353,3 +353,95 @@ fn ai_capture_commit_rejects_learning_default_duration() {
             .contains("explicit duration or complete time window")
     );
 }
+
+#[test]
+fn ai_draft_kind_accepts_snake_case_and_legacy_pascal_case() {
+    let lower: life_os_core::AiCaptureCommitInput = serde_json::from_value(serde_json::json!({
+        "user_id": "u1",
+        "context_date": "2026-04-29",
+        "drafts": [{
+            "draft_id": "d1",
+            "kind": "time",
+            "payload": {"date": "2026-04-29"},
+            "confidence": 0.5,
+            "source": "test",
+            "warning": null
+        }],
+        "review_notes": [],
+        "options": {
+            "source": "external",
+            "auto_create_tags": false,
+            "strict_reference_resolution": false
+        }
+    }))
+    .expect("snake_case kind should parse");
+    assert_eq!(lower.drafts[0].kind.as_str(), "time");
+
+    let upper: life_os_core::AiCaptureCommitInput = serde_json::from_value(serde_json::json!({
+        "user_id": "u1",
+        "context_date": "2026-04-29",
+        "drafts": [{
+            "draft_id": "d1",
+            "kind": "Time",
+            "payload": {"date": "2026-04-29"},
+            "confidence": 0.5,
+            "source": "test",
+            "warning": null
+        }],
+        "review_notes": [],
+        "options": {
+            "source": "external",
+            "auto_create_tags": false,
+            "strict_reference_resolution": false
+        }
+    }))
+    .expect("legacy PascalCase kind should parse");
+    assert_eq!(upper.drafts[0].kind.as_str(), "time");
+}
+
+#[test]
+fn ai_capture_commit_accepts_snake_case_time_kind_at_backend_boundary() {
+    let directory = tempdir().expect("tempdir");
+    let database_path = directory.path().join("life_os.db");
+    let record_service = RecordService::new(&database_path);
+    let user = record_service.init_database().expect("init database");
+    let service = AiService::new(&database_path);
+
+    let payload = serde_json::json!({
+        "user_id": user.id,
+        "context_date": "2026-04-29",
+        "drafts": [{
+            "draft_id": "d1",
+            "kind": "time",
+            "payload": {
+                "date": "2026-04-29",
+                "category": "work",
+                "description": "协议边界测试"
+            },
+            "confidence": 0.5,
+            "source": "test",
+            "warning": null
+        }],
+        "review_notes": [],
+        "options": {
+            "source": "external",
+            "auto_create_tags": false,
+            "strict_reference_resolution": false
+        }
+    });
+
+    let input: life_os_core::AiCaptureCommitInput =
+        serde_json::from_value(payload).expect("snake_case kind should parse at backend boundary");
+
+    let result = service
+        .commit_capture(&input)
+        .expect("commit should reach business layer instead of serde failing");
+
+    assert!(result.committed.is_empty());
+    assert_eq!(result.failures.len(), 1);
+    assert!(
+        result.failures[0]
+            .message
+            .contains("explicit start_time and end_time")
+    );
+}

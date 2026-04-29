@@ -218,6 +218,38 @@ impl CaptureInboxRepository {
             LifeOsError::InvalidInput(format!("capture inbox entry not found: {inbox_id}"))
         })
     }
+
+    pub fn mark_committed(
+        connection: &mut Connection,
+        user_id: &str,
+        inbox_id: &str,
+        request_id: Option<&str>,
+        warnings: &[String],
+    ) -> Result<CaptureInboxEntry> {
+        ensure_user_exists(connection, user_id)?;
+        let now = now_string();
+        let warnings_json = serde_json::to_string(warnings)
+            .map_err(|error| LifeOsError::InvalidInput(format!("serialize warnings: {error}")))?;
+        let updated = connection.execute(
+            "UPDATE capture_inbox
+             SET status = 'committed',
+                 request_id = COALESCE(?3, request_id),
+                 warnings_json = ?4,
+                 error_message = NULL,
+                 processed_at = ?5,
+                 updated_at = ?5
+             WHERE user_id = ?1 AND id = ?2",
+            params![user_id, inbox_id, request_id, warnings_json, now],
+        )?;
+        if updated == 0 {
+            return Err(LifeOsError::InvalidInput(format!(
+                "capture inbox entry not found: {inbox_id}"
+            )));
+        }
+        Self::get(connection, user_id, inbox_id)?.ok_or_else(|| {
+            LifeOsError::InvalidInput(format!("capture inbox entry not found: {inbox_id}"))
+        })
+    }
 }
 
 fn map_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<CaptureInboxEntry> {
