@@ -1,10 +1,11 @@
 use chrono::{Datelike, Local};
 use life_os_core::{
     AiCaptureCommitInput, AiCommitInput, AiCommitOptions, AiDraftKind, AiParseDraft, AiParseInput,
-    AiService, BackupService, BackupType, CapexCostInput, CostService, CreateAiServiceConfigInput,
-    CreateCloudSyncConfigInput, CreateExpenseRecordInput, CreateIncomeRecordInput,
-    CreateLearningRecordInput, CreateProjectInput, CreateTagInput, CreateTimeRecordInput, Database,
-    DemoDataService, DimensionOptionInput, MonthlyCostBaselineInput, ProjectAllocation,
+    AiService, BackupService, BackupType, CapexCostInput, CaptureService, CostService,
+    CreateAiServiceConfigInput, CreateCaptureInboxEntryInput, CreateCloudSyncConfigInput,
+    CreateExpenseRecordInput, CreateIncomeRecordInput, CreateLearningRecordInput,
+    CreateProjectInput, CreateTagInput, CreateTimeRecordInput, Database, DemoDataService,
+    DimensionOptionInput, MonthlyCostBaselineInput, ProcessCaptureInboxInput, ProjectAllocation,
     ProjectService, RecordKind, RecordService, RecurringCostRuleInput, RemoteBackupFile,
     RemoteDownloadResult, RemoteUploadResult, ReviewNoteDraft, ReviewService, SnapshotService,
     SnapshotWindow, cloud::CloudSyncTransport,
@@ -43,6 +44,7 @@ fn migrations_seed_dimensions_and_default_user() {
         "cloud_sync_configs",
         "review_snapshots",
         "review_notes",
+        "capture_inbox",
         "dimension_options",
         "metric_snapshot_projects",
     ];
@@ -56,6 +58,57 @@ fn migrations_seed_dimensions_and_default_user() {
             .expect("check table exists");
         assert_eq!(exists, 1, "missing table {table_name}");
     }
+}
+
+#[test]
+fn capture_inbox_can_enqueue_and_process_to_draft_ready() {
+    let directory = tempdir().expect("tempdir");
+    let database_path = directory.path().join("life_os.db");
+    let record_service = RecordService::new(&database_path);
+    let user = record_service.init_database().expect("init database");
+    let capture_service = CaptureService::new(&database_path);
+
+    let entry = capture_service
+        .enqueue_capture_inbox(&CreateCaptureInboxEntryInput {
+            user_id: user.id.clone(),
+            source: "launcher_shortcut".to_string(),
+            entry_point: "quick_capture".to_string(),
+            raw_text: "今天学习 Rust FFI 1小时，效率 8，AI 30".to_string(),
+            context_date: Some("2026-04-25".to_string()),
+            route_hint: Some("/capture?mode=ai".to_string()),
+            record_type_hint: Some("learning".to_string()),
+            mode_hint: Some("ai".to_string()),
+            parser_mode_hint: Some(life_os_core::ParserMode::Rule),
+            device_context: None,
+        })
+        .expect("enqueue capture inbox");
+
+    let processed = capture_service
+        .process_capture_inbox(&ProcessCaptureInboxInput {
+            user_id: user.id.clone(),
+            inbox_id: entry.id.clone(),
+            parser_mode_override: None,
+        })
+        .expect("process capture inbox");
+
+    assert_eq!(processed.entry.status.as_str(), "draft_ready");
+    assert_eq!(processed.draft_envelope.items.len(), 1);
+    assert_eq!(
+        processed.draft_envelope.items[0].kind,
+        life_os_core::TypedDraftKind::LearningRecord
+    );
+
+    let loaded = capture_service
+        .get_capture_inbox(&user.id, &entry.id)
+        .expect("load capture inbox")
+        .expect("capture inbox entry should exist");
+    assert_eq!(loaded.status.as_str(), "draft_ready");
+    assert!(loaded.draft_envelope.is_some());
+
+    let queued = capture_service
+        .list_capture_inbox(&user.id, None, 10)
+        .expect("list capture inbox");
+    assert_eq!(queued.len(), 1);
 }
 
 #[test]

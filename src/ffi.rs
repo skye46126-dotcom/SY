@@ -6,15 +6,16 @@ use serde_json::Value;
 
 use crate::error::LifeOsError;
 use crate::models::{
-    AiCaptureCommitInput, AiCommitInput, AiParseInput, CapexCostInput, CreateAiServiceConfigInput,
-    CreateCloudSyncConfigInput, CreateExpenseRecordInput, CreateIncomeRecordInput,
-    CreateLearningRecordInput, CreateProjectInput, CreateReviewNoteInput, CreateTagInput,
-    CreateTimeRecordInput, DimensionOptionInput, MonthlyCostBaselineInput, RecordKind,
+    AiCaptureCommitInput, AiCommitInput, AiParseInput, CapexCostInput, CaptureInboxStatus,
+    CreateAiServiceConfigInput, CreateCaptureInboxEntryInput, CreateCloudSyncConfigInput,
+    CreateExpenseRecordInput, CreateIncomeRecordInput, CreateLearningRecordInput,
+    CreateProjectInput, CreateReviewNoteInput, CreateTagInput, CreateTimeRecordInput,
+    DimensionOptionInput, MonthlyCostBaselineInput, ProcessCaptureInboxInput, RecordKind,
     RecurringCostRuleInput, UpdateOperatingSettingsInput,
 };
 use crate::services::{
-    AiService, BackupService, CostService, DataPackageExportInput, DemoDataService, ExportService,
-    ProjectService, RecordService, ReviewNoteService, ReviewService, ShareService,
+    AiService, BackupService, CaptureService, CostService, DataPackageExportInput, DemoDataService,
+    ExportService, ProjectService, RecordService, ReviewNoteService, ReviewService, ShareService,
     ShareTargetInput, SnapshotService,
 };
 
@@ -431,6 +432,19 @@ struct DeleteProjectRequest {
     project_id: String,
 }
 
+#[derive(Debug, serde::Deserialize)]
+struct ListCaptureInboxRequest {
+    user_id: String,
+    status_filter: Option<String>,
+    limit: Option<usize>,
+}
+
+#[derive(Debug, serde::Deserialize)]
+struct GetCaptureInboxRequest {
+    user_id: String,
+    inbox_id: String,
+}
+
 fn success_response<T: Serialize>(data: T) -> String {
     serde_json::to_string(&BridgeResponse {
         ok: true,
@@ -498,6 +512,40 @@ fn invoke_inner(
             let request: UserScopedRequest = parse_payload(payload_json)?;
             let data = DemoDataService::new(database_path)
                 .clear_demo_data(&request.user_id)
+                .map_err(BridgeInvokeError::from_core)?;
+            Ok(success_response(data))
+        }
+        "enqueue_capture_inbox" => {
+            let request: CreateCaptureInboxEntryInput = parse_payload(payload_json)?;
+            let data = CaptureService::new(database_path)
+                .enqueue_capture_inbox(&request)
+                .map_err(BridgeInvokeError::from_core)?;
+            Ok(success_response(data))
+        }
+        "list_capture_inbox" => {
+            let request: ListCaptureInboxRequest = parse_payload(payload_json)?;
+            let status_filter = request
+                .status_filter
+                .as_deref()
+                .map(CaptureInboxStatus::from_str)
+                .transpose()
+                .map_err(BridgeInvokeError::from_core)?;
+            let data = CaptureService::new(database_path)
+                .list_capture_inbox(&request.user_id, status_filter, request.limit.unwrap_or(20))
+                .map_err(BridgeInvokeError::from_core)?;
+            Ok(success_response(data))
+        }
+        "get_capture_inbox" => {
+            let request: GetCaptureInboxRequest = parse_payload(payload_json)?;
+            let data = CaptureService::new(database_path)
+                .get_capture_inbox(&request.user_id, &request.inbox_id)
+                .map_err(BridgeInvokeError::from_core)?;
+            Ok(success_response(data))
+        }
+        "process_capture_inbox" => {
+            let request: ProcessCaptureInboxInput = parse_payload(payload_json)?;
+            let data = CaptureService::new(database_path)
+                .process_capture_inbox(&request)
                 .map_err(BridgeInvokeError::from_core)?;
             Ok(success_response(data))
         }

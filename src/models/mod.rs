@@ -1,4 +1,5 @@
 mod ai;
+mod capture_inbox;
 mod common;
 mod cost;
 mod expense_record;
@@ -24,6 +25,10 @@ pub use ai::{
     DraftFieldSource, DraftIntent, DraftLinks, DraftProjectLink, DraftStatus, DraftTagLink,
     DraftValidation, ParseContext, ParsePipelineResult, ParserMode, ReviewableDraft,
     TypedDraftKind,
+};
+pub use capture_inbox::{
+    CaptureInboxEntry, CaptureInboxProcessResult, CaptureInboxStatus, CreateCaptureInboxEntryInput,
+    ProcessCaptureInboxInput,
 };
 pub(crate) use common::{
     normalize_code, normalize_optional_string, normalize_required_string, parse_date,

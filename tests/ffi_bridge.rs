@@ -233,6 +233,73 @@ fn ffi_bridge_can_return_v2_parse_drafts() {
 }
 
 #[test]
+fn ffi_bridge_can_enqueue_and_process_capture_inbox() {
+    let directory = tempdir().expect("tempdir");
+    let database_path = directory.path().join("life_os.db");
+    let database_path = database_path.to_string_lossy().to_string();
+
+    let user = bridge_call(&database_path, "init_database", json!({}));
+    let user_id = user["id"].as_str().expect("user id").to_string();
+
+    let entry = bridge_call(
+        &database_path,
+        "enqueue_capture_inbox",
+        json!({
+            "user_id": user_id,
+            "source": "quick_settings",
+            "entry_point": "quick_capture",
+            "raw_text": "今天学习 Rust FFI 1小时，效率 8，AI 30",
+            "context_date": "2026-04-25",
+            "route_hint": "/capture?mode=ai",
+            "record_type_hint": "learning",
+            "mode_hint": "ai",
+            "parser_mode_hint": "Rule",
+            "device_context": {
+                "device": "test"
+            }
+        }),
+    );
+
+    let inbox_id = entry["id"].as_str().expect("inbox id");
+    assert_eq!(entry["status"].as_str(), Some("queued"));
+
+    let processed = bridge_call(
+        &database_path,
+        "process_capture_inbox",
+        json!({
+            "user_id": user["id"],
+            "inbox_id": inbox_id,
+        }),
+    );
+
+    assert_eq!(processed["entry"]["status"].as_str(), Some("draft_ready"));
+    assert_eq!(
+        processed["draft_envelope"]["items"][0]["kind"].as_str(),
+        Some("learning_record")
+    );
+
+    let loaded = bridge_call(
+        &database_path,
+        "get_capture_inbox",
+        json!({
+            "user_id": user["id"],
+            "inbox_id": inbox_id,
+        }),
+    );
+    assert_eq!(loaded["status"].as_str(), Some("draft_ready"));
+
+    let listed = bridge_call(
+        &database_path,
+        "list_capture_inbox",
+        json!({
+            "user_id": user["id"],
+            "limit": 10,
+        }),
+    );
+    assert_eq!(listed.as_array().map(Vec::len), Some(1));
+}
+
+#[test]
 fn ffi_bridge_exports_data_package_files_from_rust() {
     let directory = tempdir().expect("tempdir");
     let database_path = directory.path().join("life_os.db");

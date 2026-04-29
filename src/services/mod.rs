@@ -1,5 +1,6 @@
 mod ai_service;
 mod backup_service;
+mod capture_service;
 mod cost_service;
 mod demo_service;
 mod export_service;
@@ -12,6 +13,7 @@ mod snapshot_service;
 
 pub use ai_service::AiService;
 pub use backup_service::BackupService;
+pub use capture_service::CaptureService;
 pub use cost_service::CostService;
 pub use demo_service::{DemoDataResult, DemoDataService};
 pub use export_service::{DataPackageExportInput, ExportService};
