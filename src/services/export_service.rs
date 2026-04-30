@@ -80,7 +80,7 @@ impl ExportService {
             )?,
             "time_records": query_rows_as_json(
                 &connection,
-                "SELECT * FROM time_records WHERE user_id = ?1 ORDER BY started_at",
+                "SELECT * FROM time_records WHERE user_id = ?1 ORDER BY occurred_on, started_at, created_at",
                 &[&user_id],
             )?,
             "income_records": query_rows_as_json(
@@ -91,11 +91,6 @@ impl ExportService {
             "expense_records": query_rows_as_json(
                 &connection,
                 "SELECT * FROM expense_records WHERE user_id = ?1 ORDER BY occurred_on, created_at",
-                &[&user_id],
-            )?,
-            "learning_records": query_rows_as_json(
-                &connection,
-                "SELECT * FROM learning_records WHERE user_id = ?1 ORDER BY occurred_on, created_at",
                 &[&user_id],
             )?,
             "record_project_links": query_rows_as_json(

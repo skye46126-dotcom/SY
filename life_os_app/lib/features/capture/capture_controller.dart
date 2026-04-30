@@ -10,7 +10,6 @@ enum CaptureType {
   time('时间'),
   income('收入'),
   expense('支出'),
-  learning('学习'),
   project('项目');
 
   const CaptureType(this.label);
@@ -350,10 +349,16 @@ class CaptureController extends ChangeNotifier {
         case CaptureType.time:
           await _service.createTimeRecord({
             'user_id': userId,
+            'occurred_on':
+                _requiredOrDefault(fields['occurred_on'], anchorDate),
             'started_at':
-                _toUtcTimestamp(anchorDate, fields['started_at'] ?? ''),
-            'ended_at': _toUtcTimestamp(anchorDate, fields['ended_at'] ?? ''),
+                _optionalUtcTimestamp(anchorDate, fields['started_at']),
+            'ended_at': _optionalUtcTimestamp(anchorDate, fields['ended_at']),
+            'duration_minutes': _parseInt(fields['duration_minutes']),
             'category_code': _required(fields['category_code'], '类别'),
+            'content': _required(fields['content'], '内容'),
+            'application_level_code':
+                _nullable(fields['application_level_code']),
             'efficiency_score': _parseInt(fields['efficiency_score']),
             'value_score': null,
             'state_score': null,
@@ -390,26 +395,6 @@ class CaptureController extends ChangeNotifier {
             'ai_assist_ratio': _parseInt(fields['ai_assist_ratio']),
             'note': _nullable(fields['note']),
             'source': 'manual',
-            'project_allocations': _projectAllocations(projectIds),
-            'tag_ids': tagIds,
-          });
-        case CaptureType.learning:
-          await _service.createLearningRecord({
-            'user_id': userId,
-            'occurred_on':
-                _requiredOrDefault(fields['occurred_on'], anchorDate),
-            'started_at':
-                _optionalUtcTimestamp(anchorDate, fields['started_at']),
-            'ended_at': _optionalUtcTimestamp(anchorDate, fields['ended_at']),
-            'content': _required(fields['content'], '内容'),
-            'duration_minutes': _requiredInt(fields['duration_minutes'], '时长'),
-            'application_level_code':
-                _required(fields['application_level_code'], '应用等级'),
-            'efficiency_score': _parseInt(fields['efficiency_score']),
-            'ai_assist_ratio': _parseInt(fields['ai_assist_ratio']),
-            'note': _nullable(fields['note']),
-            'source': 'manual',
-            'is_public_pool': false,
             'project_allocations': _projectAllocations(projectIds),
             'tag_ids': tagIds,
           });
@@ -500,7 +485,7 @@ class CaptureController extends ChangeNotifier {
       'time_record' => 'time',
       'income_record' => 'income',
       'expense_record' => 'expense',
-      'learning_record' => 'learning',
+      'learning_record' => 'time',
       _ => 'unknown',
     };
     final payload = <String, String>{};
@@ -568,7 +553,6 @@ class CaptureController extends ChangeNotifier {
       'time_record',
       'income_record',
       'expense_record',
-      'learning_record',
     }.contains(kind)) {
       return false;
     }
@@ -638,14 +622,6 @@ class CaptureController extends ChangeNotifier {
     return int.parse(trimmed);
   }
 
-  int _requiredInt(String? value, String label) {
-    final parsed = _parseInt(value);
-    if (parsed == null) {
-      throw ArgumentError('$label 不能为空');
-    }
-    return parsed;
-  }
-
   bool _parseBool(String? value) {
     final normalized = value?.trim().toLowerCase() ?? '';
     return normalized == 'true' || normalized == '1' || normalized == 'yes';
@@ -666,15 +642,6 @@ class CaptureController extends ChangeNotifier {
               'weight_ratio': 1.0,
             })
         .toList();
-  }
-
-  String _toUtcTimestamp(String date, String time) {
-    final trimmedTime = time.trim();
-    if (trimmedTime.isEmpty) {
-      throw ArgumentError('时间不能为空');
-    }
-    final local = DateTime.parse('$date ${_normalizeTime(trimmedTime)}');
-    return local.toUtc().toIso8601String();
   }
 
   String? _optionalUtcTimestamp(String date, String? time) {

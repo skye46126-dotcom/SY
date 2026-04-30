@@ -5,7 +5,6 @@ mod common;
 mod cost;
 mod expense_record;
 mod income_record;
-mod learning_record;
 mod overview;
 mod preferences;
 mod project;
@@ -48,7 +47,6 @@ pub use cost::{
 };
 pub use expense_record::{CreateExpenseRecordInput, ExpenseRecord};
 pub use income_record::{CreateIncomeRecordInput, IncomeRecord};
-pub use learning_record::{CreateLearningRecordInput, LearningRecord};
 pub use overview::{
     TodayAlert, TodayAlerts, TodayGoalProgress, TodayGoalProgressItem, TodayOverview, TodaySummary,
 };
@@ -59,8 +57,7 @@ pub use preferences::{
 pub use project::{CreateProjectInput, Project};
 pub use project_query::{ProjectDetail, ProjectOption, ProjectOverview};
 pub use record_query::{
-    ExpenseRecordSnapshot, IncomeRecordSnapshot, LearningRecordSnapshot, RecentRecordItem,
-    RecordKind, TimeRecordSnapshot,
+    ExpenseRecordSnapshot, IncomeRecordSnapshot, RecentRecordItem, RecordKind, TimeRecordSnapshot,
 };
 pub use review::{
     ProjectProgressItem, ReviewReport, ReviewTagMetric, ReviewWindow, ReviewWindowKind,

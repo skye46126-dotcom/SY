@@ -7,7 +7,6 @@ pub enum RecordKind {
     Time,
     Income,
     Expense,
-    Learning,
 }
 
 impl RecordKind {
@@ -16,7 +15,6 @@ impl RecordKind {
             Self::Time => "time",
             Self::Income => "income",
             Self::Expense => "expense",
-            Self::Learning => "learning",
         }
     }
 
@@ -25,7 +23,6 @@ impl RecordKind {
             Self::Time => "time_records",
             Self::Income => "income_records",
             Self::Expense => "expense_records",
-            Self::Learning => "learning_records",
         }
     }
 }
@@ -42,9 +39,13 @@ pub struct RecentRecordItem {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct TimeRecordSnapshot {
     pub record_id: String,
-    pub started_at: String,
-    pub ended_at: String,
+    pub occurred_on: String,
+    pub started_at: Option<String>,
+    pub ended_at: Option<String>,
+    pub duration_minutes: i64,
     pub category_code: String,
+    pub content: String,
+    pub application_level_code: Option<String>,
     pub efficiency_score: Option<i32>,
     pub value_score: Option<i32>,
     pub state_score: Option<i32>,
@@ -77,23 +78,6 @@ pub struct ExpenseRecordSnapshot {
     pub amount_cents: i64,
     pub ai_assist_ratio: Option<i32>,
     pub note: Option<String>,
-    pub project_allocations: Vec<ProjectAllocation>,
-    pub tag_ids: Vec<String>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub struct LearningRecordSnapshot {
-    pub record_id: String,
-    pub occurred_on: String,
-    pub started_at: Option<String>,
-    pub ended_at: Option<String>,
-    pub content: String,
-    pub duration_minutes: i64,
-    pub application_level_code: String,
-    pub efficiency_score: Option<i32>,
-    pub ai_assist_ratio: Option<i32>,
-    pub note: Option<String>,
-    pub is_public_pool: bool,
     pub project_allocations: Vec<ProjectAllocation>,
     pub tag_ids: Vec<String>,
 }

@@ -8,9 +8,9 @@ use crate::db::Database;
 use crate::error::Result;
 use crate::models::{
     CapexCostInput, CreateAiServiceConfigInput, CreateCloudSyncConfigInput,
-    CreateExpenseRecordInput, CreateIncomeRecordInput, CreateLearningRecordInput,
-    CreateProjectInput, CreateTagInput, CreateTimeRecordInput, DimensionOptionInput,
-    MonthlyCostBaselineInput, ParserMode, ProjectAllocation, RecurringCostRuleInput,
+    CreateExpenseRecordInput, CreateIncomeRecordInput, CreateProjectInput, CreateTagInput,
+    CreateTimeRecordInput, DimensionOptionInput, MonthlyCostBaselineInput, ParserMode,
+    ProjectAllocation, RecurringCostRuleInput,
 };
 use crate::services::{
     AiService, BackupService, CostService, ProjectService, RecordService, SnapshotService,
@@ -72,7 +72,6 @@ impl DemoDataService {
             "DELETE FROM record_project_links WHERE user_id = ?1",
             [user_id],
         )?;
-        connection.execute("DELETE FROM learning_records WHERE user_id = ?1", [user_id])?;
         connection.execute("DELETE FROM expense_records WHERE user_id = ?1", [user_id])?;
         connection.execute("DELETE FROM income_records WHERE user_id = ?1", [user_id])?;
         connection.execute("DELETE FROM time_records WHERE user_id = ?1", [user_id])?;
@@ -278,9 +277,13 @@ impl DemoDataService {
 
         record_service.create_time_record(&CreateTimeRecordInput {
             user_id: user_id.to_string(),
-            started_at: format!("{today}T01:00:00Z"),
-            ended_at: format!("{today}T03:30:00Z"),
+            occurred_on: None,
+            started_at: Some(format!("{today}T01:00:00Z")),
+            ended_at: Some(format!("{today}T03:30:00Z")),
+            duration_minutes: None,
             category_code: "work".to_string(),
+            content: Some("推进 SkyeOS 首页与数据链路".to_string()),
+            application_level_code: None,
             efficiency_score: Some(8),
             value_score: Some(9),
             state_score: Some(8),
@@ -293,9 +296,13 @@ impl DemoDataService {
         })?;
         record_service.create_time_record(&CreateTimeRecordInput {
             user_id: user_id.to_string(),
-            started_at: format!("{today}T05:00:00Z"),
-            ended_at: format!("{today}T06:00:00Z"),
+            occurred_on: None,
+            started_at: Some(format!("{today}T05:00:00Z")),
+            ended_at: Some(format!("{today}T06:00:00Z")),
+            duration_minutes: None,
             category_code: "learning".to_string(),
+            content: Some("研究 Rust 与 Flutter FFI".to_string()),
+            application_level_code: Some("applied".to_string()),
             efficiency_score: Some(7),
             value_score: Some(7),
             state_score: Some(7),
@@ -356,15 +363,18 @@ impl DemoDataService {
             project_allocations: product_alloc.clone(),
             tag_ids: vec![ai_tag.id.clone()],
         })?;
-        record_service.create_learning_record(&CreateLearningRecordInput {
+        record_service.create_time_record(&CreateTimeRecordInput {
             user_id: user_id.to_string(),
-            occurred_on: today.to_string(),
+            occurred_on: Some(today.to_string()),
             started_at: Some(format!("{today}T08:00:00Z")),
             ended_at: Some(format!("{today}T09:10:00Z")),
-            content: "Read Flutter rendering docs".to_string(),
-            duration_minutes: 70,
-            application_level_code: "applied".to_string(),
+            duration_minutes: Some(70),
+            category_code: "learning".to_string(),
+            content: Some("Read Flutter rendering docs".to_string()),
+            application_level_code: Some("applied".to_string()),
             efficiency_score: Some(8),
+            value_score: None,
+            state_score: None,
             ai_assist_ratio: Some(40),
             note: Some("demo learning".to_string()),
             source: Some("manual".to_string()),
@@ -375,9 +385,13 @@ impl DemoDataService {
 
         record_service.create_time_record(&CreateTimeRecordInput {
             user_id: user_id.to_string(),
-            started_at: format!("{yesterday}T01:00:00Z"),
-            ended_at: format!("{yesterday}T02:30:00Z"),
+            occurred_on: None,
+            started_at: Some(format!("{yesterday}T01:00:00Z")),
+            ended_at: Some(format!("{yesterday}T02:30:00Z")),
+            duration_minutes: None,
             category_code: "work".to_string(),
+            content: Some("yesterday work".to_string()),
+            application_level_code: None,
             efficiency_score: Some(6),
             value_score: Some(7),
             state_score: Some(6),

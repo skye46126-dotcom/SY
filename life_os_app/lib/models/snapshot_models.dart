@@ -69,7 +69,8 @@ class ProjectMetricSnapshotSummaryModel {
   final double roiRatio;
   final int breakEvenCents;
 
-  factory ProjectMetricSnapshotSummaryModel.fromJson(Map<String, dynamic> json) {
+  factory ProjectMetricSnapshotSummaryModel.fromJson(
+      Map<String, dynamic> json) {
     return ProjectMetricSnapshotSummaryModel(
       metricSnapshotId: json['metric_snapshot_id'] as String? ?? '',
       projectId: json['project_id'] as String? ?? '',
@@ -77,8 +78,7 @@ class ProjectMetricSnapshotSummaryModel {
       directExpenseCents: (json['direct_expense_cents'] as num?)?.toInt() ?? 0,
       structuralCostCents:
           (json['structural_cost_cents'] as num?)?.toInt() ?? 0,
-      operatingCostCents:
-          (json['operating_cost_cents'] as num?)?.toInt() ?? 0,
+      operatingCostCents: (json['operating_cost_cents'] as num?)?.toInt() ?? 0,
       totalCostCents: (json['total_cost_cents'] as num?)?.toInt() ?? 0,
       profitCents: (json['profit_cents'] as num?)?.toInt() ?? 0,
       investedMinutes: (json['invested_minutes'] as num?)?.toInt() ?? 0,

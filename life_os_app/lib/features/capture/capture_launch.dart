@@ -46,7 +46,7 @@ class CaptureLaunchConfig {
       'time' => CaptureType.time,
       'income' => CaptureType.income,
       'expense' => CaptureType.expense,
-      'learning' => CaptureType.learning,
+      'learning' => CaptureType.time,
       'project' => CaptureType.project,
       _ => null,
     };

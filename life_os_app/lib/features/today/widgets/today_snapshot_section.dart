@@ -30,7 +30,9 @@ class TodaySnapshotSection extends StatelessWidget {
       );
     }
 
-    final actual = (summary?.actualHourlyRateCents ?? snapshot!.hourlyRateCents ?? 0) / 100;
+    final actual =
+        (summary?.actualHourlyRateCents ?? snapshot!.hourlyRateCents ?? 0) /
+            100;
     final ideal = (summary?.idealHourlyRateCents ?? 0) / 100;
 
     return SectionCard(
@@ -44,9 +46,8 @@ class TodaySnapshotSection extends StatelessWidget {
             child: BarChart(
               BarChartData(
                 alignment: BarChartAlignment.spaceAround,
-                maxY: [actual, ideal, 1.0]
-                        .reduce((a, b) => a > b ? a : b) *
-                    1.25,
+                maxY:
+                    [actual, ideal, 1.0].reduce((a, b) => a > b ? a : b) * 1.25,
                 gridData: FlGridData(
                   show: true,
                   drawVerticalLine: false,
@@ -58,8 +59,10 @@ class TodaySnapshotSection extends StatelessWidget {
                 ),
                 borderData: FlBorderData(show: false),
                 titlesData: FlTitlesData(
-                  topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                  rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                  topTitles: const AxisTitles(
+                      sideTitles: SideTitles(showTitles: false)),
+                  rightTitles: const AxisTitles(
+                      sideTitles: SideTitles(showTitles: false)),
                   leftTitles: AxisTitles(
                     sideTitles: SideTitles(
                       showTitles: true,
@@ -107,14 +110,18 @@ class TodaySnapshotSection extends StatelessWidget {
               _HealthCard(
                 title: '被动覆盖率',
                 value: _ratio(snapshot!.passiveCoverRatio),
-                tone: (snapshot!.passiveCoverRatio ?? 0) >= 1 ? Colors.green : Colors.orange,
+                tone: (snapshot!.passiveCoverRatio ?? 0) >= 1
+                    ? Colors.green
+                    : Colors.orange,
                 subtitle: '被动收入覆盖必要支出',
               ),
               const SizedBox(height: 12),
               _HealthCard(
                 title: '自由度金额',
                 value: _currency(snapshot!.freedomCents),
-                tone: (snapshot!.freedomCents ?? 0) >= 0 ? Colors.blue : Colors.red,
+                tone: (snapshot!.freedomCents ?? 0) >= 0
+                    ? Colors.blue
+                    : Colors.red,
                 subtitle: '被动收入减必要支出',
               ),
             ],

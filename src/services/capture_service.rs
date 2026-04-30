@@ -554,10 +554,7 @@ fn is_commit_ready_reviewable(item: &CommitReviewableDraftInput) -> bool {
 fn is_committable_reviewable(item: &CommitReviewableDraftInput) -> bool {
     matches!(
         item.draft.kind,
-        TypedDraftKind::TimeRecord
-            | TypedDraftKind::IncomeRecord
-            | TypedDraftKind::ExpenseRecord
-            | TypedDraftKind::LearningRecord
+        TypedDraftKind::TimeRecord | TypedDraftKind::IncomeRecord | TypedDraftKind::ExpenseRecord
     ) && matches!(
         item.draft.validation.status,
         DraftStatus::CommitReady | DraftStatus::NeedsReview
@@ -577,7 +574,6 @@ fn reviewable_to_legacy_draft(item: &CommitReviewableDraftInput) -> Result<AiPar
         TypedDraftKind::TimeRecord => AiDraftKind::Time,
         TypedDraftKind::IncomeRecord => AiDraftKind::Income,
         TypedDraftKind::ExpenseRecord => AiDraftKind::Expense,
-        TypedDraftKind::LearningRecord => AiDraftKind::Learning,
         _ => AiDraftKind::Unknown,
     };
     if kind == AiDraftKind::Unknown {

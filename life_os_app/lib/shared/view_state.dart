@@ -20,9 +20,11 @@ class ViewState<T> {
 
   bool get hasData => status == ViewStatus.data && data != null;
 
-  static ViewState<T> initial<T>() => const ViewState._(status: ViewStatus.initial);
+  static ViewState<T> initial<T>() =>
+      const ViewState._(status: ViewStatus.initial);
 
-  static ViewState<T> loading<T>() => const ViewState._(status: ViewStatus.loading);
+  static ViewState<T> loading<T>() =>
+      const ViewState._(status: ViewStatus.loading);
 
   static ViewState<T> ready<T>(T data) =>
       ViewState._(status: ViewStatus.data, data: data);

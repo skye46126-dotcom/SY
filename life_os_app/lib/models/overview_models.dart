@@ -31,7 +31,8 @@ class TodayOverview {
       netIncomeCents: (json['net_income_cents'] as num?)?.toInt() ?? 0,
       totalTimeMinutes: (json['total_time_minutes'] as num?)?.toInt() ?? 0,
       totalWorkMinutes: (json['total_work_minutes'] as num?)?.toInt() ?? 0,
-      totalLearningMinutes: (json['total_learning_minutes'] as num?)?.toInt() ?? 0,
+      totalLearningMinutes:
+          (json['total_learning_minutes'] as num?)?.toInt() ?? 0,
     );
   }
 }
@@ -85,7 +86,8 @@ class TodayGoalProgressModel {
       anchorDate: json['anchor_date'] as String? ?? '',
       items: ((json['items'] as List?) ?? const [])
           .whereType<Map>()
-          .map((item) => TodayGoalProgressItemModel.fromJson(item.cast<String, dynamic>()))
+          .map((item) =>
+              TodayGoalProgressItemModel.fromJson(item.cast<String, dynamic>()))
           .toList(),
     );
   }
@@ -175,8 +177,10 @@ class TodaySummaryModel {
       workStatus: json['work_status'] as String? ?? '',
       learningStatus: json['learning_status'] as String? ?? '',
       shouldReview: json['should_review'] == true,
-      actualHourlyRateCents: (json['actual_hourly_rate_cents'] as num?)?.toInt(),
-      idealHourlyRateCents: (json['ideal_hourly_rate_cents'] as num?)?.toInt() ?? 0,
+      actualHourlyRateCents:
+          (json['actual_hourly_rate_cents'] as num?)?.toInt(),
+      idealHourlyRateCents:
+          (json['ideal_hourly_rate_cents'] as num?)?.toInt() ?? 0,
       freedomCents: (json['freedom_cents'] as num?)?.toInt(),
       passiveCoverRatioBps: (json['passive_cover_ratio_bps'] as num?)?.toInt(),
       alerts: ((json['alerts'] as List?) ?? const [])

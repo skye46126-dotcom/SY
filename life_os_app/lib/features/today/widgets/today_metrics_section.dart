@@ -61,8 +61,10 @@ class TodayMetricsSection extends StatelessWidget {
                 ),
                 borderData: FlBorderData(show: false),
                 titlesData: FlTitlesData(
-                  topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                  rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                  topTitles: const AxisTitles(
+                      sideTitles: SideTitles(showTitles: false)),
+                  rightTitles: const AxisTitles(
+                      sideTitles: SideTitles(showTitles: false)),
                   leftTitles: AxisTitles(
                     sideTitles: SideTitles(
                       showTitles: true,
@@ -94,7 +96,12 @@ class TodayMetricsSection extends StatelessWidget {
                 barGroups: [
                   _group(0, income, const Color(0xFF2363FF)),
                   _group(1, expense, const Color(0xFFD64C4C)),
-                  _group(2, net, net >= 0 ? const Color(0xFF0F9D84) : const Color(0xFFE6811A)),
+                  _group(
+                      2,
+                      net,
+                      net >= 0
+                          ? const Color(0xFF0F9D84)
+                          : const Color(0xFFE6811A)),
                 ],
               ),
             ),

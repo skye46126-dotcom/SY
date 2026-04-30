@@ -210,8 +210,6 @@ abstract class RustApi {
 
   Future<void> createExpenseRecord(Map<String, Object?> payload);
 
-  Future<void> createLearningRecord(Map<String, Object?> payload);
-
   Future<void> createProject(Map<String, Object?> payload);
 
   Future<Map<String, Object?>?> parseAiCapture({
@@ -272,11 +270,6 @@ class UnimplementedRustApi implements RustApi {
   @override
   Future<void> createIncomeRecord(Map<String, Object?> payload) async {
     _notReady('createIncomeRecord');
-  }
-
-  @override
-  Future<void> createLearningRecord(Map<String, Object?> payload) async {
-    _notReady('createLearningRecord');
   }
 
   @override

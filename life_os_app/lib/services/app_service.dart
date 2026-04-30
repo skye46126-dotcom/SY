@@ -410,10 +410,6 @@ class AppService {
     return api.createExpenseRecord(payload);
   }
 
-  Future<void> createLearningRecord(Map<String, Object?> payload) {
-    return api.createLearningRecord(payload);
-  }
-
   Future<void> createProject(Map<String, Object?> payload) {
     return api.createProject(payload);
   }

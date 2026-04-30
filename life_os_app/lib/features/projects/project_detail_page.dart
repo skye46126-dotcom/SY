@@ -695,7 +695,6 @@ class _ProjectDetailPageState extends State<ProjectDetailPage> {
       RecordKind.time => 'get_time_record_snapshot',
       RecordKind.income => 'get_income_record_snapshot',
       RecordKind.expense => 'get_expense_record_snapshot',
-      RecordKind.learning => 'get_learning_record_snapshot',
     };
     final snapshot = await service.invokeRaw(
       method: method,
@@ -743,16 +742,6 @@ class _ProjectDetailPageState extends State<ProjectDetailPage> {
               userId: runtime.userId,
               anchorDate: detailAnchorDate(),
               expenseSnapshot: ExpenseRecordSnapshotModel.fromJson(
-                  snapshot.cast<String, dynamic>()),
-              projectOptions: typedProjectOptions,
-              tags: typedTags,
-            );
-          case RecordKind.learning:
-            return RecordEditorDialog.learning(
-              recordId: record.recordId,
-              userId: runtime.userId,
-              anchorDate: detailAnchorDate(),
-              learningSnapshot: LearningRecordSnapshotModel.fromJson(
                   snapshot.cast<String, dynamic>()),
               projectOptions: typedProjectOptions,
               tags: typedTags,

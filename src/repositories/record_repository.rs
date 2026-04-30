@@ -7,12 +7,11 @@ use uuid::Uuid;
 use crate::error::{LifeOsError, Result};
 use crate::models::{
     CaptureDefaults, CaptureMetadata, CreateExpenseRecordInput, CreateIncomeRecordInput,
-    CreateLearningRecordInput, CreateProjectInput, CreateTagInput, CreateTimeRecordInput,
-    DimensionOption, DimensionOptionInput, ExpenseRecord, ExpenseRecordSnapshot, IncomeRecord,
-    IncomeRecordSnapshot, LearningRecord, LearningRecordSnapshot, OperatingSettings, Project,
-    ProjectAllocation, ProjectOption, RecentRecordItem, RecordKind, Tag, TimeRecord,
-    TimeRecordSnapshot, TodayAlert, TodayAlerts, TodayGoalProgress, TodayGoalProgressItem,
-    TodayOverview, TodaySummary, UpdateOperatingSettingsInput, normalize_optional_string,
+    CreateProjectInput, CreateTagInput, CreateTimeRecordInput, DimensionOption,
+    DimensionOptionInput, ExpenseRecord, ExpenseRecordSnapshot, IncomeRecord, IncomeRecordSnapshot,
+    OperatingSettings, Project, ProjectAllocation, ProjectOption, RecentRecordItem, RecordKind,
+    Tag, TimeRecord, TimeRecordSnapshot, TodayAlert, TodayAlerts, TodayGoalProgress,
+    TodayGoalProgressItem, TodayOverview, TodaySummary, UpdateOperatingSettingsInput,
     parse_rfc3339_utc, to_utc_string,
 };
 
@@ -32,30 +31,43 @@ impl RecordRepository {
             DimensionKind::TimeCategory,
             &input.normalized_category_code(),
         )?;
+        if let Some(application_level_code) = input.normalized_application_level_code() {
+            ensure_dimension_option_exists(
+                &tx,
+                DimensionKind::LearningLevel,
+                &application_level_code,
+            )?;
+        }
         ensure_project_allocations_exist(&tx, &input.user_id, &input.project_allocations)?;
         ensure_tags_exist(&tx, &input.user_id, &input.tag_ids)?;
 
         let id = new_id();
         let now = now_string();
         let duration_minutes = input.duration_minutes()?;
-        let started_at = to_utc_string(input.started_at()?);
-        let ended_at = to_utc_string(input.ended_at()?);
+        let occurred_on = input.resolved_occurred_on()?;
+        let started_at = input.started_at()?.map(to_utc_string);
+        let ended_at = input.ended_at()?.map(to_utc_string);
+        let content = input.resolved_content();
+        let application_level_code = input.normalized_application_level_code();
         let source = input.normalized_source();
         let note = input.normalized_note();
 
         tx.execute(
             "INSERT INTO time_records(
-                id, user_id, started_at, ended_at, duration_minutes, category_code,
-                efficiency_score, value_score, state_score, ai_assist_ratio, note, source,
-                is_public_pool, is_deleted, created_at, updated_at
-             ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, 0, ?14, ?14)",
+                id, user_id, occurred_on, started_at, ended_at, duration_minutes, category_code,
+                content, application_level_code, efficiency_score, value_score, state_score,
+                ai_assist_ratio, note, source, is_public_pool, is_deleted, created_at, updated_at
+             ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, 0, ?17, ?17)",
             params![
                 id,
                 input.user_id,
+                occurred_on,
                 started_at,
                 ended_at,
                 duration_minutes,
                 input.normalized_category_code(),
+                content,
+                application_level_code,
                 input.efficiency_score,
                 input.value_score,
                 input.state_score,
@@ -82,10 +94,13 @@ impl RecordRepository {
         Ok(TimeRecord {
             id,
             user_id: input.user_id.clone(),
+            occurred_on,
             started_at,
             ended_at,
             duration_minutes,
             category_code: input.normalized_category_code(),
+            content,
+            application_level_code,
             efficiency_score: input.efficiency_score,
             value_score: input.value_score,
             state_score: input.state_score,
@@ -227,83 +242,6 @@ impl RecordRepository {
             ai_assist_ratio: input.ai_assist_ratio,
             note,
             source,
-            created_at: now.clone(),
-            updated_at: now,
-        })
-    }
-
-    pub fn create_learning_record(
-        connection: &mut Connection,
-        input: &CreateLearningRecordInput,
-    ) -> Result<LearningRecord> {
-        input.validate()?;
-
-        let tx = connection.transaction()?;
-        ensure_user_exists(&tx, &input.user_id)?;
-        ensure_dimension_option_exists(
-            &tx,
-            DimensionKind::LearningLevel,
-            &input.normalized_application_level_code(),
-        )?;
-        ensure_project_allocations_exist(&tx, &input.user_id, &input.project_allocations)?;
-        ensure_tags_exist(&tx, &input.user_id, &input.tag_ids)?;
-
-        let id = new_id();
-        let now = now_string();
-        let source = input.normalized_source();
-        let note = input.normalized_note();
-        let started_at = normalize_optional_string(&input.started_at);
-        let ended_at = normalize_optional_string(&input.ended_at);
-
-        tx.execute(
-            "INSERT INTO learning_records(
-                id, user_id, occurred_on, started_at, ended_at, content, duration_minutes,
-                application_level_code, efficiency_score, ai_assist_ratio, note, source,
-                is_public_pool, is_deleted, created_at, updated_at
-             ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, 0, ?14, ?14)",
-            params![
-                id,
-                input.user_id,
-                input.occurred_on,
-                started_at,
-                ended_at,
-                input.content.trim(),
-                input.duration_minutes,
-                input.normalized_application_level_code(),
-                input.efficiency_score,
-                input.ai_assist_ratio,
-                note,
-                source,
-                input.is_public_pool as i32,
-                now,
-            ],
-        )?;
-
-        insert_project_links(
-            &tx,
-            "learning",
-            &id,
-            &input.user_id,
-            &input.project_allocations,
-            &now,
-        )?;
-        insert_tag_links(&tx, "learning", &id, &input.user_id, &input.tag_ids, &now)?;
-        tx.commit()?;
-
-        Ok(LearningRecord {
-            id,
-            user_id: input.user_id.clone(),
-            occurred_on: input.occurred_on.clone(),
-            started_at: normalize_optional_string(&input.started_at),
-            ended_at: normalize_optional_string(&input.ended_at),
-            content: input.content.trim().to_string(),
-            duration_minutes: input.duration_minutes,
-            application_level_code: input.normalized_application_level_code(),
-            efficiency_score: input.efficiency_score,
-            ai_assist_ratio: input.ai_assist_ratio,
-            note,
-            source,
-            is_public_pool: input.is_public_pool,
             created_at: now.clone(),
             updated_at: now,
         })
@@ -803,46 +741,53 @@ impl RecordRepository {
 
         let mut total_time_minutes = 0_i64;
         let mut total_work_minutes = 0_i64;
+        let mut total_learning_minutes = 0_i64;
 
         let mut statement = connection.prepare(
-            "SELECT started_at, ended_at, category_code
+            "SELECT started_at, ended_at, duration_minutes, category_code
              FROM time_records
              WHERE user_id = ?1
                AND is_deleted = 0
-               AND started_at < ?2
-               AND ended_at > ?3",
+               AND (
+                    (started_at IS NOT NULL AND ended_at IS NOT NULL AND started_at < ?2 AND ended_at > ?3)
+                 OR (started_at IS NULL AND ended_at IS NULL AND occurred_on = ?4)
+               )",
         )?;
         let rows = statement.query_map(
-            params![user_id, to_utc_string(end_utc), to_utc_string(start_utc)],
+            params![
+                user_id,
+                to_utc_string(end_utc),
+                to_utc_string(start_utc),
+                anchor_date
+            ],
             |row| {
                 Ok((
-                    row.get::<_, String>(0)?,
-                    row.get::<_, String>(1)?,
-                    row.get::<_, String>(2)?,
+                    row.get::<_, Option<String>>(0)?,
+                    row.get::<_, Option<String>>(1)?,
+                    row.get::<_, i64>(2)?,
+                    row.get::<_, String>(3)?,
                 ))
             },
         )?;
 
         for row in rows {
-            let (started_at, ended_at, category_code) = row?;
-            let started_at = parse_rfc3339_utc(&started_at)?;
-            let ended_at = parse_rfc3339_utc(&ended_at)?;
-            let overlap = overlap_minutes(started_at, ended_at, start_utc, end_utc);
-            total_time_minutes += overlap;
+            let (started_at, ended_at, duration_minutes, category_code) = row?;
+            let minutes = match (started_at, ended_at) {
+                (Some(started_at), Some(ended_at)) => {
+                    let started_at = parse_rfc3339_utc(&started_at)?;
+                    let ended_at = parse_rfc3339_utc(&ended_at)?;
+                    overlap_minutes(started_at, ended_at, start_utc, end_utc)
+                }
+                _ => duration_minutes,
+            };
+            total_time_minutes += minutes;
             if category_code == "work" {
-                total_work_minutes += overlap;
+                total_work_minutes += minutes;
+            }
+            if category_code == "learning" {
+                total_learning_minutes += minutes;
             }
         }
-
-        let total_learning_minutes = connection.query_row(
-            "SELECT COALESCE(SUM(duration_minutes), 0)
-             FROM learning_records
-             WHERE user_id = ?1
-               AND is_deleted = 0
-               AND occurred_on = ?2",
-            params![user_id, anchor_date],
-            |row| row.get::<_, i64>(0),
-        )?;
 
         let total_income_cents = connection.query_row(
             "SELECT COALESCE(SUM(amount_cents), 0)
@@ -1106,38 +1051,54 @@ impl RecordRepository {
             DimensionKind::TimeCategory,
             &input.normalized_category_code(),
         )?;
+        if let Some(application_level_code) = input.normalized_application_level_code() {
+            ensure_dimension_option_exists(
+                &tx,
+                DimensionKind::LearningLevel,
+                &application_level_code,
+            )?;
+        }
         ensure_project_allocations_exist(&tx, &input.user_id, &input.project_allocations)?;
         ensure_tags_exist(&tx, &input.user_id, &input.tag_ids)?;
 
         let now = now_string();
-        let started_at = to_utc_string(input.started_at()?);
-        let ended_at = to_utc_string(input.ended_at()?);
+        let occurred_on = input.resolved_occurred_on()?;
+        let started_at = input.started_at()?.map(to_utc_string);
+        let ended_at = input.ended_at()?.map(to_utc_string);
         let duration_minutes = input.duration_minutes()?;
+        let content = input.resolved_content();
+        let application_level_code = input.normalized_application_level_code();
         let source = input.normalized_source();
         let note = input.normalized_note();
 
         tx.execute(
             "UPDATE time_records
-             SET started_at = ?1,
-                 ended_at = ?2,
-                 duration_minutes = ?3,
-                 category_code = ?4,
-                 efficiency_score = ?5,
-                 value_score = ?6,
-                 state_score = ?7,
-                 ai_assist_ratio = ?8,
-                 note = ?9,
-                 source = ?10,
-                 is_public_pool = ?11,
-                 updated_at = ?12
-             WHERE id = ?13
-               AND user_id = ?14
+             SET occurred_on = ?1,
+                 started_at = ?2,
+                 ended_at = ?3,
+                 duration_minutes = ?4,
+                 category_code = ?5,
+                 content = ?6,
+                 application_level_code = ?7,
+                 efficiency_score = ?8,
+                 value_score = ?9,
+                 state_score = ?10,
+                 ai_assist_ratio = ?11,
+                 note = ?12,
+                 source = ?13,
+                 is_public_pool = ?14,
+                 updated_at = ?15
+             WHERE id = ?16
+               AND user_id = ?17
                AND is_deleted = 0",
             params![
+                occurred_on,
                 started_at,
                 ended_at,
                 duration_minutes,
                 input.normalized_category_code(),
+                content,
+                application_level_code,
                 input.efficiency_score,
                 input.value_score,
                 input.state_score,
@@ -1172,10 +1133,13 @@ impl RecordRepository {
         Ok(TimeRecord {
             id: record_id.to_string(),
             user_id: input.user_id.clone(),
+            occurred_on,
             started_at,
             ended_at,
             duration_minutes,
             category_code: input.normalized_category_code(),
+            content,
+            application_level_code,
             efficiency_score: input.efficiency_score,
             value_score: input.value_score,
             state_score: input.state_score,
@@ -1347,98 +1311,6 @@ impl RecordRepository {
         })
     }
 
-    pub fn update_learning_record(
-        connection: &mut Connection,
-        record_id: &str,
-        input: &CreateLearningRecordInput,
-    ) -> Result<LearningRecord> {
-        input.validate()?;
-        let tx = connection.transaction()?;
-        ensure_active_record_exists(&tx, RecordKind::Learning, record_id, &input.user_id)?;
-        ensure_dimension_option_exists(
-            &tx,
-            DimensionKind::LearningLevel,
-            &input.normalized_application_level_code(),
-        )?;
-        ensure_project_allocations_exist(&tx, &input.user_id, &input.project_allocations)?;
-        ensure_tags_exist(&tx, &input.user_id, &input.tag_ids)?;
-
-        let now = now_string();
-        let source = input.normalized_source();
-        let note = input.normalized_note();
-        let started_at = normalize_optional_string(&input.started_at);
-        let ended_at = normalize_optional_string(&input.ended_at);
-        tx.execute(
-            "UPDATE learning_records
-             SET occurred_on = ?1,
-                 started_at = ?2,
-                 ended_at = ?3,
-                 content = ?4,
-                 duration_minutes = ?5,
-                 application_level_code = ?6,
-                 efficiency_score = ?7,
-                 ai_assist_ratio = ?8,
-                 note = ?9,
-                 source = ?10,
-                 is_public_pool = ?11,
-                 updated_at = ?12
-             WHERE id = ?13
-               AND user_id = ?14
-               AND is_deleted = 0",
-            params![
-                input.occurred_on,
-                started_at,
-                ended_at,
-                input.content.trim(),
-                input.duration_minutes,
-                input.normalized_application_level_code(),
-                input.efficiency_score,
-                input.ai_assist_ratio,
-                note,
-                source,
-                input.is_public_pool as i32,
-                now,
-                record_id,
-                input.user_id,
-            ],
-        )?;
-        replace_project_links(
-            &tx,
-            RecordKind::Learning,
-            record_id,
-            &input.user_id,
-            &input.project_allocations,
-            &now,
-        )?;
-        replace_tag_links(
-            &tx,
-            RecordKind::Learning,
-            record_id,
-            &input.user_id,
-            &input.tag_ids,
-            &now,
-        )?;
-        tx.commit()?;
-
-        Ok(LearningRecord {
-            id: record_id.to_string(),
-            user_id: input.user_id.clone(),
-            occurred_on: input.occurred_on.clone(),
-            started_at: normalize_optional_string(&input.started_at),
-            ended_at: normalize_optional_string(&input.ended_at),
-            content: input.content.trim().to_string(),
-            duration_minutes: input.duration_minutes,
-            application_level_code: input.normalized_application_level_code(),
-            efficiency_score: input.efficiency_score,
-            ai_assist_ratio: input.ai_assist_ratio,
-            note,
-            source,
-            is_public_pool: input.is_public_pool,
-            created_at: String::new(),
-            updated_at: now,
-        })
-    }
-
     pub fn soft_delete_record(
         connection: &mut Connection,
         kind: RecordKind,
@@ -1471,8 +1343,9 @@ impl RecordRepository {
         let mut statement = connection.prepare(
             "SELECT record_id, kind, occurred_at, title, detail
              FROM (
-               SELECT id AS record_id, 'time' AS kind, started_at AS occurred_at, category_code AS title,
-                      COALESCE(note, '') AS detail
+               SELECT id AS record_id, 'time' AS kind, COALESCE(started_at, occurred_on) AS occurred_at, content AS title,
+                      category_code || ' | ' || CAST(duration_minutes AS TEXT) || ' min' ||
+                      CASE WHEN note IS NULL OR note = '' THEN '' ELSE ' | ' || note END AS detail
                FROM time_records
                WHERE user_id = ?1 AND is_deleted = 0
                UNION ALL
@@ -1486,12 +1359,6 @@ impl RecordRepository {
                       CAST(amount_cents AS TEXT) || ' cents' ||
                       CASE WHEN note IS NULL OR note = '' THEN '' ELSE ' | ' || note END AS detail
                FROM expense_records
-               WHERE user_id = ?1 AND is_deleted = 0
-               UNION ALL
-               SELECT id AS record_id, 'learning' AS kind, COALESCE(started_at, occurred_on) AS occurred_at, content AS title,
-                      CAST(duration_minutes AS TEXT) || ' min' ||
-                      CASE WHEN note IS NULL OR note = '' THEN '' ELSE ' | ' || note END AS detail
-               FROM learning_records
                WHERE user_id = ?1 AND is_deleted = 0
              )
              ORDER BY occurred_at DESC
@@ -1548,10 +1415,15 @@ impl RecordRepository {
         let mut statement = connection.prepare(
             "SELECT record_id, kind, occurred_at, title, detail
              FROM (
-               SELECT id AS record_id, 'time' AS kind, started_at AS occurred_at, category_code AS title,
-                      COALESCE(note, '') AS detail
+               SELECT id AS record_id, 'time' AS kind, COALESCE(started_at, occurred_on) AS occurred_at, content AS title,
+                      category_code || ' | ' || CAST(duration_minutes AS TEXT) || ' min' ||
+                      CASE WHEN note IS NULL OR note = '' THEN '' ELSE ' | ' || note END AS detail
                FROM time_records
-               WHERE user_id = ?1 AND is_deleted = 0 AND started_at < ?3 AND ended_at > ?2
+               WHERE user_id = ?1 AND is_deleted = 0
+                 AND (
+                    (started_at IS NOT NULL AND ended_at IS NOT NULL AND started_at < ?3 AND ended_at > ?2)
+                    OR (started_at IS NULL AND ended_at IS NULL AND occurred_on = ?4)
+                 )
                UNION ALL
                SELECT id AS record_id, 'income' AS kind, occurred_on AS occurred_at, source_name AS title,
                       CAST(amount_cents AS TEXT) || ' cents' ||
@@ -1563,12 +1435,6 @@ impl RecordRepository {
                       CAST(amount_cents AS TEXT) || ' cents' ||
                       CASE WHEN note IS NULL OR note = '' THEN '' ELSE ' | ' || note END AS detail
                FROM expense_records
-               WHERE user_id = ?1 AND is_deleted = 0 AND occurred_on = ?4
-               UNION ALL
-               SELECT id AS record_id, 'learning' AS kind, COALESCE(started_at, occurred_on) AS occurred_at, content AS title,
-                      CAST(duration_minutes AS TEXT) || ' min' ||
-                      CASE WHEN note IS NULL OR note = '' THEN '' ELSE ' | ' || note END AS detail
-               FROM learning_records
                WHERE user_id = ?1 AND is_deleted = 0 AND occurred_on = ?4
              )
              ORDER BY occurred_at DESC
@@ -1610,7 +1476,8 @@ impl RecordRepository {
         ensure_user_exists(connection, user_id)?;
         let raw = connection
             .query_row(
-                "SELECT started_at, ended_at, category_code, efficiency_score, value_score,
+                "SELECT occurred_on, started_at, ended_at, duration_minutes, category_code,
+                        content, application_level_code, efficiency_score, value_score,
                         state_score, ai_assist_ratio, note
                  FROM time_records
                  WHERE id = ?1 AND user_id = ?2 AND is_deleted = 0
@@ -1619,22 +1486,30 @@ impl RecordRepository {
                 |row| {
                     Ok((
                         row.get::<_, String>(0)?,
-                        row.get::<_, String>(1)?,
-                        row.get::<_, String>(2)?,
-                        row.get::<_, Option<i32>>(3)?,
-                        row.get::<_, Option<i32>>(4)?,
-                        row.get::<_, Option<i32>>(5)?,
-                        row.get::<_, Option<i32>>(6)?,
-                        row.get::<_, Option<String>>(7)?,
+                        row.get::<_, Option<String>>(1)?,
+                        row.get::<_, Option<String>>(2)?,
+                        row.get::<_, i64>(3)?,
+                        row.get::<_, String>(4)?,
+                        row.get::<_, String>(5)?,
+                        row.get::<_, Option<String>>(6)?,
+                        row.get::<_, Option<i32>>(7)?,
+                        row.get::<_, Option<i32>>(8)?,
+                        row.get::<_, Option<i32>>(9)?,
+                        row.get::<_, Option<i32>>(10)?,
+                        row.get::<_, Option<String>>(11)?,
                     ))
                 },
             )
             .optional()?;
         raw.map(
             |(
+                occurred_on,
                 started_at,
                 ended_at,
+                duration_minutes,
                 category_code,
+                content,
+                application_level_code,
                 efficiency_score,
                 value_score,
                 state_score,
@@ -1643,9 +1518,13 @@ impl RecordRepository {
             )| {
                 Ok(TimeRecordSnapshot {
                     record_id: record_id.to_string(),
+                    occurred_on,
                     started_at,
                     ended_at,
+                    duration_minutes,
                     category_code,
+                    content,
+                    application_level_code,
                     efficiency_score,
                     value_score,
                     state_score,
@@ -1763,73 +1642,6 @@ impl RecordRepository {
                         record_id,
                     )?,
                     tag_ids: load_tag_ids(connection, RecordKind::Expense, record_id)?,
-                })
-            },
-        )
-        .transpose()
-    }
-
-    pub fn get_learning_record_snapshot(
-        connection: &Connection,
-        user_id: &str,
-        record_id: &str,
-    ) -> Result<Option<LearningRecordSnapshot>> {
-        ensure_user_exists(connection, user_id)?;
-        let raw = connection
-            .query_row(
-                "SELECT occurred_on, started_at, ended_at, content, duration_minutes,
-                        application_level_code, efficiency_score, ai_assist_ratio, note, is_public_pool
-                 FROM learning_records
-                 WHERE id = ?1 AND user_id = ?2 AND is_deleted = 0
-                 LIMIT 1",
-                params![record_id, user_id],
-                |row| {
-                    Ok((
-                        row.get::<_, String>(0)?,
-                        row.get::<_, Option<String>>(1)?,
-                        row.get::<_, Option<String>>(2)?,
-                        row.get::<_, String>(3)?,
-                        row.get::<_, i64>(4)?,
-                        row.get::<_, String>(5)?,
-                        row.get::<_, Option<i32>>(6)?,
-                        row.get::<_, Option<i32>>(7)?,
-                        row.get::<_, Option<String>>(8)?,
-                        row.get::<_, i64>(9)?,
-                    ))
-                },
-            )
-            .optional()?;
-        raw.map(
-            |(
-                occurred_on,
-                started_at,
-                ended_at,
-                content,
-                duration_minutes,
-                application_level_code,
-                efficiency_score,
-                ai_assist_ratio,
-                note,
-                is_public_pool,
-            )| {
-                Ok(LearningRecordSnapshot {
-                    record_id: record_id.to_string(),
-                    occurred_on,
-                    started_at,
-                    ended_at,
-                    content,
-                    duration_minutes,
-                    application_level_code,
-                    efficiency_score,
-                    ai_assist_ratio,
-                    note,
-                    is_public_pool: is_public_pool == 1,
-                    project_allocations: load_project_allocations(
-                        connection,
-                        RecordKind::Learning,
-                        record_id,
-                    )?,
-                    tag_ids: load_tag_ids(connection, RecordKind::Learning, record_id)?,
                 })
             },
         )
@@ -2220,7 +2032,7 @@ fn load_capture_defaults(connection: &Connection, user_id: &str) -> Result<Captu
         )?,
         learning_level_code: load_latest_dimension_code(
             connection,
-            "learning_records",
+            "time_records",
             "application_level_code",
             user_id,
             Some("occurred_on"),
@@ -2421,7 +2233,6 @@ fn parse_record_kind(value: &str) -> Result<RecordKind> {
         "time" => Ok(RecordKind::Time),
         "income" => Ok(RecordKind::Income),
         "expense" => Ok(RecordKind::Expense),
-        "learning" => Ok(RecordKind::Learning),
         other => Err(LifeOsError::InvalidInput(format!(
             "unsupported record kind: {other}"
         ))),

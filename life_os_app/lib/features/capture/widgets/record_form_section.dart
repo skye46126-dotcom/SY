@@ -52,15 +52,33 @@ List<CaptureFieldDefinition> captureFieldDefinitionsFor(CaptureType type) {
     case CaptureType.time:
       return const [
         CaptureFieldDefinition(
+          key: 'content',
+          label: '内容',
+          kind: CaptureFieldKind.text,
+          hintText: '例如：写代码、背单词、健身、休息',
+        ),
+        CaptureFieldDefinition(
+          key: 'occurred_on',
+          label: '发生日期',
+          kind: CaptureFieldKind.date,
+        ),
+        CaptureFieldDefinition(
           key: 'started_at',
           label: '开始时间',
           kind: CaptureFieldKind.time,
-          helperText: '使用时间轮盘选择，支持闹钟式滑动。',
+          helperText: '可选；没有完整时间段时填写时长。',
         ),
         CaptureFieldDefinition(
           key: 'ended_at',
           label: '结束时间',
           kind: CaptureFieldKind.time,
+        ),
+        CaptureFieldDefinition(
+          key: 'duration_minutes',
+          label: '时长',
+          kind: CaptureFieldKind.integer,
+          suffixText: '分钟',
+          helperText: '有开始/结束时间时可不填；仅有时长时必填。',
         ),
         CaptureFieldDefinition(
           key: 'category_code',
@@ -74,6 +92,13 @@ List<CaptureFieldDefinition> captureFieldDefinitionsFor(CaptureType type) {
           kind: CaptureFieldKind.percentage,
           suffixText: '%',
           helperText: '0-100，表示本次工作中 AI 参与的比例。',
+        ),
+        CaptureFieldDefinition(
+          key: 'application_level_code',
+          label: '学习应用等级',
+          kind: CaptureFieldKind.dropdown,
+          optionsKey: CaptureFieldOptions.learningLevel,
+          helperText: '仅当类别为 learning 时填写。',
         ),
         CaptureFieldDefinition(
           key: 'efficiency_score',
@@ -186,65 +211,6 @@ List<CaptureFieldDefinition> captureFieldDefinitionsFor(CaptureType type) {
           maxLines: 4,
           fullWidth: true,
           hintText: '补充购买内容、场景、用途。',
-        ),
-      ];
-    case CaptureType.learning:
-      return const [
-        CaptureFieldDefinition(
-          key: 'content',
-          label: '学习内容',
-          kind: CaptureFieldKind.text,
-          hintText: '例如：Rust FFI 调试、产品分析',
-        ),
-        CaptureFieldDefinition(
-          key: 'duration_minutes',
-          label: '学习时长',
-          kind: CaptureFieldKind.integer,
-          suffixText: '分钟',
-        ),
-        CaptureFieldDefinition(
-          key: 'occurred_on',
-          label: '发生日期',
-          kind: CaptureFieldKind.date,
-        ),
-        CaptureFieldDefinition(
-          key: 'application_level_code',
-          label: '应用等级',
-          kind: CaptureFieldKind.dropdown,
-          optionsKey: CaptureFieldOptions.learningLevel,
-        ),
-        CaptureFieldDefinition(
-          key: 'started_at',
-          label: '开始时间',
-          kind: CaptureFieldKind.time,
-          helperText: '可选，用于保留更完整的学习时段。',
-        ),
-        CaptureFieldDefinition(
-          key: 'ended_at',
-          label: '结束时间',
-          kind: CaptureFieldKind.time,
-        ),
-        CaptureFieldDefinition(
-          key: 'efficiency_score',
-          label: '效率评分',
-          kind: CaptureFieldKind.score,
-          suffixText: '/10',
-          helperText: '1-10 分，10 分代表吸收和输出都很好。',
-        ),
-        CaptureFieldDefinition(
-          key: 'ai_assist_ratio',
-          label: 'AI 占比',
-          kind: CaptureFieldKind.percentage,
-          suffixText: '%',
-          helperText: '0-100，表示学习过程中 AI 的辅助比例。',
-        ),
-        CaptureFieldDefinition(
-          key: 'note',
-          label: '备注',
-          kind: CaptureFieldKind.multiline,
-          maxLines: 4,
-          fullWidth: true,
-          hintText: '记录关键收获、应用计划或资料来源。',
         ),
       ];
     case CaptureType.project:
@@ -399,8 +365,7 @@ class RecordFormSection extends StatelessWidget {
             decoration: BoxDecoration(
               color: Colors.white.withValues(alpha: 0.56),
               borderRadius: BorderRadius.circular(20),
-              border:
-                  Border.all(color: Colors.white.withValues(alpha: 0.62)),
+              border: Border.all(color: Colors.white.withValues(alpha: 0.62)),
             ),
             child: Row(
               children: [
@@ -619,16 +584,14 @@ class _AdaptiveRecordFormState extends State<AdaptiveRecordForm> {
     }
     if (!mounted) return;
     setState(() {
-      widget.controllers[key]!.text =
-          result.toIso8601String().split('T').first;
+      widget.controllers[key]!.text = result.toIso8601String().split('T').first;
     });
   }
 
   Future<void> _pickTime(String key) async {
     final rootContext = Navigator.of(context, rootNavigator: true).context;
-    final initial =
-        _parseTime(widget.controllers[key]!.text) ??
-            const TimeOfDay(hour: 9, minute: 0);
+    final initial = _parseTime(widget.controllers[key]!.text) ??
+        const TimeOfDay(hour: 9, minute: 0);
     var selected = initial;
     final result = await showModalBottomSheet<TimeOfDay>(
       context: rootContext,
@@ -695,8 +658,7 @@ class _AdaptiveRecordFormState extends State<AdaptiveRecordForm> {
   void _setStartNow() {
     final now = TimeOfDay.now();
     final roundedMinute = (now.minute / 5).round() * 5;
-    final normalizedHour =
-        roundedMinute == 60 ? (now.hour + 1) % 24 : now.hour;
+    final normalizedHour = roundedMinute == 60 ? (now.hour + 1) % 24 : now.hour;
     final normalizedMinute = roundedMinute == 60 ? 0 : roundedMinute;
     final text = _timeText(
       TimeOfDay(hour: normalizedHour, minute: normalizedMinute),
@@ -736,8 +698,7 @@ class _AdaptiveRecordFormState extends State<AdaptiveRecordForm> {
   }
 
   String _offsetTimeText(String baseText, int minutes) {
-    final base =
-        _parseTime(baseText) ?? const TimeOfDay(hour: 9, minute: 0);
+    final base = _parseTime(baseText) ?? const TimeOfDay(hour: 9, minute: 0);
     final totalMinutes = base.hour * 60 + base.minute + minutes;
     final normalized = totalMinutes % (24 * 60);
     final hour = normalized ~/ 60;
@@ -835,7 +796,10 @@ class _OptionPickerField extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final selected = options.where((item) => item.code == value).cast<DimensionOptionModel?>().firstWhere(
+    final selected = options
+        .where((item) => item.code == value)
+        .cast<DimensionOptionModel?>()
+        .firstWhere(
           (item) => item != null,
           orElse: () => null,
         );
@@ -882,7 +846,8 @@ class _OptionPickerField extends StatelessWidget {
                                 trailing: item.code == value
                                     ? const Icon(Icons.check_rounded)
                                     : null,
-                                onTap: () => Navigator.of(context).pop(item.code),
+                                onTap: () =>
+                                    Navigator.of(context).pop(item.code),
                               ),
                           ],
                         ),

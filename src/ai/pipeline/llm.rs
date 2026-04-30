@@ -163,7 +163,6 @@ pub fn run_llm_pipeline(
                 TypedDraftKind::TimeRecord
                     | TypedDraftKind::IncomeRecord
                     | TypedDraftKind::ExpenseRecord
-                    | TypedDraftKind::LearningRecord
             )
         });
         warnings.extend(
@@ -316,7 +315,7 @@ fn reviewable_from_llm_event(
         .unwrap_or_default();
     let kind = match record_type.as_str() {
         "time" | "time_record" => TypedDraftKind::TimeRecord,
-        "learning" | "learning_record" => TypedDraftKind::LearningRecord,
+        "learning" | "learning_record" => TypedDraftKind::TimeRecord,
         "income" | "income_record" => TypedDraftKind::IncomeRecord,
         "expense" | "expense_record" => TypedDraftKind::ExpenseRecord,
         _ => return None,
@@ -386,10 +385,7 @@ fn reviewable_from_llm_item_core(
     let kind = typed_kind_from_str(text(item, "kind").as_deref());
     if !matches!(
         kind,
-        TypedDraftKind::TimeRecord
-            | TypedDraftKind::IncomeRecord
-            | TypedDraftKind::ExpenseRecord
-            | TypedDraftKind::LearningRecord
+        TypedDraftKind::TimeRecord | TypedDraftKind::IncomeRecord | TypedDraftKind::ExpenseRecord
     ) {
         return None;
     }
@@ -488,7 +484,7 @@ fn normalized_event_item(
         Value::String(text(event, "date").unwrap_or_else(|| context_date.to_string())),
     );
     if let Some(activity) = text(event, "activity_text") {
-        let key = if *kind == TypedDraftKind::LearningRecord {
+        let key = if *kind == TypedDraftKind::TimeRecord {
             "content"
         } else if *kind == TypedDraftKind::IncomeRecord {
             "source"
@@ -559,7 +555,7 @@ fn merge_llm_fields_into_rule_draft(
     if draft.kind == TypedDraftKind::TimeRecord {
         overlay_text_field(&mut draft, "description", text(item, "description"));
     }
-    if draft.kind == TypedDraftKind::LearningRecord {
+    if draft.kind == TypedDraftKind::TimeRecord {
         overlay_text_field(&mut draft, "content", text(item, "content"));
     }
     if draft.kind == TypedDraftKind::IncomeRecord {
@@ -662,7 +658,7 @@ fn field_level_warnings(
     kind: &TypedDraftKind,
 ) -> Vec<String> {
     let mut warnings = Vec::new();
-    if *kind == TypedDraftKind::TimeRecord || *kind == TypedDraftKind::LearningRecord {
+    if *kind == TypedDraftKind::TimeRecord {
         let start = field_string(fields, "start_time").and_then(|value| parse_clock_value(&value));
         let end = field_string(fields, "end_time").and_then(|value| parse_clock_value(&value));
         let duration = field_i64(fields, "duration_minutes");
@@ -749,7 +745,7 @@ fn typed_kind_from_str(value: Option<&str>) -> TypedDraftKind {
         "time_record" => TypedDraftKind::TimeRecord,
         "income_record" => TypedDraftKind::IncomeRecord,
         "expense_record" => TypedDraftKind::ExpenseRecord,
-        "learning_record" => TypedDraftKind::LearningRecord,
+        "learning_record" => TypedDraftKind::TimeRecord,
         "monthly_cost_baseline" => TypedDraftKind::MonthlyCostBaseline,
         "recurring_expense_rule" => TypedDraftKind::RecurringExpenseRule,
         "capex_cost" => TypedDraftKind::CapexCost,
@@ -765,12 +761,9 @@ fn typed_kind_from_str(value: Option<&str>) -> TypedDraftKind {
 
 fn mark_required_fields(kind: &TypedDraftKind, fields: &mut BTreeMap<String, DraftField>) {
     let required = match kind {
-        TypedDraftKind::TimeRecord => ["date", "category"].as_slice(),
+        TypedDraftKind::TimeRecord => ["date"].as_slice(),
         TypedDraftKind::IncomeRecord => ["date", "amount", "source"].as_slice(),
         TypedDraftKind::ExpenseRecord => ["date", "amount", "category"].as_slice(),
-        TypedDraftKind::LearningRecord => {
-            ["date", "content", "duration_minutes", "application_level"].as_slice()
-        }
         _ => [].as_slice(),
     };
     for key in required {

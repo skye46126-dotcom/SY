@@ -44,17 +44,21 @@ class ProjectListSection extends StatelessWidget {
                 decoration: BoxDecoration(
                   color: Colors.white.withValues(alpha: 0.42),
                   borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: Colors.white.withValues(alpha: 0.58)),
+                  border:
+                      Border.all(color: Colors.white.withValues(alpha: 0.58)),
                 ),
                 child: Wrap(
                   spacing: 18,
                   runSpacing: 10,
                   children: [
-                    Text(item.name, style: Theme.of(context).textTheme.titleMedium),
+                    Text(item.name,
+                        style: Theme.of(context).textTheme.titleMedium),
                     Text('状态: ${item.statusCode}'),
                     Text('时间: ${item.totalTimeMinutes} 分钟'),
-                    Text('收入: ¥${(item.totalIncomeCents / 100).toStringAsFixed(2)}'),
-                    Text('支出: ¥${(item.totalExpenseCents / 100).toStringAsFixed(2)}'),
+                    Text(
+                        '收入: ¥${(item.totalIncomeCents / 100).toStringAsFixed(2)}'),
+                    Text(
+                        '支出: ¥${(item.totalExpenseCents / 100).toStringAsFixed(2)}'),
                   ],
                 ),
               ),

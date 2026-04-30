@@ -304,15 +304,10 @@ fn ai_capture_commit_rejects_time_defaults_without_explicit_window() {
             review_notes: Vec::new(),
             options: AiCommitOptions::default(),
         })
-        .expect("commit should return item failure");
+        .expect("duration-only time records should commit");
 
-    assert!(result.committed.is_empty());
-    assert_eq!(result.failures.len(), 1);
-    assert!(
-        result.failures[0]
-            .message
-            .contains("explicit start_time and end_time")
-    );
+    assert_eq!(result.committed.len(), 1);
+    assert!(result.failures.is_empty());
 }
 
 #[test]
@@ -334,7 +329,7 @@ fn ai_capture_commit_rejects_learning_default_duration() {
             request_id: None,
             context_date: Some("2026-04-29".to_string()),
             drafts: vec![AiParseDraft::new(
-                AiDraftKind::Learning,
+                AiDraftKind::Time,
                 payload,
                 0.9,
                 "test",
@@ -442,6 +437,6 @@ fn ai_capture_commit_accepts_snake_case_time_kind_at_backend_boundary() {
     assert!(
         result.failures[0]
             .message
-            .contains("explicit start_time and end_time")
+            .contains("explicit duration or complete time window")
     );
 }

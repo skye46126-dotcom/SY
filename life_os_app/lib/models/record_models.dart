@@ -2,7 +2,6 @@ enum RecordKind {
   time,
   income,
   expense,
-  learning,
 }
 
 RecordKind recordKindFromJson(Object? value) {
@@ -14,8 +13,6 @@ RecordKind recordKindFromJson(Object? value) {
       return RecordKind.income;
     case 'expense':
       return RecordKind.expense;
-    case 'learning':
-      return RecordKind.learning;
     default:
       return RecordKind.time;
   }
@@ -30,8 +27,6 @@ extension RecordKindLabel on RecordKind {
         return '收入';
       case RecordKind.expense:
         return '支出';
-      case RecordKind.learning:
-        return '学习';
     }
   }
 }
@@ -82,9 +77,13 @@ class ProjectAllocationModel {
 class TimeRecordSnapshotModel {
   const TimeRecordSnapshotModel({
     required this.recordId,
+    required this.occurredOn,
     required this.startedAt,
     required this.endedAt,
+    required this.durationMinutes,
     required this.categoryCode,
+    required this.content,
+    required this.applicationLevelCode,
     required this.efficiencyScore,
     required this.valueScore,
     required this.stateScore,
@@ -95,9 +94,13 @@ class TimeRecordSnapshotModel {
   });
 
   final String recordId;
-  final String startedAt;
-  final String endedAt;
+  final String occurredOn;
+  final String? startedAt;
+  final String? endedAt;
+  final int durationMinutes;
   final String categoryCode;
+  final String content;
+  final String? applicationLevelCode;
   final int? efficiencyScore;
   final int? valueScore;
   final int? stateScore;
@@ -109,9 +112,13 @@ class TimeRecordSnapshotModel {
   factory TimeRecordSnapshotModel.fromJson(Map<String, dynamic> json) {
     return TimeRecordSnapshotModel(
       recordId: json['record_id'] as String? ?? '',
-      startedAt: json['started_at'] as String? ?? '',
-      endedAt: json['ended_at'] as String? ?? '',
+      occurredOn: json['occurred_on'] as String? ?? '',
+      startedAt: json['started_at'] as String?,
+      endedAt: json['ended_at'] as String?,
+      durationMinutes: (json['duration_minutes'] as num?)?.toInt() ?? 0,
       categoryCode: json['category_code'] as String? ?? '',
+      content: json['content'] as String? ?? '',
+      applicationLevelCode: json['application_level_code'] as String?,
       efficiencyScore: (json['efficiency_score'] as num?)?.toInt(),
       valueScore: (json['value_score'] as num?)?.toInt(),
       stateScore: (json['state_score'] as num?)?.toInt(),
@@ -119,9 +126,12 @@ class TimeRecordSnapshotModel {
       note: json['note'] as String?,
       projectAllocations: ((json['project_allocations'] as List?) ?? const [])
           .whereType<Map>()
-          .map((item) => ProjectAllocationModel.fromJson(item.cast<String, dynamic>()))
+          .map((item) =>
+              ProjectAllocationModel.fromJson(item.cast<String, dynamic>()))
           .toList(),
-      tagIds: ((json['tag_ids'] as List?) ?? const []).map((item) => item.toString()).toList(),
+      tagIds: ((json['tag_ids'] as List?) ?? const [])
+          .map((item) => item.toString())
+          .toList(),
     );
   }
 }
@@ -166,9 +176,12 @@ class IncomeRecordSnapshotModel {
       isPublicPool: json['is_public_pool'] == true,
       projectAllocations: ((json['project_allocations'] as List?) ?? const [])
           .whereType<Map>()
-          .map((item) => ProjectAllocationModel.fromJson(item.cast<String, dynamic>()))
+          .map((item) =>
+              ProjectAllocationModel.fromJson(item.cast<String, dynamic>()))
           .toList(),
-      tagIds: ((json['tag_ids'] as List?) ?? const []).map((item) => item.toString()).toList(),
+      tagIds: ((json['tag_ids'] as List?) ?? const [])
+          .map((item) => item.toString())
+          .toList(),
     );
   }
 }
@@ -204,62 +217,12 @@ class ExpenseRecordSnapshotModel {
       note: json['note'] as String?,
       projectAllocations: ((json['project_allocations'] as List?) ?? const [])
           .whereType<Map>()
-          .map((item) => ProjectAllocationModel.fromJson(item.cast<String, dynamic>()))
+          .map((item) =>
+              ProjectAllocationModel.fromJson(item.cast<String, dynamic>()))
           .toList(),
-      tagIds: ((json['tag_ids'] as List?) ?? const []).map((item) => item.toString()).toList(),
-    );
-  }
-}
-
-class LearningRecordSnapshotModel {
-  const LearningRecordSnapshotModel({
-    required this.recordId,
-    required this.occurredOn,
-    required this.startedAt,
-    required this.endedAt,
-    required this.content,
-    required this.durationMinutes,
-    required this.applicationLevelCode,
-    required this.efficiencyScore,
-    required this.aiAssistRatio,
-    required this.note,
-    required this.isPublicPool,
-    required this.projectAllocations,
-    required this.tagIds,
-  });
-
-  final String recordId;
-  final String occurredOn;
-  final String? startedAt;
-  final String? endedAt;
-  final String content;
-  final int durationMinutes;
-  final String applicationLevelCode;
-  final int? efficiencyScore;
-  final int? aiAssistRatio;
-  final String? note;
-  final bool isPublicPool;
-  final List<ProjectAllocationModel> projectAllocations;
-  final List<String> tagIds;
-
-  factory LearningRecordSnapshotModel.fromJson(Map<String, dynamic> json) {
-    return LearningRecordSnapshotModel(
-      recordId: json['record_id'] as String? ?? '',
-      occurredOn: json['occurred_on'] as String? ?? '',
-      startedAt: json['started_at'] as String?,
-      endedAt: json['ended_at'] as String?,
-      content: json['content'] as String? ?? '',
-      durationMinutes: (json['duration_minutes'] as num?)?.toInt() ?? 0,
-      applicationLevelCode: json['application_level_code'] as String? ?? '',
-      efficiencyScore: (json['efficiency_score'] as num?)?.toInt(),
-      aiAssistRatio: (json['ai_assist_ratio'] as num?)?.toInt(),
-      note: json['note'] as String?,
-      isPublicPool: json['is_public_pool'] == true,
-      projectAllocations: ((json['project_allocations'] as List?) ?? const [])
-          .whereType<Map>()
-          .map((item) => ProjectAllocationModel.fromJson(item.cast<String, dynamic>()))
+      tagIds: ((json['tag_ids'] as List?) ?? const [])
+          .map((item) => item.toString())
           .toList(),
-      tagIds: ((json['tag_ids'] as List?) ?? const []).map((item) => item.toString()).toList(),
     );
   }
 }

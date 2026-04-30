@@ -86,11 +86,14 @@ class _QualityRow extends StatelessWidget {
         Row(
           children: [
             Expanded(
-              child: Text(label, style: Theme.of(context).textTheme.titleMedium),
+              child:
+                  Text(label, style: Theme.of(context).textTheme.titleMedium),
             ),
             Text(
               rightLabel ??
-                  (value == null ? '暂无数据' : '${(normalized * 100).toStringAsFixed(1)}%'),
+                  (value == null
+                      ? '暂无数据'
+                      : '${(normalized * 100).toStringAsFixed(1)}%'),
               style: Theme.of(context).textTheme.bodyMedium,
             ),
           ],

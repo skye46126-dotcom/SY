@@ -125,7 +125,8 @@ class AiParseResultModel {
       requestId: json['request_id'] as String? ?? '',
       items: ((json['items'] as List?) ?? const [])
           .whereType<Map>()
-          .map((item) => AiParseDraftModel.fromJson(item.cast<String, dynamic>()))
+          .map((item) =>
+              AiParseDraftModel.fromJson(item.cast<String, dynamic>()))
           .toList(),
       warnings: ((json['warnings'] as List?) ?? const [])
           .map((item) => item.toString())
@@ -201,11 +202,13 @@ class AiCommitResultModel {
       requestId: json['request_id'] as String? ?? '',
       committed: ((json['committed'] as List?) ?? const [])
           .whereType<Map>()
-          .map((item) => AiCommittedRecordModel.fromJson(item.cast<String, dynamic>()))
+          .map((item) =>
+              AiCommittedRecordModel.fromJson(item.cast<String, dynamic>()))
           .toList(),
       failures: ((json['failures'] as List?) ?? const [])
           .whereType<Map>()
-          .map((item) => AiCommitFailureModel.fromJson(item.cast<String, dynamic>()))
+          .map((item) =>
+              AiCommitFailureModel.fromJson(item.cast<String, dynamic>()))
           .toList(),
       warnings: ((json['warnings'] as List?) ?? const [])
           .map((item) => item.toString())

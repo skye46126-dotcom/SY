@@ -85,18 +85,23 @@ class TodayRecentRecordsSection extends StatelessWidget {
                               },
                               itemBuilder: (context) => const [
                                 PopupMenuItem(value: 'edit', child: Text('编辑')),
-                                PopupMenuItem(value: 'copy', child: Text('复制一条')),
-                                PopupMenuItem(value: 'delete', child: Text('删除')),
+                                PopupMenuItem(
+                                    value: 'copy', child: Text('复制一条')),
+                                PopupMenuItem(
+                                    value: 'delete', child: Text('删除')),
                               ],
                             ),
                           ],
                         ),
                         const SizedBox(height: 8),
-                        Text(record.title, style: Theme.of(context).textTheme.titleMedium),
+                        Text(record.title,
+                            style: Theme.of(context).textTheme.titleMedium),
                         const SizedBox(height: 4),
-                        Text(record.detail, style: Theme.of(context).textTheme.bodyMedium),
+                        Text(record.detail,
+                            style: Theme.of(context).textTheme.bodyMedium),
                         const SizedBox(height: 8),
-                        Text(record.occurredAt, style: Theme.of(context).textTheme.bodyMedium),
+                        Text(record.occurredAt,
+                            style: Theme.of(context).textTheme.bodyMedium),
                       ],
                     );
                   }
@@ -109,9 +114,11 @@ class TodayRecentRecordsSection extends StatelessWidget {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text(record.title, style: Theme.of(context).textTheme.titleMedium),
+                            Text(record.title,
+                                style: Theme.of(context).textTheme.titleMedium),
                             const SizedBox(height: 4),
-                            Text(record.detail, style: Theme.of(context).textTheme.bodyMedium),
+                            Text(record.detail,
+                                style: Theme.of(context).textTheme.bodyMedium),
                           ],
                         ),
                       ),

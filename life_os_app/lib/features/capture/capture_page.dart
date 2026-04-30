@@ -451,9 +451,17 @@ class _CapturePageState extends State<CapturePage> {
           _offsetTime(_formControllers['started_at']!.text, 30),
           force: force,
         );
+        _setDefault('occurred_on', anchorDate, force: force);
+        _setDefault('content', '', force: force);
+        _setDefault('duration_minutes', '', force: force);
         _setDefault(
           'category_code',
           defaults?.timeCategoryCode ?? 'work',
+          force: force,
+        );
+        _setDefault(
+          'application_level_code',
+          defaults?.learningLevelCode ?? 'input',
           force: force,
         );
         _setDefault('ai_assist_ratio', '', force: force);
@@ -482,20 +490,6 @@ class _CapturePageState extends State<CapturePage> {
         );
         _setDefault('amount_yuan', '', force: force);
         _setDefault('ai_assist_ratio', '', force: force);
-        _setDefault('note', '', force: force);
-      case CaptureType.learning:
-        _setDefault('occurred_on', anchorDate, force: force);
-        _setDefault('content', '', force: force);
-        _setDefault('duration_minutes', '', force: force);
-        _setDefault(
-          'application_level_code',
-          defaults?.learningLevelCode ?? 'input',
-          force: force,
-        );
-        _setDefault('started_at', '', force: force);
-        _setDefault('ended_at', '', force: force);
-        _setDefault('ai_assist_ratio', '', force: force);
-        _setDefault('efficiency_score', '', force: force);
         _setDefault('note', '', force: force);
       case CaptureType.project:
         _setDefault('name', '', force: force);

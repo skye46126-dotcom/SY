@@ -50,7 +50,8 @@ class ManagementPage extends StatelessWidget {
             ManagementEntry(
               title: '经营参数',
               description: '理想时薪、每日目标与长期配置。',
-              onTap: () => Navigator.of(context).pushNamed('/settings/operating'),
+              onTap: () =>
+                  Navigator.of(context).pushNamed('/settings/operating'),
             ),
             ManagementEntry(
               title: '标签管理',

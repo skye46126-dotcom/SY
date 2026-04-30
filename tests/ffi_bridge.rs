@@ -152,16 +152,19 @@ fn ffi_bridge_can_initialize_write_and_read_today_data() {
 
     bridge_call(
         &database_path,
-        "create_learning_record",
+        "create_time_record",
         json!({
             "user_id": user_id,
             "occurred_on": "2026-04-25",
             "started_at": "2026-04-25T10:00:00Z",
             "ended_at": "2026-04-25T11:00:00Z",
+            "category_code": "learning",
             "content": "Read Rust docs",
             "duration_minutes": 60,
             "application_level_code": "input",
             "efficiency_score": 7,
+            "value_score": null,
+            "state_score": null,
             "ai_assist_ratio": 30,
             "note": "ffi learning",
             "source": "manual",
@@ -222,7 +225,7 @@ fn ffi_bridge_can_return_v2_parse_drafts() {
 
     let items = parsed["items"].as_array().expect("v2 items");
     assert_eq!(items.len(), 1);
-    assert_eq!(items[0]["kind"].as_str(), Some("learning_record"));
+    assert_eq!(items[0]["kind"].as_str(), Some("time_record"));
     assert_eq!(items[0]["intent"].as_str(), Some("record"));
     assert!(items[0]["fields"]["duration_minutes"]["value"].is_string());
     assert!(
@@ -275,7 +278,7 @@ fn ffi_bridge_can_enqueue_and_process_capture_inbox() {
     assert_eq!(processed["entry"]["status"].as_str(), Some("draft_ready"));
     assert_eq!(
         processed["draft_envelope"]["items"][0]["kind"].as_str(),
-        Some("learning_record")
+        Some("time_record")
     );
 
     let loaded = bridge_call(
@@ -718,16 +721,19 @@ fn ffi_bridge_can_query_projects_tags_and_reviews() {
 
     bridge_call(
         &database_path,
-        "create_learning_record",
+        "create_time_record",
         json!({
             "user_id": user_id,
             "occurred_on": "2026-04-25",
             "started_at": "2026-04-25T12:00:00Z",
             "ended_at": "2026-04-25T13:00:00Z",
+            "category_code": "learning",
             "content": "Read rusqlite docs",
             "duration_minutes": 60,
             "application_level_code": "applied",
             "efficiency_score": 7,
+            "value_score": null,
+            "state_score": null,
             "ai_assist_ratio": 30,
             "note": "project learning",
             "source": "manual",
@@ -769,7 +775,7 @@ fn ffi_bridge_can_query_projects_tags_and_reviews() {
     assert_eq!(detail["name"].as_str(), Some("SkyeOS Rust Refactor"));
     assert_eq!(detail["income_record_count"].as_i64(), Some(1));
     assert_eq!(detail["expense_record_count"].as_i64(), Some(1));
-    assert_eq!(detail["time_record_count"].as_i64(), Some(1));
+    assert_eq!(detail["time_record_count"].as_i64(), Some(2));
     assert_eq!(detail["learning_record_count"].as_i64(), Some(1));
 
     let review = bridge_call(

@@ -10,7 +10,7 @@ void main() {
       );
 
       expect(config, isNotNull);
-      expect(config!.initialType, CaptureType.learning);
+      expect(config!.initialType, CaptureType.time);
       expect(config.mode, CaptureLaunchMode.ai);
       expect(config.prefillText, '测试');
       expect(config.focusAiInput, isTrue);

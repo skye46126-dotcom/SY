@@ -139,6 +139,7 @@ fn try_parse_learning(
 
     let mut payload = BTreeMap::new();
     payload.insert("date".to_string(), occurred_on.to_string());
+    payload.insert("category".to_string(), "learning".to_string());
     payload.insert("content".to_string(), extract_learning_content(line));
     payload.insert(
         "application_level".to_string(),
@@ -164,7 +165,7 @@ fn try_parse_learning(
     };
 
     Some(AiParseDraft::new(
-        AiDraftKind::Learning,
+        AiDraftKind::Time,
         payload,
         if warning.is_some() { 0.64 } else { 0.84 },
         "rule",

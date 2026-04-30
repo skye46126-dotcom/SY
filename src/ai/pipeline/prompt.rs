@@ -12,7 +12,7 @@ pub const DEFAULT_EXTRACTION_PROMPT: &str = r#"你是个人经营系统的数据
 
 可提交记录的边界:
 1. time_record 只用于完整时间段或明确时长的行动，例如 "9:00-11:40 上课"、"背单词 50 分钟"。
-2. learning_record 只用于学习内容，并且最好有时长、产出、课程、题目、阅读材料之一。
+2. 学习不是独立 record_type；学习类行动统一输出 time_record，并将 domain 设为 learning。
 3. expense_record/income_record 必须有金额文本；没有金额必须忽略。
 4. 单点时间不是 time_record，例如 "8:20 出寝室"、"11:40 下课"、"中午"，必须忽略。
 5. "写到 1:32"、"上到 11:40" 只有结束点，除非原文给出开始点或时长，否则忽略。
@@ -31,7 +31,7 @@ pub const DEFAULT_EXTRACTION_PROMPT: &str = r#"你是个人经营系统的数据
 - end_time: 规范化结束时间，使用 HH:MM；能明确推断时必须填写，不能明确推断时填 null。
 - duration_minutes: 规范化时长分钟；能明确推断时填写整数，不能明确推断时填 null。
 - money_text: 原始金额文本，例如 28元、3k、1.2万；没有则 null。
-- record_type: time|learning|income|expense。
+- record_type: time|income|expense。
 - domain: work|learning|life|entertainment|rest|social|null，只用于时间语义提示。
 - application_level: input|applied|result|null，只用于 learning；无法明确时填 input 但加 warning。
 - note_text: 能挂到该事件的感受、判断、上下文；没有则 null。
@@ -46,8 +46,8 @@ pub const DEFAULT_EXTRACTION_PROMPT: &str = r#"你是个人经营系统的数据
 补充要求:
 - 如果文本像“细节需要打磨”“结构清晰，不混乱”“GPT辅助学习很舒服”这样有复盘价值，但挂不到明确事件，优先进入 notes，不要放进 ignored_context。
 - 如果文本像“没有早起，该罚”“英语学习一小时失败”“任务不明确”“道心乱了”“效果并不好”“需要找有经验的人问问”这类短反思/失败项，即使很短，也优先进入 notes，不要因为太碎放进 ignored_context。
-- “看书 / 读书 / 背单词 / 预习 / 课程 / 作业 / 刷题 / 答疑 / 听课 / 听直播 / 学习唱歌 / 排版学习 / 工作流搭建学习” 这类学习动作，如果同时有明确时间段或明确时长，优先判断为 learning_record；不要一律降成 time_record。
-- “玩游戏 / 吃饭 / 洗澡 / 睡觉 / 冥想 / 锻炼 / 通勤 / 社交” 这类非学习动作，有明确时间段或时长时可以是 time_record，但不要误判成 learning_record。
+- “看书 / 读书 / 背单词 / 预习 / 课程 / 作业 / 刷题 / 答疑 / 听课 / 听直播 / 学习唱歌 / 排版学习 / 工作流搭建学习” 这类学习动作，如果同时有明确时间段或明确时长，输出 record_type=time、domain=learning。
+- “玩游戏 / 吃饭 / 洗澡 / 睡觉 / 冥想 / 锻炼 / 通勤 / 社交” 这类非学习动作，有明确时间段或时长时可以是 time_record，但 domain 不要误设为 learning。
 - 如果出现“中午 / 下午 / 晚上”后一两行才出现动作或时间，优先把它们理解为同一段上下文。
 - 如果时间原文是 `12.30-1.30`、`1.30-2`、`8-10.30`、`5-9点` 这种半结构表达，你要先把它归一化成固定时间再输出，例如 `12:30-13:30`、`13:30-14:00`、`08:00-10:30`、`17:00-21:00`。如果上午/下午无法确定，再保留 time_text 并把 start_time/end_time 设为 null。
 - 长混合文本中，优先抽取所有“显式时间段 / 显式时长 + 动作”的事件；不要因为前后有很多复盘或碎句，就漏掉诸如“看书 1h”“背单词 50min”“预习高数课 2h”“听答疑 30min”这样的明确行动。
@@ -69,7 +69,7 @@ pub const DEFAULT_EXTRACTION_PROMPT: &str = r#"你是个人经营系统的数据
       "end_time": "HH:MM/null",
       "duration_minutes": null,
       "money_text": "金额原文/null",
-      "record_type": "time|learning|income|expense",
+      "record_type": "time|income|expense",
       "domain": "work|learning|life|entertainment|rest|social|null",
       "application_level": "input|applied|result|null",
       "project_texts": [],

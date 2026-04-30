@@ -28,7 +28,8 @@ class TodayTimeMixSection extends StatelessWidget {
 
     final work = overview!.totalWorkMinutes;
     final learning = overview!.totalLearningMinutes;
-    final other = (overview!.totalTimeMinutes - work - learning).clamp(0, 1 << 30);
+    final other =
+        (overview!.totalTimeMinutes - work - learning).clamp(0, 1 << 30);
     final total = (work + learning + other).clamp(1, 1 << 30);
 
     return SectionCard(

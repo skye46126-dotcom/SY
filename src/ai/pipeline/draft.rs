@@ -152,10 +152,9 @@ fn fields_from_legacy(legacy: &AiParseDraft) -> BTreeMap<String, DraftField> {
 
 fn mark_required_fields(kind: &AiDraftKind, fields: &mut BTreeMap<String, DraftField>) {
     let required = match kind {
-        AiDraftKind::Time => vec!["date", "category"],
+        AiDraftKind::Time => vec!["date"],
         AiDraftKind::Income => vec!["date", "amount", "source", "type"],
         AiDraftKind::Expense => vec!["date", "amount", "category"],
-        AiDraftKind::Learning => vec!["date", "content", "duration_minutes", "application_level"],
         AiDraftKind::Unknown => Vec::new(),
     };
     for key in required {
@@ -192,8 +191,6 @@ fn build_title(kind: &TypedDraftKind, legacy: &AiParseDraft) -> String {
                 .unwrap_or_default();
             format!("{note}{amount}")
         }
-        TypedDraftKind::LearningRecord => first_payload_value(legacy, &["content", "description"])
-            .unwrap_or_else(|| "学习记录".to_string()),
         TypedDraftKind::TimeMarker => {
             let time = first_payload_value(legacy, &["raw"])
                 .and_then(|raw| extract_time_marker_text(&raw))
@@ -209,8 +206,7 @@ fn build_title(kind: &TypedDraftKind, legacy: &AiParseDraft) -> String {
 fn build_note(kind: &TypedDraftKind, legacy: &AiParseDraft) -> Option<String> {
     let explicit_note = first_payload_value(legacy, &["note"]);
     let fallback = match kind {
-        TypedDraftKind::TimeRecord => first_payload_value(legacy, &["description"]),
-        TypedDraftKind::LearningRecord => first_payload_value(legacy, &["content"]),
+        TypedDraftKind::TimeRecord => first_payload_value(legacy, &["content", "description"]),
         TypedDraftKind::IncomeRecord => first_payload_value(legacy, &["source"]),
         TypedDraftKind::ExpenseRecord => explicit_note.clone(),
         _ => first_payload_value(legacy, &["raw"]),

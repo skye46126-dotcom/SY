@@ -3,12 +3,11 @@ use std::path::Path;
 use crate::db::Database;
 use crate::error::Result;
 use crate::models::{
-    CaptureMetadata, CreateExpenseRecordInput, CreateIncomeRecordInput, CreateLearningRecordInput,
-    CreateProjectInput, CreateTagInput, CreateTimeRecordInput, DimensionOption,
-    DimensionOptionInput, ExpenseRecord, ExpenseRecordSnapshot, IncomeRecord, IncomeRecordSnapshot,
-    LearningRecord, LearningRecordSnapshot, OperatingSettings, Project, RecentRecordItem,
-    RecordKind, Tag, TimeRecord, TimeRecordSnapshot, TodayAlerts, TodayGoalProgress, TodayOverview,
-    TodaySummary, UpdateOperatingSettingsInput, UserProfile,
+    CaptureMetadata, CreateExpenseRecordInput, CreateIncomeRecordInput, CreateProjectInput,
+    CreateTagInput, CreateTimeRecordInput, DimensionOption, DimensionOptionInput, ExpenseRecord,
+    ExpenseRecordSnapshot, IncomeRecord, IncomeRecordSnapshot, OperatingSettings, Project,
+    RecentRecordItem, RecordKind, Tag, TimeRecord, TimeRecordSnapshot, TodayAlerts,
+    TodayGoalProgress, TodayOverview, TodaySummary, UpdateOperatingSettingsInput, UserProfile,
 };
 use crate::repositories::record_repository::RecordRepository;
 
@@ -50,15 +49,6 @@ impl RecordService {
         self.database.initialize()?;
         let mut connection = self.database.connect()?;
         RecordRepository::create_expense_record(&mut connection, input)
-    }
-
-    pub fn create_learning_record(
-        &self,
-        input: &CreateLearningRecordInput,
-    ) -> Result<LearningRecord> {
-        self.database.initialize()?;
-        let mut connection = self.database.connect()?;
-        RecordRepository::create_learning_record(&mut connection, input)
     }
 
     pub fn create_project(&self, input: &CreateProjectInput) -> Result<Project> {
@@ -214,16 +204,6 @@ impl RecordService {
         RecordRepository::update_expense_record(&mut connection, record_id, input)
     }
 
-    pub fn update_learning_record(
-        &self,
-        record_id: &str,
-        input: &CreateLearningRecordInput,
-    ) -> Result<LearningRecord> {
-        self.database.initialize()?;
-        let mut connection = self.database.connect()?;
-        RecordRepository::update_learning_record(&mut connection, record_id, input)
-    }
-
     pub fn delete_record(&self, kind: RecordKind, user_id: &str, record_id: &str) -> Result<()> {
         self.database.initialize()?;
         let mut connection = self.database.connect()?;
@@ -281,15 +261,5 @@ impl RecordService {
         self.database.initialize()?;
         let connection = self.database.connect()?;
         RecordRepository::get_expense_record_snapshot(&connection, user_id, record_id)
-    }
-
-    pub fn get_learning_record_snapshot(
-        &self,
-        user_id: &str,
-        record_id: &str,
-    ) -> Result<Option<LearningRecordSnapshot>> {
-        self.database.initialize()?;
-        let connection = self.database.connect()?;
-        RecordRepository::get_learning_record_snapshot(&connection, user_id, record_id)
     }
 }

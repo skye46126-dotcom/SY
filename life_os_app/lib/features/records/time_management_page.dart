@@ -78,7 +78,8 @@ class _TimeManagementPageState extends State<TimeManagementPage> {
                       title: Text(record.title),
                       subtitle: Text(record.detail),
                       trailing: Text(record.occurredAt),
-                      onTap: () => Navigator.of(context).pushNamed('/day/${runtime.todayDate}'),
+                      onTap: () => Navigator.of(context)
+                          .pushNamed('/day/${runtime.todayDate}'),
                     ),
                 ],
               ),

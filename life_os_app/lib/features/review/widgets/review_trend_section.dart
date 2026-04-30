@@ -69,8 +69,10 @@ class ReviewTrendSection extends StatelessWidget {
                 ),
                 borderData: FlBorderData(show: false),
                 titlesData: FlTitlesData(
-                  topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                  rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                  topTitles: const AxisTitles(
+                      sideTitles: SideTitles(showTitles: false)),
+                  rightTitles: const AxisTitles(
+                      sideTitles: SideTitles(showTitles: false)),
                   leftTitles: AxisTitles(
                     sideTitles: SideTitles(
                       showTitles: true,
@@ -111,10 +113,13 @@ class ReviewTrendSection extends StatelessWidget {
             spacing: 12,
             runSpacing: 12,
             children: [
-              _TrendChip(label: '收入变化', value: _ratio(report!.incomeChangeRatio)),
-              _TrendChip(label: '支出变化', value: _ratio(report!.expenseChangeRatio)),
+              _TrendChip(
+                  label: '收入变化', value: _ratio(report!.incomeChangeRatio)),
+              _TrendChip(
+                  label: '支出变化', value: _ratio(report!.expenseChangeRatio)),
               _TrendChip(label: '工作变化', value: _ratio(report!.workChangeRatio)),
-              _TrendChip(label: '被动覆盖', value: _ratio(report!.passiveCoverRatio)),
+              _TrendChip(
+                  label: '被动覆盖', value: _ratio(report!.passiveCoverRatio)),
               _TrendChip(
                 label: '快照时薪',
                 value: snapshot?.hourlyRateCents == null

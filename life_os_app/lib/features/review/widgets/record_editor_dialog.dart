@@ -33,7 +33,6 @@ class RecordEditorDialog extends StatefulWidget {
     required this.tags,
   })  : incomeSnapshot = null,
         expenseSnapshot = null,
-        learningSnapshot = null,
         kind = RecordKind.time;
 
   const RecordEditorDialog.income({
@@ -46,7 +45,6 @@ class RecordEditorDialog extends StatefulWidget {
     required this.tags,
   })  : timeSnapshot = null,
         expenseSnapshot = null,
-        learningSnapshot = null,
         kind = RecordKind.income;
 
   const RecordEditorDialog.expense({
@@ -59,21 +57,7 @@ class RecordEditorDialog extends StatefulWidget {
     required this.tags,
   })  : timeSnapshot = null,
         incomeSnapshot = null,
-        learningSnapshot = null,
         kind = RecordKind.expense;
-
-  const RecordEditorDialog.learning({
-    super.key,
-    required this.recordId,
-    required this.userId,
-    required this.anchorDate,
-    required this.learningSnapshot,
-    required this.projectOptions,
-    required this.tags,
-  })  : timeSnapshot = null,
-        incomeSnapshot = null,
-        expenseSnapshot = null,
-        kind = RecordKind.learning;
 
   final String recordId;
   final String userId;
@@ -82,7 +66,6 @@ class RecordEditorDialog extends StatefulWidget {
   final TimeRecordSnapshotModel? timeSnapshot;
   final IncomeRecordSnapshotModel? incomeSnapshot;
   final ExpenseRecordSnapshotModel? expenseSnapshot;
-  final LearningRecordSnapshotModel? learningSnapshot;
   final List<ProjectOption> projectOptions;
   final List<TagModel> tags;
 
@@ -261,10 +244,21 @@ class _RecordEditorDialogState extends State<RecordEditorDialog> {
       case RecordKind.time:
         final snapshot = widget.timeSnapshot!;
         return {
-          'started_at':
-              TextEditingController(text: _utcToTime(snapshot.startedAt)),
-          'ended_at': TextEditingController(text: _utcToTime(snapshot.endedAt)),
+          'occurred_on': TextEditingController(text: snapshot.occurredOn),
+          'started_at': TextEditingController(
+            text: snapshot.startedAt == null
+                ? ''
+                : _utcToTime(snapshot.startedAt!),
+          ),
+          'ended_at': TextEditingController(
+            text: snapshot.endedAt == null ? '' : _utcToTime(snapshot.endedAt!),
+          ),
+          'duration_minutes':
+              TextEditingController(text: '${snapshot.durationMinutes}'),
           'category_code': TextEditingController(text: snapshot.categoryCode),
+          'content': TextEditingController(text: snapshot.content),
+          'application_level_code':
+              TextEditingController(text: snapshot.applicationLevelCode ?? ''),
           'efficiency_score':
               TextEditingController(text: _text(snapshot.efficiencyScore)),
           'value_score':
@@ -300,29 +294,6 @@ class _RecordEditorDialogState extends State<RecordEditorDialog> {
               TextEditingController(text: _text(snapshot.aiAssistRatio)),
           'note': TextEditingController(text: snapshot.note ?? ''),
         };
-      case RecordKind.learning:
-        final snapshot = widget.learningSnapshot!;
-        return {
-          'occurred_on': TextEditingController(text: snapshot.occurredOn),
-          'started_at': TextEditingController(
-            text: snapshot.startedAt == null
-                ? ''
-                : _utcToTime(snapshot.startedAt!),
-          ),
-          'ended_at': TextEditingController(
-            text: snapshot.endedAt == null ? '' : _utcToTime(snapshot.endedAt!),
-          ),
-          'content': TextEditingController(text: snapshot.content),
-          'duration_minutes':
-              TextEditingController(text: '${snapshot.durationMinutes}'),
-          'application_level_code':
-              TextEditingController(text: snapshot.applicationLevelCode),
-          'efficiency_score':
-              TextEditingController(text: _text(snapshot.efficiencyScore)),
-          'ai_assist_ratio':
-              TextEditingController(text: _text(snapshot.aiAssistRatio)),
-          'note': TextEditingController(text: snapshot.note ?? ''),
-        };
     }
   }
 
@@ -340,10 +311,6 @@ class _RecordEditorDialogState extends State<RecordEditorDialog> {
         return widget.expenseSnapshot!.projectAllocations
             .map((item) => item.projectId)
             .toSet();
-      case RecordKind.learning:
-        return widget.learningSnapshot!.projectAllocations
-            .map((item) => item.projectId)
-            .toSet();
     }
   }
 
@@ -355,8 +322,6 @@ class _RecordEditorDialogState extends State<RecordEditorDialog> {
         return widget.incomeSnapshot!.tagIds.toSet();
       case RecordKind.expense:
         return widget.expenseSnapshot!.tagIds.toSet();
-      case RecordKind.learning:
-        return widget.learningSnapshot!.tagIds.toSet();
     }
   }
 
@@ -373,9 +338,14 @@ class _RecordEditorDialogState extends State<RecordEditorDialog> {
             'record_id': widget.recordId,
             'input': {
               'user_id': widget.userId,
-              'started_at': _toUtcTimestamp(_controllers['started_at']!.text),
-              'ended_at': _toUtcTimestamp(_controllers['ended_at']!.text),
+              'occurred_on': _controllers['occurred_on']!.text,
+              'started_at':
+                  _optionalUtcTimestamp(_controllers['started_at']!.text),
+              'ended_at': _optionalUtcTimestamp(_controllers['ended_at']!.text),
+              'duration_minutes': _intValue('duration_minutes'),
               'category_code': _controllers['category_code']!.text,
+              'content': _controllers['content']!.text,
+              'application_level_code': _nullable('application_level_code'),
               'efficiency_score': _intValue('efficiency_score'),
               'value_score': _intValue('value_score'),
               'state_score': _intValue('state_score'),
@@ -429,35 +399,6 @@ class _RecordEditorDialogState extends State<RecordEditorDialog> {
             },
           },
         );
-      case RecordKind.learning:
-        return RecordEditorResult(
-          method: 'update_learning_record',
-          payload: {
-            'record_id': widget.recordId,
-            'input': {
-              'user_id': widget.userId,
-              'occurred_on': _controllers['occurred_on']!.text,
-              'started_at': _controllers['started_at']!.text.isEmpty
-                  ? null
-                  : _toUtcTimestamp(_controllers['started_at']!.text),
-              'ended_at': _controllers['ended_at']!.text.isEmpty
-                  ? null
-                  : _toUtcTimestamp(_controllers['ended_at']!.text),
-              'content': _controllers['content']!.text,
-              'duration_minutes':
-                  int.parse(_controllers['duration_minutes']!.text),
-              'application_level_code':
-                  _controllers['application_level_code']!.text,
-              'efficiency_score': _intValue('efficiency_score'),
-              'ai_assist_ratio': _intValue('ai_assist_ratio'),
-              'note': _nullable('note'),
-              'source': 'manual',
-              'is_public_pool': false,
-              'project_allocations': projectAllocations,
-              'tag_ids': tagIds,
-            },
-          },
-        );
     }
   }
 
@@ -494,6 +435,13 @@ class _RecordEditorDialogState extends State<RecordEditorDialog> {
     return local.toUtc().toIso8601String();
   }
 
+  String? _optionalUtcTimestamp(String time) {
+    if (time.trim().isEmpty) {
+      return null;
+    }
+    return _toUtcTimestamp(time);
+  }
+
   CaptureType _captureTypeFor(RecordKind kind) {
     switch (kind) {
       case RecordKind.time:
@@ -502,8 +450,6 @@ class _RecordEditorDialogState extends State<RecordEditorDialog> {
         return CaptureType.income;
       case RecordKind.expense:
         return CaptureType.expense;
-      case RecordKind.learning:
-        return CaptureType.learning;
     }
   }
 }

@@ -32,12 +32,15 @@ class _LedgerManagementPageState extends State<LedgerManagementPage> {
         date: runtime.todayDate,
         timezone: runtime.timezone,
       );
-      final kind = widget.recordType == 'income' ? RecordKind.income : RecordKind.expense;
+      final kind = widget.recordType == 'income'
+          ? RecordKind.income
+          : RecordKind.expense;
       final filtered = records.where((item) => item.kind == kind).toList();
       if (!mounted) return;
       setState(() {
         _state = filtered.isEmpty
-            ? ViewState.empty('今天还没有${widget.recordType == 'income' ? '收入' : '支出'}记录。')
+            ? ViewState.empty(
+                '今天还没有${widget.recordType == 'income' ? '收入' : '支出'}记录。')
             : ViewState.ready(filtered);
       });
     } catch (error) {

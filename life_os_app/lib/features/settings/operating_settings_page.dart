@@ -48,8 +48,8 @@ class _OperatingSettingsPageState extends State<OperatingSettingsPage> {
         method: 'get_operating_settings',
         payload: {'user_id': runtime.userId},
       );
-      final settings =
-          OperatingSettingsModel.fromJson((data as Map).cast<String, dynamic>());
+      final settings = OperatingSettingsModel.fromJson(
+          (data as Map).cast<String, dynamic>());
       _timezone.text = settings.timezone;
       _currency.text = settings.currencyCode;
       _idealHourlyRate.text =
@@ -59,7 +59,8 @@ class _OperatingSettingsPageState extends State<OperatingSettingsPage> {
       _basicLiving.text =
           (settings.currentMonthBasicLivingCents / 100).toStringAsFixed(2);
       _fixedSubscription.text =
-          (settings.currentMonthFixedSubscriptionCents / 100).toStringAsFixed(2);
+          (settings.currentMonthFixedSubscriptionCents / 100)
+              .toStringAsFixed(2);
       if (!mounted) {
         return;
       }
@@ -271,8 +272,10 @@ class _OperatingSettingsPageState extends State<OperatingSettingsPage> {
         payload: {
           'user_id': runtime.userId,
           'input': {
-            'month': _state.data?.currentMonth ?? runtime.todayDate.substring(0, 7),
-            'basic_living_cents': (double.parse(_basicLiving.text) * 100).round(),
+            'month':
+                _state.data?.currentMonth ?? runtime.todayDate.substring(0, 7),
+            'basic_living_cents':
+                (double.parse(_basicLiving.text) * 100).round(),
             'fixed_subscription_cents':
                 (double.parse(_fixedSubscription.text) * 100).round(),
             'note': null,
@@ -336,8 +339,9 @@ class _AutocompleteTextField extends StatelessWidget {
         return TextFormField(
           controller: textController,
           focusNode: focusNode,
-          textCapitalization:
-              uppercase ? TextCapitalization.characters : TextCapitalization.none,
+          textCapitalization: uppercase
+              ? TextCapitalization.characters
+              : TextCapitalization.none,
           decoration: InputDecoration(
             labelText: labelText,
             helperText: helperText,

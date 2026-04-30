@@ -292,7 +292,6 @@ class _TodayPageState extends State<TodayPage> {
       RecordKind.time => 'get_time_record_snapshot',
       RecordKind.income => 'get_income_record_snapshot',
       RecordKind.expense => 'get_expense_record_snapshot',
-      RecordKind.learning => 'get_learning_record_snapshot',
     };
     final snapshot = await service.invokeRaw(
       method: method,
@@ -344,16 +343,6 @@ class _TodayPageState extends State<TodayPage> {
               projectOptions: typedProjectOptions,
               tags: typedTags,
             );
-          case RecordKind.learning:
-            return RecordEditorDialog.learning(
-              recordId: record.recordId,
-              userId: runtime.userId,
-              anchorDate: runtime.todayDate,
-              learningSnapshot: LearningRecordSnapshotModel.fromJson(
-                  snapshot.cast<String, dynamic>()),
-              projectOptions: typedProjectOptions,
-              tags: typedTags,
-            );
         }
       },
     );
@@ -374,7 +363,6 @@ class _TodayPageState extends State<TodayPage> {
       RecordKind.time => 'get_time_record_snapshot',
       RecordKind.income => 'get_income_record_snapshot',
       RecordKind.expense => 'get_expense_record_snapshot',
-      RecordKind.learning => 'get_learning_record_snapshot',
     };
     final snapshot = await service.invokeRaw(
       method: method,
@@ -388,9 +376,13 @@ class _TodayPageState extends State<TodayPage> {
       case RecordKind.time:
         await service.createTimeRecord({
           'user_id': runtime.userId,
+          'occurred_on': snapshot['occurred_on'],
           'started_at': snapshot['started_at'],
           'ended_at': snapshot['ended_at'],
+          'duration_minutes': snapshot['duration_minutes'],
           'category_code': snapshot['category_code'],
+          'content': snapshot['content'],
+          'application_level_code': snapshot['application_level_code'],
           'efficiency_score': snapshot['efficiency_score'],
           'value_score': snapshot['value_score'],
           'state_score': snapshot['state_score'],
@@ -425,23 +417,6 @@ class _TodayPageState extends State<TodayPage> {
           'ai_assist_ratio': snapshot['ai_assist_ratio'],
           'note': snapshot['note'],
           'source': 'manual',
-          'project_allocations': snapshot['project_allocations'],
-          'tag_ids': snapshot['tag_ids'],
-        });
-      case RecordKind.learning:
-        await service.createLearningRecord({
-          'user_id': runtime.userId,
-          'occurred_on': snapshot['occurred_on'],
-          'started_at': snapshot['started_at'],
-          'ended_at': snapshot['ended_at'],
-          'content': snapshot['content'],
-          'duration_minutes': snapshot['duration_minutes'],
-          'application_level_code': snapshot['application_level_code'],
-          'efficiency_score': snapshot['efficiency_score'],
-          'ai_assist_ratio': snapshot['ai_assist_ratio'],
-          'note': snapshot['note'],
-          'source': 'manual',
-          'is_public_pool': snapshot['is_public_pool'] ?? false,
           'project_allocations': snapshot['project_allocations'],
           'tag_ids': snapshot['tag_ids'],
         });
@@ -1446,8 +1421,6 @@ IconData _recordIcon(RecordKind kind) {
       return Icons.account_balance_wallet_rounded;
     case RecordKind.expense:
       return Icons.receipt_long_rounded;
-    case RecordKind.learning:
-      return Icons.menu_book_rounded;
   }
 }
 
@@ -1459,7 +1432,5 @@ Color _recordColor(RecordKind kind) {
       return AppleDashboardPalette.success;
     case RecordKind.expense:
       return AppleDashboardPalette.danger;
-    case RecordKind.learning:
-      return AppleDashboardPalette.warning;
   }
 }

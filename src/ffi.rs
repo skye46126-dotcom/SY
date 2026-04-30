@@ -10,11 +10,10 @@ use crate::models::{
     CapexCostInput, CaptureInboxStatus, CommitCaptureDraftEnvelopeInput,
     CreateAiServiceConfigInput, CreateCaptureBufferSessionInput, CreateCaptureInboxEntryInput,
     CreateCloudSyncConfigInput, CreateExpenseRecordInput, CreateIncomeRecordInput,
-    CreateLearningRecordInput, CreateProjectInput, CreateReviewNoteInput, CreateTagInput,
-    CreateTimeRecordInput, DimensionOptionInput, MonthlyCostBaselineInput,
-    PrepareCaptureSessionInput, ProcessCaptureBufferSessionInput,
-    ProcessCaptureInboxAndCommitInput, ProcessCaptureInboxInput, RecordKind,
-    RecurringCostRuleInput, UpdateOperatingSettingsInput,
+    CreateProjectInput, CreateReviewNoteInput, CreateTagInput, CreateTimeRecordInput,
+    DimensionOptionInput, MonthlyCostBaselineInput, PrepareCaptureSessionInput,
+    ProcessCaptureBufferSessionInput, ProcessCaptureInboxAndCommitInput, ProcessCaptureInboxInput,
+    RecordKind, RecurringCostRuleInput, UpdateOperatingSettingsInput,
 };
 use crate::services::{
     AiService, BackupService, CaptureService, CostService, DataPackageExportInput, DemoDataService,
@@ -401,12 +400,6 @@ struct UpdateExpenseRecordRequest {
 }
 
 #[derive(Debug, serde::Deserialize)]
-struct UpdateLearningRecordRequest {
-    record_id: String,
-    input: CreateLearningRecordInput,
-}
-
-#[derive(Debug, serde::Deserialize)]
 struct DeleteRecordRequest {
     user_id: String,
     record_id: String,
@@ -690,13 +683,6 @@ fn invoke_inner(
             let request: CreateExpenseRecordInput = parse_payload(payload_json)?;
             let data = RecordService::new(database_path)
                 .create_expense_record(&request)
-                .map_err(BridgeInvokeError::from_core)?;
-            Ok(success_response(data))
-        }
-        "create_learning_record" => {
-            let request: CreateLearningRecordInput = parse_payload(payload_json)?;
-            let data = RecordService::new(database_path)
-                .create_learning_record(&request)
                 .map_err(BridgeInvokeError::from_core)?;
             Ok(success_response(data))
         }
@@ -1356,13 +1342,6 @@ fn invoke_inner(
                 .map_err(BridgeInvokeError::from_core)?;
             Ok(success_response(data))
         }
-        "get_learning_record_snapshot" => {
-            let request: TimeSnapshotRequest = parse_payload(payload_json)?;
-            let data = RecordService::new(database_path)
-                .get_learning_record_snapshot(&request.user_id, &request.record_id)
-                .map_err(BridgeInvokeError::from_core)?;
-            Ok(success_response(data))
-        }
         "update_time_record" => {
             let request: UpdateTimeRecordRequest = parse_payload(payload_json)?;
             let data = RecordService::new(database_path)
@@ -1384,20 +1363,12 @@ fn invoke_inner(
                 .map_err(BridgeInvokeError::from_core)?;
             Ok(success_response(data))
         }
-        "update_learning_record" => {
-            let request: UpdateLearningRecordRequest = parse_payload(payload_json)?;
-            let data = RecordService::new(database_path)
-                .update_learning_record(&request.record_id, &request.input)
-                .map_err(BridgeInvokeError::from_core)?;
-            Ok(success_response(data))
-        }
         "delete_record" => {
             let request: DeleteRecordRequest = parse_payload(payload_json)?;
             let kind = match request.kind.trim().to_lowercase().as_str() {
                 "time" => RecordKind::Time,
                 "income" => RecordKind::Income,
                 "expense" => RecordKind::Expense,
-                "learning" => RecordKind::Learning,
                 other => {
                     return Err(BridgeInvokeError::invalid_argument(format!(
                         "unsupported record kind: {other}"

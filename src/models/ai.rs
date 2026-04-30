@@ -103,8 +103,6 @@ pub enum AiDraftKind {
     Income,
     #[serde(alias = "Expense")]
     Expense,
-    #[serde(alias = "Learning")]
-    Learning,
     #[serde(alias = "Unknown")]
     Unknown,
 }
@@ -116,7 +114,7 @@ impl AiDraftKind {
             "time" | "time_log" | "time_record" => Ok(Self::Time),
             "income" | "income_record" => Ok(Self::Income),
             "expense" | "expense_record" => Ok(Self::Expense),
-            "learning" | "learning_record" => Ok(Self::Learning),
+            "learning" | "learning_record" => Ok(Self::Time),
             "unknown" => Ok(Self::Unknown),
             other => Err(LifeOsError::InvalidInput(format!(
                 "unsupported draft kind: {other}"
@@ -129,7 +127,6 @@ impl AiDraftKind {
             Self::Time => "time",
             Self::Income => "income",
             Self::Expense => "expense",
-            Self::Learning => "learning",
             Self::Unknown => "unknown",
         }
     }
@@ -299,7 +296,6 @@ pub enum TypedDraftKind {
     TimeRecord,
     IncomeRecord,
     ExpenseRecord,
-    LearningRecord,
     MonthlyCostBaseline,
     RecurringExpenseRule,
     CapexCost,
@@ -315,9 +311,7 @@ pub enum TypedDraftKind {
 impl TypedDraftKind {
     pub fn intent(&self) -> DraftIntent {
         match self {
-            Self::TimeRecord | Self::IncomeRecord | Self::ExpenseRecord | Self::LearningRecord => {
-                DraftIntent::Record
-            }
+            Self::TimeRecord | Self::IncomeRecord | Self::ExpenseRecord => DraftIntent::Record,
             Self::MonthlyCostBaseline
             | Self::RecurringExpenseRule
             | Self::CapexCost
@@ -333,7 +327,6 @@ impl TypedDraftKind {
             Self::TimeRecord => AiDraftKind::Time,
             Self::IncomeRecord => AiDraftKind::Income,
             Self::ExpenseRecord => AiDraftKind::Expense,
-            Self::LearningRecord => AiDraftKind::Learning,
             _ => AiDraftKind::Unknown,
         }
     }
@@ -343,7 +336,6 @@ impl TypedDraftKind {
             AiDraftKind::Time => Self::TimeRecord,
             AiDraftKind::Income => Self::IncomeRecord,
             AiDraftKind::Expense => Self::ExpenseRecord,
-            AiDraftKind::Learning => Self::LearningRecord,
             AiDraftKind::Unknown => Self::Unknown,
         }
     }
@@ -353,7 +345,6 @@ impl TypedDraftKind {
             Self::TimeRecord => "time_record",
             Self::IncomeRecord => "income_record",
             Self::ExpenseRecord => "expense_record",
-            Self::LearningRecord => "learning_record",
             Self::MonthlyCostBaseline => "monthly_cost_baseline",
             Self::RecurringExpenseRule => "recurring_expense_rule",
             Self::CapexCost => "capex_cost",

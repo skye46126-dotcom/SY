@@ -295,7 +295,7 @@ void main() {
         ),
         RecentRecordItem(
           recordId: 'r3',
-          kind: RecordKind.learning,
+          kind: RecordKind.time,
           occurredAt: '2026-04-27 20:00',
           title: 'reading',
           detail: '45m',
@@ -306,9 +306,8 @@ void main() {
     expect(metadata['page'], 'day_detail');
     final summary = metadata['summary']! as Map<String, Object?>;
     expect(summary['total_record_count'], 3);
-    expect(summary['time_count'], 1);
+    expect(summary['time_count'], 2);
     expect(summary['expense_count'], 1);
-    expect(summary['learning_count'], 1);
     expect(summary['first_occurred_at'], '2026-04-27 09:00');
     expect(summary['last_occurred_at'], '2026-04-27 20:00');
   });

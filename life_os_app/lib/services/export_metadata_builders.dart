@@ -214,7 +214,6 @@ Map<String, Object?> buildDayDetailExportMetadata({
       'time_count': countFor(RecordKind.time),
       'income_count': countFor(RecordKind.income),
       'expense_count': countFor(RecordKind.expense),
-      'learning_count': countFor(RecordKind.learning),
       'first_occurred_at': records.isEmpty ? null : records.first.occurredAt,
       'last_occurred_at': records.isEmpty ? null : records.last.occurredAt,
     },

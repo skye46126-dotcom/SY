@@ -171,7 +171,8 @@ class _HeroMetric extends StatelessWidget {
               Container(
                 width: 10,
                 height: 10,
-                decoration: BoxDecoration(color: accent, shape: BoxShape.circle),
+                decoration:
+                    BoxDecoration(color: accent, shape: BoxShape.circle),
               ),
               const SizedBox(width: 8),
               Text(title, style: Theme.of(context).textTheme.labelSmall),

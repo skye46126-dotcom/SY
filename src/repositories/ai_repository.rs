@@ -8,8 +8,8 @@ use crate::error::{LifeOsError, Result};
 use crate::models::{
     AiCommitFailure, AiCommitInput, AiCommitResult, AiCommittedRecord, AiDraftKind, AiParseDraft,
     AiServiceConfig, CreateAiServiceConfigInput, CreateExpenseRecordInput, CreateIncomeRecordInput,
-    CreateLearningRecordInput, CreateTagInput, CreateTimeRecordInput, ParseContext, ParserMode,
-    ProjectAllocation, normalize_optional_string,
+    CreateTagInput, CreateTimeRecordInput, ParseContext, ParserMode, ProjectAllocation,
+    normalize_optional_string,
 };
 use crate::repositories::record_repository::{
     DimensionKind, ensure_dimension_option_exists, ensure_project_allocations_exist,
@@ -282,9 +282,6 @@ fn commit_one_draft(
         AiDraftKind::Expense => {
             commit_expense_draft(connection, user_id, context_date, draft, options, source)
         }
-        AiDraftKind::Learning => {
-            commit_learning_draft(connection, user_id, context_date, draft, options, source)
-        }
         AiDraftKind::Unknown => Err(LifeOsError::InvalidInput(
             "unknown draft cannot be committed".to_string(),
         )),
@@ -300,15 +297,36 @@ fn commit_time_draft(
     source: &str,
 ) -> Result<AiCommittedRecord> {
     let occurred_on = resolve_item_date(draft, context_date)?;
-    let (started_at, ended_at, resolved_duration) =
-        resolve_required_time_window(draft, &occurred_on, "Asia/Shanghai")?;
+    let explicit_duration = resolve_duration_minutes(draft)?;
+    let (started_at, ended_at, window_duration) =
+        resolve_optional_time_window(draft, &occurred_on, "Asia/Shanghai")?;
+    let resolved_duration = explicit_duration.or(window_duration).ok_or_else(|| {
+        LifeOsError::InvalidInput(
+            "time draft requires explicit duration or complete time window".to_string(),
+        )
+    })?;
+    let category_code = normalize_time_category(
+        first_value(draft, &["category", "category_code"]).unwrap_or("work"),
+    );
     let input = CreateTimeRecordInput {
         user_id: user_id.to_string(),
+        occurred_on: Some(occurred_on.clone()),
         started_at,
         ended_at,
+        duration_minutes: Some(resolved_duration),
         category_code: normalize_time_category(
             first_value(draft, &["category", "category_code"]).unwrap_or("work"),
         ),
+        content: Some(
+            first_value(draft, &["content", "description"])
+                .unwrap_or(category_code.as_str())
+                .to_string(),
+        ),
+        application_level_code: first_value(
+            draft,
+            &["application_level", "application_level_code"],
+        )
+        .map(normalize_learning_level),
         efficiency_score: parse_optional_i32(first_value(draft, &["efficiency_score"])),
         value_score: parse_optional_i32(first_value(draft, &["value_score"])),
         state_score: parse_optional_i32(first_value(draft, &["state_score"])),
@@ -332,23 +350,29 @@ fn commit_time_draft(
         DimensionKind::TimeCategory,
         &input.normalized_category_code(),
     )?;
+    if let Some(application_level_code) = input.normalized_application_level_code() {
+        ensure_dimension_option_exists(&tx, DimensionKind::LearningLevel, &application_level_code)?;
+    }
     ensure_project_allocations_exist(&tx, user_id, &project_allocations)?;
     ensure_tags_exist(&tx, user_id, &tag_ids)?;
     let id = new_id();
     let now = now_string();
     tx.execute(
         "INSERT INTO time_records(
-            id, user_id, started_at, ended_at, duration_minutes, category_code,
-            efficiency_score, value_score, state_score, ai_assist_ratio, note, source,
-            parse_confidence, is_public_pool, is_deleted, created_at, updated_at
-         ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, 0, 0, ?14, ?14)",
+            id, user_id, occurred_on, started_at, ended_at, duration_minutes, category_code,
+            content, application_level_code, efficiency_score, value_score, state_score,
+            ai_assist_ratio, note, source, parse_confidence, is_public_pool, is_deleted, created_at, updated_at
+         ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, 0, 0, ?17, ?17)",
         params![
             id,
             user_id,
+            input.resolved_occurred_on()?,
             input.started_at,
             input.ended_at,
             resolved_duration,
             input.normalized_category_code(),
+            input.resolved_content(),
+            input.normalized_application_level_code(),
             input.efficiency_score,
             input.value_score,
             input.state_score,
@@ -504,94 +528,6 @@ fn commit_expense_draft(
     )?;
     insert_project_links(&tx, "expense", &id, user_id, &project_allocations, &now)?;
     insert_tag_links(&tx, "expense", &id, user_id, &tag_ids, &now)?;
-    tx.commit()?;
-
-    Ok(AiCommittedRecord {
-        draft_id: draft.draft_id.clone(),
-        kind: draft.kind.clone(),
-        record_id: id,
-        occurred_at: occurred_on,
-        warnings,
-    })
-}
-
-fn commit_learning_draft(
-    connection: &mut Connection,
-    user_id: &str,
-    context_date: &str,
-    draft: &AiParseDraft,
-    options: &crate::models::AiCommitOptions,
-    source: &str,
-) -> Result<AiCommittedRecord> {
-    let occurred_on = resolve_item_date(draft, context_date)?;
-    let explicit_duration = resolve_duration_minutes(draft)?;
-    let (started_at, ended_at, window_duration) =
-        resolve_optional_time_window(draft, &occurred_on, "Asia/Shanghai")?;
-    let resolved_duration = explicit_duration.or(window_duration).ok_or_else(|| {
-        LifeOsError::InvalidInput(
-            "learning draft requires explicit duration or complete time window".to_string(),
-        )
-    })?;
-    let input = CreateLearningRecordInput {
-        user_id: user_id.to_string(),
-        occurred_on: occurred_on.clone(),
-        started_at,
-        ended_at,
-        content: first_value(draft, &["content", "description"])
-            .unwrap_or("Learning")
-            .to_string(),
-        duration_minutes: resolved_duration,
-        application_level_code: normalize_learning_level(
-            first_value(draft, &["application_level", "application_level_code"]).unwrap_or("input"),
-        ),
-        efficiency_score: parse_optional_i32(first_value(draft, &["efficiency_score"])),
-        ai_assist_ratio: parse_optional_i32(first_value(draft, &["ai_ratio", "ai_assist_ratio"])),
-        note: normalize_optional_string(&first_value(draft, &["note"]).map(ToString::to_string)),
-        source: Some(source.to_string()),
-        is_public_pool: false,
-        project_allocations: Vec::new(),
-        tag_ids: Vec::new(),
-    };
-    input.validate()?;
-    let (project_allocations, tag_ids, warnings) =
-        resolve_links_for_draft(connection, user_id, draft, options, "learning")?;
-
-    let tx = connection.transaction()?;
-    ensure_user_exists(&tx, user_id)?;
-    ensure_dimension_option_exists(
-        &tx,
-        DimensionKind::LearningLevel,
-        &input.normalized_application_level_code(),
-    )?;
-    ensure_project_allocations_exist(&tx, user_id, &project_allocations)?;
-    ensure_tags_exist(&tx, user_id, &tag_ids)?;
-    let id = new_id();
-    let now = now_string();
-    tx.execute(
-        "INSERT INTO learning_records(
-            id, user_id, occurred_on, started_at, ended_at, content, duration_minutes,
-            application_level_code, efficiency_score, ai_assist_ratio, note, source, parse_confidence,
-            is_public_pool, is_deleted, created_at, updated_at
-         ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, 0, 0, ?14, ?14)",
-        params![
-            id,
-            user_id,
-            input.occurred_on,
-            input.started_at,
-            input.ended_at,
-            input.content.trim(),
-            input.duration_minutes,
-            input.normalized_application_level_code(),
-            input.efficiency_score,
-            input.ai_assist_ratio,
-            input.normalized_note(),
-            source,
-            draft.confidence.clamp(0.0, 1.0),
-            now,
-        ],
-    )?;
-    insert_project_links(&tx, "learning", &id, user_id, &project_allocations, &now)?;
-    insert_tag_links(&tx, "learning", &id, user_id, &tag_ids, &now)?;
     tx.commit()?;
 
     Ok(AiCommittedRecord {

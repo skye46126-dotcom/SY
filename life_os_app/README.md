@@ -63,7 +63,6 @@ Current bridged methods:
 - `create_time_record`
 - `create_income_record`
 - `create_expense_record`
-- `create_learning_record`
 - `create_project`
 - `create_tag`
 - `list_tags`

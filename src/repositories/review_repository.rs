@@ -327,12 +327,12 @@ impl ReviewRepository {
                 timezone,
                 row_limit,
             ),
-            "learning" => load_tag_detail_learning_records(
+            "learning" => load_tag_detail_time_records(
                 connection,
                 user_id,
                 tag_name,
-                &start.to_string(),
-                &end.to_string(),
+                &start_at_utc,
+                &end_at_utc_exclusive,
                 timezone,
                 row_limit,
             ),
@@ -449,9 +449,10 @@ fn load_learning_efficiency(
 ) -> Result<Option<f64>> {
     let numerator = connection.query_row(
         "SELECT COALESCE(SUM(duration_minutes * efficiency_score), 0.0)
-         FROM learning_records
+         FROM time_records
          WHERE user_id = ?1
            AND is_deleted = 0
+           AND category_code = 'learning'
            AND efficiency_score IS NOT NULL
            AND occurred_on >= ?2
            AND occurred_on <= ?3",
@@ -460,9 +461,10 @@ fn load_learning_efficiency(
     )?;
     let denominator = connection.query_row(
         "SELECT COALESCE(SUM(duration_minutes), 0)
-         FROM learning_records
+         FROM time_records
          WHERE user_id = ?1
            AND is_deleted = 0
+           AND category_code = 'learning'
            AND efficiency_score IS NOT NULL
            AND occurred_on >= ?2
            AND occurred_on <= ?3",
@@ -758,9 +760,15 @@ fn load_history_records(
     let mut statement = connection.prepare(
         "SELECT record_id, kind, occurred_at, title, detail
          FROM (
-           SELECT id AS record_id, 'time' AS kind, started_at AS occurred_at, category_code AS title, COALESCE(note, '') AS detail
+           SELECT id AS record_id, 'time' AS kind, COALESCE(started_at, occurred_on) AS occurred_at, content AS title,
+                  category_code || ' | ' || CAST(duration_minutes AS TEXT) || ' min' ||
+                  CASE WHEN note IS NULL OR note = '' THEN '' ELSE ' | ' || note END AS detail
            FROM time_records
-           WHERE user_id = ?1 AND is_deleted = 0 AND started_at >= ?2 AND started_at < ?3
+           WHERE user_id = ?1 AND is_deleted = 0
+             AND (
+                (started_at IS NOT NULL AND started_at >= ?2 AND started_at < ?3)
+                OR (started_at IS NULL AND occurred_on >= ?4 AND occurred_on <= ?5)
+             )
            UNION ALL
            SELECT id AS record_id, 'income' AS kind, occurred_on AS occurred_at, source_name AS title,
                   CAST(amount_cents AS TEXT) || ' cents' || CASE WHEN note IS NULL OR note = '' THEN '' ELSE ' | ' || note END AS detail
@@ -770,11 +778,6 @@ fn load_history_records(
            SELECT id AS record_id, 'expense' AS kind, occurred_on AS occurred_at, category_code AS title,
                   CAST(amount_cents AS TEXT) || ' cents' || CASE WHEN note IS NULL OR note = '' THEN '' ELSE ' | ' || note END AS detail
            FROM expense_records
-           WHERE user_id = ?1 AND is_deleted = 0 AND occurred_on >= ?4 AND occurred_on <= ?5
-           UNION ALL
-           SELECT id AS record_id, 'learning' AS kind, COALESCE(started_at, occurred_on) AS occurred_at, content AS title,
-                  CAST(duration_minutes AS TEXT) || ' min' || CASE WHEN note IS NULL OR note = '' THEN '' ELSE ' | ' || note END AS detail
-           FROM learning_records
            WHERE user_id = ?1 AND is_deleted = 0 AND occurred_on >= ?4 AND occurred_on <= ?5
          )
          ORDER BY occurred_at DESC
@@ -1038,51 +1041,6 @@ fn load_tag_detail_income_records(
     normalize_recent_rows(raw_rows, timezone)
 }
 
-fn load_tag_detail_learning_records(
-    connection: &Connection,
-    user_id: &str,
-    tag_name: &str,
-    start_date: &str,
-    end_date: &str,
-    timezone: &str,
-    limit: i64,
-) -> Result<Vec<RecentRecordItem>> {
-    let mut statement = connection.prepare(
-        "SELECT l.id, COALESCE(l.started_at, l.occurred_on), l.content, l.duration_minutes, COALESCE(l.note, '')
-         FROM record_tag_links rtl
-         JOIN learning_records l
-           ON rtl.record_kind = 'learning'
-          AND rtl.record_id = l.id
-         JOIN tags tg
-           ON tg.id = rtl.tag_id
-         WHERE l.user_id = ?1
-           AND l.is_deleted = 0
-           AND tg.name = ?2
-           AND l.occurred_on >= ?3
-           AND l.occurred_on <= ?4
-         ORDER BY COALESCE(l.started_at, l.occurred_on) DESC, l.created_at DESC
-         LIMIT ?5",
-    )?;
-    let rows = statement.query_map(
-        params![user_id, tag_name, start_date, end_date, limit],
-        |row| {
-            Ok(RecentRecordItem {
-                record_id: row.get(0)?,
-                kind: RecordKind::Learning,
-                occurred_at: row.get(1)?,
-                title: row.get(2)?,
-                detail: format!(
-                    "{} min{}",
-                    row.get::<_, i64>(3)?,
-                    note_suffix(&row.get::<_, String>(4)?)
-                ),
-            })
-        },
-    )?;
-    let raw_rows = rows.collect::<std::result::Result<Vec<_>, _>>()?;
-    normalize_recent_rows(raw_rows, timezone)
-}
-
 fn normalize_recent_rows(
     raw_rows: Vec<RecentRecordItem>,
     timezone: &str,
@@ -1228,7 +1186,6 @@ fn parse_kind(value: &str) -> Result<RecordKind> {
         "time" => Ok(RecordKind::Time),
         "income" => Ok(RecordKind::Income),
         "expense" => Ok(RecordKind::Expense),
-        "learning" => Ok(RecordKind::Learning),
         other => Err(LifeOsError::InvalidInput(format!(
             "unsupported review record kind: {other}"
         ))),

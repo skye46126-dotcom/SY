@@ -47,8 +47,7 @@ class RecurringCostRuleModel {
       id: json['id'] as String? ?? '',
       name: json['name'] as String? ?? '',
       categoryCode: json['category_code'] as String? ?? '',
-      monthlyAmountCents:
-          (json['monthly_amount_cents'] as num?)?.toInt() ?? 0,
+      monthlyAmountCents: (json['monthly_amount_cents'] as num?)?.toInt() ?? 0,
       isNecessary: json['is_necessary'] == true,
       startMonth: json['start_month'] as String? ?? '',
       endMonth: json['end_month'] as String?,
@@ -96,8 +95,7 @@ class CapexCostModel {
       residualRateBps: (json['residual_rate_bps'] as num?)?.toInt() ?? 0,
       monthlyAmortizedCents:
           (json['monthly_amortized_cents'] as num?)?.toInt() ?? 0,
-      amortizationStartMonth:
-          json['amortization_start_month'] as String? ?? '',
+      amortizationStartMonth: json['amortization_start_month'] as String? ?? '',
       amortizationEndMonth: json['amortization_end_month'] as String? ?? '',
       isActive: json['is_active'] == true,
       note: json['note'] as String?,
@@ -142,10 +140,8 @@ class RateComparisonSummaryModel {
           (json['previous_year_income_cents'] as num?)?.toInt() ?? 0,
       previousYearWorkMinutes:
           (json['previous_year_work_minutes'] as num?)?.toInt() ?? 0,
-      currentIncomeCents:
-          (json['current_income_cents'] as num?)?.toInt() ?? 0,
-      currentWorkMinutes:
-          (json['current_work_minutes'] as num?)?.toInt() ?? 0,
+      currentIncomeCents: (json['current_income_cents'] as num?)?.toInt() ?? 0,
+      currentWorkMinutes: (json['current_work_minutes'] as num?)?.toInt() ?? 0,
     );
   }
 }

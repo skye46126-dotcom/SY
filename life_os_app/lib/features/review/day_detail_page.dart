@@ -205,7 +205,6 @@ class _DayDetailPageState extends State<DayDetailPage> {
       RecordKind.time => 'get_time_record_snapshot',
       RecordKind.income => 'get_income_record_snapshot',
       RecordKind.expense => 'get_expense_record_snapshot',
-      RecordKind.learning => 'get_learning_record_snapshot',
     };
     final snapshot = await service.invokeRaw(
       method: method,
@@ -248,15 +247,6 @@ class _DayDetailPageState extends State<DayDetailPage> {
           userId: runtime.userId,
           anchorDate: widget.anchorDate,
           expenseSnapshot: ExpenseRecordSnapshotModel.fromJson(
-              snapshot.cast<String, dynamic>()),
-          projectOptions: typedProjectOptions,
-          tags: typedTags,
-        ),
-      RecordKind.learning => RecordEditorDialog.learning(
-          recordId: record.recordId,
-          userId: runtime.userId,
-          anchorDate: widget.anchorDate,
-          learningSnapshot: LearningRecordSnapshotModel.fromJson(
               snapshot.cast<String, dynamic>()),
           projectOptions: typedProjectOptions,
           tags: typedTags,
@@ -358,10 +348,6 @@ class _DaySummaryHero extends StatelessWidget {
               _SummaryPill(
                 label: '时间 ${countFor(RecordKind.time)}',
                 color: _kindColor(RecordKind.time),
-              ),
-              _SummaryPill(
-                label: '学习 ${countFor(RecordKind.learning)}',
-                color: _kindColor(RecordKind.learning),
               ),
               _SummaryPill(
                 label: '收入 ${countFor(RecordKind.income)}',
@@ -509,7 +495,6 @@ String _kindLabel(RecordKind kind) {
     RecordKind.time => '时间',
     RecordKind.income => '收入',
     RecordKind.expense => '支出',
-    RecordKind.learning => '学习',
   };
 }
 
@@ -518,7 +503,6 @@ String _kindEmptyDetail(RecordKind kind) {
     RecordKind.time => '没有补充备注',
     RecordKind.income => '没有补充来源说明',
     RecordKind.expense => '没有补充支出说明',
-    RecordKind.learning => '没有补充学习备注',
   };
 }
 
@@ -527,7 +511,6 @@ Color _kindColor(RecordKind kind) {
     RecordKind.time => const Color(0xFF2563EB),
     RecordKind.income => const Color(0xFF059669),
     RecordKind.expense => const Color(0xFFDC2626),
-    RecordKind.learning => const Color(0xFF7C3AED),
   };
 }
 

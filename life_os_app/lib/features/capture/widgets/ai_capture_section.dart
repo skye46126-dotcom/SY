@@ -698,7 +698,6 @@ class _DraftListPreview extends StatelessWidget {
       'time_record',
       'income_record',
       'expense_record',
-      'learning_record',
     }.contains(kind);
   }
 
@@ -1724,16 +1723,6 @@ String _draftSummaryText(Map<String, Object?> item) {
         _fieldMapValue(fields, 'category'),
         _fieldMapValue(fields, 'description'),
       ],
-    'learning_record' => [
-        _fieldMapValue(fields, 'content'),
-        _fieldMapValue(fields, 'duration_minutes').isEmpty
-            ? ''
-            : '${_fieldMapValue(fields, 'duration_minutes')} 分钟',
-        _timeRangeText(
-          _fieldMapValue(fields, 'start_time'),
-          _fieldMapValue(fields, 'end_time'),
-        ),
-      ],
     'income_record' => [
         _fieldMapValue(fields, 'date'),
         _fieldMapValue(fields, 'amount').isEmpty
@@ -1890,7 +1879,6 @@ String _kindLabel(String kind) {
     'time_record' => '时间',
     'income_record' => '收入',
     'expense_record' => '支出',
-    'learning_record' => '学习',
     'time_marker' => '时间锚点',
     'reference_note' => '引用',
     'project' => '项目',
@@ -1958,7 +1946,6 @@ Color _kindColor(String kind) {
     'time_record' => const Color(0xFF2563EB),
     'income_record' => const Color(0xFF059669),
     'expense_record' => const Color(0xFFDC2626),
-    'learning_record' => const Color(0xFF7C3AED),
     'time_marker' => const Color(0xFF0891B2),
     'reference_note' => const Color(0xFF64748B),
     _ => const Color(0xFF475569),
@@ -2036,53 +2023,6 @@ List<CaptureFieldDefinition> _draftFieldDefinitionsFor(String kind) {
           kind: CaptureFieldKind.multiline,
           maxLines: 2,
           fullWidth: true,
-        ),
-      ];
-    case 'learning_record':
-      return const [
-        CaptureFieldDefinition(
-          key: 'date',
-          label: '日期',
-          kind: CaptureFieldKind.date,
-        ),
-        CaptureFieldDefinition(
-          key: 'content',
-          label: '学习内容',
-          kind: CaptureFieldKind.text,
-        ),
-        CaptureFieldDefinition(
-          key: 'duration_minutes',
-          label: '学习时长',
-          kind: CaptureFieldKind.integer,
-          suffixText: '分钟',
-        ),
-        CaptureFieldDefinition(
-          key: 'application_level',
-          label: '应用等级',
-          kind: CaptureFieldKind.dropdown,
-          optionsKey: CaptureFieldOptions.learningLevel,
-        ),
-        CaptureFieldDefinition(
-          key: 'start_time',
-          label: '开始时间',
-          kind: CaptureFieldKind.time,
-        ),
-        CaptureFieldDefinition(
-          key: 'end_time',
-          label: '结束时间',
-          kind: CaptureFieldKind.time,
-        ),
-        CaptureFieldDefinition(
-          key: 'efficiency_score',
-          label: '效率',
-          kind: CaptureFieldKind.score,
-          suffixText: '/10',
-        ),
-        CaptureFieldDefinition(
-          key: 'ai_assist_ratio',
-          label: 'AI 占比',
-          kind: CaptureFieldKind.percentage,
-          suffixText: '%',
         ),
       ];
     case 'income_record':
@@ -2528,10 +2468,6 @@ Future<String?> _pickTargetRecordKind(BuildContext context) async {
             onTap: () => Navigator.of(context).pop('time_record'),
           ),
           ListTile(
-            title: const Text('转成学习记录'),
-            onTap: () => Navigator.of(context).pop('learning_record'),
-          ),
-          ListTile(
             title: const Text('转成收入记录'),
             onTap: () => Navigator.of(context).pop('income_record'),
           ),
@@ -2629,12 +2565,6 @@ Map<String, Object?> _reviewableItemFromText({
       fields['date'] = _fieldValue(contextDate ?? '');
       fields['description'] = _fieldValue(body ?? title);
       missing.addAll(['start_time', 'end_time', 'category']);
-      break;
-    case 'learning_record':
-      fields['date'] = _fieldValue(contextDate ?? '');
-      fields['content'] = _fieldValue(body ?? title);
-      fields['application_level'] = _fieldValue('input');
-      missing.add('duration_minutes');
       break;
     case 'income_record':
       fields['date'] = _fieldValue(contextDate ?? '');

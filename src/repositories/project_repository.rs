@@ -213,17 +213,19 @@ impl ProjectRepository {
         let total_learning_minutes = scalar_long(
             connection,
             "SELECT COALESCE(CAST(SUM(
-                l.duration_minutes * rpl.weight_ratio / (
+                t.duration_minutes * rpl.weight_ratio / (
                     SELECT SUM(weight_ratio)
                     FROM record_project_links
-                    WHERE record_kind = 'learning' AND record_id = l.id
+                    WHERE record_kind = 'time' AND record_id = t.id
                 )
             ) AS INTEGER), 0)
-             FROM learning_records l
+             FROM time_records t
              JOIN record_project_links rpl
-               ON rpl.record_kind = 'learning'
-              AND rpl.record_id = l.id
-             WHERE rpl.project_id = ?1 AND l.is_deleted = 0",
+               ON rpl.record_kind = 'time'
+              AND rpl.record_id = t.id
+             WHERE rpl.project_id = ?1
+               AND t.is_deleted = 0
+               AND t.category_code = 'learning'",
             project_id,
         )?;
         let time_record_count = scalar_long(
@@ -259,11 +261,13 @@ impl ProjectRepository {
         let learning_record_count = scalar_long(
             connection,
             "SELECT COUNT(*)
-             FROM learning_records l
+             FROM time_records t
              JOIN record_project_links rpl
-               ON rpl.record_kind = 'learning'
-              AND rpl.record_id = l.id
-             WHERE rpl.project_id = ?1 AND l.is_deleted = 0",
+               ON rpl.record_kind = 'time'
+              AND rpl.record_id = t.id
+             WHERE rpl.project_id = ?1
+               AND t.is_deleted = 0
+               AND t.category_code = 'learning'",
             project_id,
         )?;
         let timezone = if timezone.trim().is_empty() {
@@ -672,7 +676,7 @@ fn first_project_activity_date(
 ) -> Result<Option<NaiveDate>> {
     let min_time = scalar_optional_string(
         connection,
-        "SELECT MIN(t.started_at)
+        "SELECT MIN(t.occurred_on)
          FROM time_records t
          JOIN record_project_links rpl
            ON rpl.record_kind = 'time'
@@ -681,11 +685,7 @@ fn first_project_activity_date(
         project_id,
         user_id,
     )?
-    .and_then(|value| {
-        chrono::DateTime::parse_from_rfc3339(&value)
-            .ok()
-            .map(|dt| dt.date_naive())
-    });
+    .and_then(|value| NaiveDate::parse_from_str(&value, "%Y-%m-%d").ok());
     let min_income = scalar_optional_string(
         connection,
         "SELECT MIN(i.occurred_on)
@@ -710,20 +710,7 @@ fn first_project_activity_date(
         user_id,
     )?
     .and_then(|value| NaiveDate::parse_from_str(&value, "%Y-%m-%d").ok());
-    let min_learning = scalar_optional_string(
-        connection,
-        "SELECT MIN(l.occurred_on)
-         FROM learning_records l
-         JOIN record_project_links rpl
-           ON rpl.record_kind = 'learning'
-          AND rpl.record_id = l.id
-         WHERE rpl.project_id = ?1 AND l.user_id = ?2 AND l.is_deleted = 0",
-        project_id,
-        user_id,
-    )?
-    .and_then(|value| NaiveDate::parse_from_str(&value, "%Y-%m-%d").ok());
-
-    Ok([min_time, min_income, min_expense, min_learning]
+    Ok([min_time, min_income, min_expense]
         .into_iter()
         .flatten()
         .min())
@@ -736,7 +723,7 @@ fn last_project_activity_date(
 ) -> Result<Option<NaiveDate>> {
     let max_time = scalar_optional_string(
         connection,
-        "SELECT MAX(t.started_at)
+        "SELECT MAX(t.occurred_on)
          FROM time_records t
          JOIN record_project_links rpl
            ON rpl.record_kind = 'time'
@@ -745,11 +732,7 @@ fn last_project_activity_date(
         project_id,
         user_id,
     )?
-    .and_then(|value| {
-        chrono::DateTime::parse_from_rfc3339(&value)
-            .ok()
-            .map(|dt| dt.date_naive())
-    });
+    .and_then(|value| NaiveDate::parse_from_str(&value, "%Y-%m-%d").ok());
     let max_income = scalar_optional_string(
         connection,
         "SELECT MAX(i.occurred_on)
@@ -774,20 +757,7 @@ fn last_project_activity_date(
         user_id,
     )?
     .and_then(|value| NaiveDate::parse_from_str(&value, "%Y-%m-%d").ok());
-    let max_learning = scalar_optional_string(
-        connection,
-        "SELECT MAX(l.occurred_on)
-         FROM learning_records l
-         JOIN record_project_links rpl
-           ON rpl.record_kind = 'learning'
-          AND rpl.record_id = l.id
-         WHERE rpl.project_id = ?1 AND l.user_id = ?2 AND l.is_deleted = 0",
-        project_id,
-        user_id,
-    )?
-    .and_then(|value| NaiveDate::parse_from_str(&value, "%Y-%m-%d").ok());
-
-    Ok([max_time, max_income, max_expense, max_learning]
+    Ok([max_time, max_income, max_expense]
         .into_iter()
         .flatten()
         .max())
@@ -977,8 +947,9 @@ fn load_project_recent_records(
     let mut statement = connection.prepare(
         "SELECT record_id, kind, occurred_at, title, detail
          FROM (
-           SELECT t.id AS record_id, 'time' AS kind, t.started_at AS occurred_at, t.category_code AS title,
-                  COALESCE(t.note, '') AS detail
+           SELECT t.id AS record_id, 'time' AS kind, COALESCE(t.started_at, t.occurred_on) AS occurred_at, t.content AS title,
+                  t.category_code || ' | ' || CAST(t.duration_minutes AS TEXT) || ' min' ||
+                  CASE WHEN t.note IS NULL OR t.note = '' THEN '' ELSE ' | ' || t.note END AS detail
            FROM time_records t
            JOIN record_project_links rpl
              ON rpl.record_kind = 'time' AND rpl.record_id = t.id
@@ -999,15 +970,6 @@ fn load_project_recent_records(
            JOIN record_project_links rpl
              ON rpl.record_kind = 'expense' AND rpl.record_id = e.id
            WHERE rpl.project_id = ?1 AND e.is_deleted = 0
-           UNION ALL
-           SELECT l.id AS record_id, 'learning' AS kind, COALESCE(l.started_at, l.occurred_on) AS occurred_at,
-                  l.content AS title,
-                  CAST(l.duration_minutes AS TEXT) || ' min' ||
-                  CASE WHEN l.note IS NULL OR l.note = '' THEN '' ELSE ' | ' || l.note END AS detail
-           FROM learning_records l
-           JOIN record_project_links rpl
-             ON rpl.record_kind = 'learning' AND rpl.record_id = l.id
-           WHERE rpl.project_id = ?1 AND l.is_deleted = 0
          )
          ORDER BY occurred_at DESC
          LIMIT ?2",
@@ -1029,7 +991,6 @@ fn load_project_recent_records(
                 "time" => RecordKind::Time,
                 "income" => RecordKind::Income,
                 "expense" => RecordKind::Expense,
-                "learning" => RecordKind::Learning,
                 other => {
                     return Err(LifeOsError::InvalidInput(format!(
                         "unsupported record kind: {other}"

@@ -50,14 +50,17 @@ class _GoalRow extends StatelessWidget {
       children: [
         Row(
           children: [
-            Expanded(child: Text(item.title, style: Theme.of(context).textTheme.titleMedium)),
+            Expanded(
+                child: Text(item.title,
+                    style: Theme.of(context).textTheme.titleMedium)),
             Text('${item.completedValue} / ${item.targetValue} ${item.unit}'),
           ],
         ),
         const SizedBox(height: 8),
         LinearProgressIndicator(value: progress),
         const SizedBox(height: 6),
-        Text(_statusLabel(item.status), style: Theme.of(context).textTheme.bodyMedium),
+        Text(_statusLabel(item.status),
+            style: Theme.of(context).textTheme.bodyMedium),
       ],
     );
   }

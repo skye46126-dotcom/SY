@@ -14,7 +14,8 @@ class ReviewTimeAllocationSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final allocations = report?.timeAllocations ?? const <TimeCategoryAllocation>[];
+    final allocations =
+        report?.timeAllocations ?? const <TimeCategoryAllocation>[];
     return SectionCard(
       eyebrow: 'Time Allocation',
       title: '时间结构',

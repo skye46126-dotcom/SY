@@ -180,11 +180,6 @@ class NativeRustApi implements RustApi {
   }
 
   @override
-  Future<void> createLearningRecord(Map<String, Object?> payload) async {
-    _call('create_learning_record', payload);
-  }
-
-  @override
   Future<void> createProject(Map<String, Object?> payload) async {
     _call('create_project', payload);
   }

@@ -41,6 +41,11 @@ const MIGRATIONS: &[Migration] = &[
         name: "capture_buffer",
         sql: include_str!("../../migrations/0006_capture_buffer.sql"),
     },
+    Migration {
+        version: 7,
+        name: "unify_time_records",
+        sql: include_str!("../../migrations/0007_unify_time_records.sql"),
+    },
 ];
 
 pub fn run_migrations(connection: &mut Connection) -> Result<()> {

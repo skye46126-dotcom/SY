@@ -215,7 +215,7 @@ fn normalize_note_visibility(value: &str) -> Result<String> {
 fn normalize_linked_record_kind(value: &str) -> Result<String> {
     let normalized = normalize_code("linked_record_kind", value)?;
     match normalized.as_str() {
-        "time" | "income" | "expense" | "learning" => Ok(normalized),
+        "time" | "income" | "expense" => Ok(normalized),
         other => Err(LifeOsError::InvalidInput(format!(
             "unsupported linked record kind: {other}"
         ))),

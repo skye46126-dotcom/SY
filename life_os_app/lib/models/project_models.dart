@@ -195,7 +195,8 @@ class ProjectDetail {
           (json['learning_record_count'] as num?)?.toInt() ?? 0,
       recentRecords: ((json['recent_records'] as List?) ?? const [])
           .whereType<Map>()
-          .map((item) => RecentRecordItem.fromJson(item.cast<String, dynamic>()))
+          .map(
+              (item) => RecentRecordItem.fromJson(item.cast<String, dynamic>()))
           .toList(),
     );
   }

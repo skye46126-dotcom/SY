@@ -190,7 +190,6 @@ class CaptureReviewStats {
         'time_record',
         'income_record',
         'expense_record',
-        'learning_record',
       }.contains(kind)) {
         continue;
       }

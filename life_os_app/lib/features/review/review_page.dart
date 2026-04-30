@@ -1835,8 +1835,6 @@ IconData _recordIcon(RecordKind kind) {
       return Icons.account_balance_wallet_rounded;
     case RecordKind.expense:
       return Icons.receipt_long_rounded;
-    case RecordKind.learning:
-      return Icons.menu_book_rounded;
   }
 }
 
@@ -1848,7 +1846,5 @@ Color _recordColor(RecordKind kind) {
       return AppleDashboardPalette.success;
     case RecordKind.expense:
       return AppleDashboardPalette.danger;
-    case RecordKind.learning:
-      return AppleDashboardPalette.warning;
   }
 }

@@ -5,12 +5,11 @@ use life_os_core::{
     CaptureService, CommitCaptureDraftEnvelopeInput, CommitReviewableDraftInput, CostService,
     CreateAiServiceConfigInput, CreateCaptureBufferSessionInput, CreateCaptureInboxEntryInput,
     CreateCloudSyncConfigInput, CreateExpenseRecordInput, CreateIncomeRecordInput,
-    CreateLearningRecordInput, CreateProjectInput, CreateTagInput, CreateTimeRecordInput, Database,
-    DemoDataService, DimensionOptionInput, MonthlyCostBaselineInput,
-    ProcessCaptureBufferSessionInput, ProcessCaptureInboxInput, ProjectAllocation, ProjectService,
-    RecordKind, RecordService, RecurringCostRuleInput, RemoteBackupFile, RemoteDownloadResult,
-    RemoteUploadResult, ReviewNoteDraft, ReviewService, SnapshotService, SnapshotWindow,
-    cloud::CloudSyncTransport,
+    CreateProjectInput, CreateTagInput, CreateTimeRecordInput, Database, DemoDataService,
+    DimensionOptionInput, MonthlyCostBaselineInput, ProcessCaptureBufferSessionInput,
+    ProcessCaptureInboxInput, ProjectAllocation, ProjectService, RecordKind, RecordService,
+    RecurringCostRuleInput, RemoteBackupFile, RemoteDownloadResult, RemoteUploadResult,
+    ReviewNoteDraft, ReviewService, SnapshotService, SnapshotWindow, cloud::CloudSyncTransport,
 };
 use rusqlite::params;
 use std::collections::BTreeMap;
@@ -99,7 +98,7 @@ fn capture_inbox_can_enqueue_and_process_to_draft_ready() {
     assert_eq!(processed.draft_envelope.items.len(), 1);
     assert_eq!(
         processed.draft_envelope.items[0].kind,
-        life_os_core::TypedDraftKind::LearningRecord
+        life_os_core::TypedDraftKind::TimeRecord
     );
 
     let loaded = capture_service
@@ -419,8 +418,8 @@ fn create_time_record_and_load_today_overview() {
 
     let input = CreateTimeRecordInput {
         user_id: user.id.clone(),
-        started_at: "2026-04-25T01:00:00Z".to_string(),
-        ended_at: "2026-04-25T03:30:00Z".to_string(),
+        started_at: Some("2026-04-25T01:00:00Z".to_string()),
+        ended_at: Some("2026-04-25T03:30:00Z".to_string()),
         category_code: "work".to_string(),
         efficiency_score: Some(8),
         value_score: Some(9),
@@ -431,6 +430,7 @@ fn create_time_record_and_load_today_overview() {
         is_public_pool: false,
         project_allocations: Vec::<ProjectAllocation>::new(),
         tag_ids: Vec::new(),
+        ..Default::default()
     };
 
     let created = service
@@ -459,12 +459,12 @@ fn create_time_record_and_load_today_overview() {
         .expect("insert expense");
     connection
         .execute(
-            "INSERT INTO learning_records(
-                id, user_id, occurred_on, started_at, ended_at, content, duration_minutes, application_level_code,
-                source, is_public_pool, is_deleted, created_at, updated_at
+            "INSERT INTO time_records(
+                id, user_id, occurred_on, started_at, ended_at, duration_minutes, category_code,
+                content, application_level_code, source, is_public_pool, is_deleted, created_at, updated_at
              ) VALUES (
                 ?1, ?2, '2026-04-25', '2026-04-25T10:00:00Z', '2026-04-25T11:00:00Z',
-                'Read Rust docs', 60, 'input', 'manual', 0, 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+                60, 'learning', 'Read Rust docs', 'input', 'manual', 0, 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
              )",
             params!["learning-1", user.id],
         )
@@ -477,7 +477,7 @@ fn create_time_record_and_load_today_overview() {
     assert_eq!(overview.total_income_cents, 80_000);
     assert_eq!(overview.total_expense_cents, 12_000);
     assert_eq!(overview.net_income_cents, 68_000);
-    assert_eq!(overview.total_time_minutes, 150);
+    assert_eq!(overview.total_time_minutes, 210);
     assert_eq!(overview.total_work_minutes, 150);
     assert_eq!(overview.total_learning_minutes, 60);
 }
@@ -562,8 +562,8 @@ fn create_full_domain_entities_and_links() {
     let time_record = service
         .create_time_record(&CreateTimeRecordInput {
             user_id: user.id.clone(),
-            started_at: "2026-04-25T09:00:00Z".to_string(),
-            ended_at: "2026-04-25T11:00:00Z".to_string(),
+            started_at: Some("2026-04-25T09:00:00Z".to_string()),
+            ended_at: Some("2026-04-25T11:00:00Z".to_string()),
             category_code: "deep_work".to_string(),
             efficiency_score: Some(8),
             value_score: Some(9),
@@ -574,6 +574,7 @@ fn create_full_domain_entities_and_links() {
             is_public_pool: false,
             project_allocations: vec![allocation.clone()],
             tag_ids: vec![child_tag.id.clone()],
+            ..Default::default()
         })
         .expect("create time record");
     assert_eq!(time_record.category_code, "deep_work");
@@ -610,15 +611,18 @@ fn create_full_domain_entities_and_links() {
         .expect("create expense");
 
     let learning = service
-        .create_learning_record(&CreateLearningRecordInput {
+        .create_time_record(&CreateTimeRecordInput {
             user_id: user.id.clone(),
-            occurred_on: "2026-04-25".to_string(),
+            occurred_on: Some("2026-04-25".to_string()),
             started_at: Some("2026-04-25T12:00:00Z".to_string()),
             ended_at: Some("2026-04-25T13:00:00Z".to_string()),
-            content: "Read rusqlite docs".to_string(),
-            duration_minutes: 60,
-            application_level_code: "applied".to_string(),
+            duration_minutes: Some(60),
+            category_code: "learning".to_string(),
+            content: Some("Read rusqlite docs".to_string()),
+            application_level_code: Some("applied".to_string()),
             efficiency_score: Some(7),
+            value_score: None,
+            state_score: None,
             ai_assist_ratio: Some(30),
             note: Some("Migration API study".to_string()),
             source: Some("manual".to_string()),
@@ -719,8 +723,8 @@ fn update_delete_and_query_record_system() {
     let time_record = service
         .create_time_record(&CreateTimeRecordInput {
             user_id: user.id.clone(),
-            started_at: "2026-04-26T01:00:00Z".to_string(),
-            ended_at: "2026-04-26T02:00:00Z".to_string(),
+            started_at: Some("2026-04-26T01:00:00Z".to_string()),
+            ended_at: Some("2026-04-26T02:00:00Z".to_string()),
             category_code: "work".to_string(),
             efficiency_score: Some(6),
             value_score: Some(7),
@@ -731,6 +735,7 @@ fn update_delete_and_query_record_system() {
             is_public_pool: false,
             project_allocations: vec![allocation.clone()],
             tag_ids: vec![tag.id.clone()],
+            ..Default::default()
         })
         .expect("create time");
 
@@ -739,8 +744,8 @@ fn update_delete_and_query_record_system() {
             &time_record.id,
             &CreateTimeRecordInput {
                 user_id: user.id.clone(),
-                started_at: "2026-04-26T03:00:00Z".to_string(),
-                ended_at: "2026-04-26T05:30:00Z".to_string(),
+                started_at: Some("2026-04-26T03:00:00Z".to_string()),
+                ended_at: Some("2026-04-26T05:30:00Z".to_string()),
                 category_code: "work".to_string(),
                 efficiency_score: Some(9),
                 value_score: Some(8),
@@ -751,6 +756,7 @@ fn update_delete_and_query_record_system() {
                 is_public_pool: false,
                 project_allocations: vec![allocation.clone()],
                 tag_ids: vec![tag.id.clone()],
+                ..Default::default()
             },
         )
         .expect("update time");
@@ -845,15 +851,18 @@ fn update_delete_and_query_record_system() {
     assert_eq!(expense_snapshot.amount_cents, 8_000);
 
     let learning = service
-        .create_learning_record(&CreateLearningRecordInput {
+        .create_time_record(&CreateTimeRecordInput {
             user_id: user.id.clone(),
-            occurred_on: "2026-04-26".to_string(),
+            occurred_on: Some("2026-04-26".to_string()),
             started_at: Some("2026-04-26T06:00:00Z".to_string()),
             ended_at: Some("2026-04-26T07:00:00Z".to_string()),
-            content: "Before update".to_string(),
-            duration_minutes: 60,
-            application_level_code: "input".to_string(),
+            duration_minutes: Some(60),
+            category_code: "learning".to_string(),
+            content: Some("Before update".to_string()),
+            application_level_code: Some("input".to_string()),
             efficiency_score: Some(6),
+            value_score: None,
+            state_score: None,
             ai_assist_ratio: Some(20),
             note: Some("draft".to_string()),
             source: Some("manual".to_string()),
@@ -864,17 +873,20 @@ fn update_delete_and_query_record_system() {
         .expect("create learning");
 
     service
-        .update_learning_record(
+        .update_time_record(
             &learning.id,
-            &CreateLearningRecordInput {
+            &CreateTimeRecordInput {
                 user_id: user.id.clone(),
-                occurred_on: "2026-04-26".to_string(),
+                occurred_on: Some("2026-04-26".to_string()),
                 started_at: Some("2026-04-26T06:00:00Z".to_string()),
                 ended_at: Some("2026-04-26T07:30:00Z".to_string()),
-                content: "After update".to_string(),
-                duration_minutes: 90,
-                application_level_code: "applied".to_string(),
+                duration_minutes: Some(90),
+                category_code: "learning".to_string(),
+                content: Some("After update".to_string()),
+                application_level_code: Some("applied".to_string()),
                 efficiency_score: Some(8),
+                value_score: None,
+                state_score: None,
                 ai_assist_ratio: Some(35),
                 note: Some("final".to_string()),
                 source: Some("manual".to_string()),
@@ -883,13 +895,16 @@ fn update_delete_and_query_record_system() {
                 tag_ids: vec![tag.id.clone()],
             },
         )
-        .expect("update learning");
+        .expect("update learning time");
     let learning_snapshot = service
-        .get_learning_record_snapshot(&user.id, &learning.id)
+        .get_time_record_snapshot(&user.id, &learning.id)
         .expect("learning snapshot")
         .expect("learning snapshot exists");
     assert_eq!(learning_snapshot.duration_minutes, 90);
-    assert_eq!(learning_snapshot.application_level_code, "applied");
+    assert_eq!(
+        learning_snapshot.application_level_code.as_deref(),
+        Some("applied")
+    );
 
     let recent_records = service
         .get_recent_records(&user.id, "Asia/Shanghai", 20)
@@ -986,8 +1001,8 @@ fn project_system_list_detail_update_and_delete() {
     record_service
         .create_time_record(&CreateTimeRecordInput {
             user_id: user.id.clone(),
-            started_at: "2026-05-02T01:00:00Z".to_string(),
-            ended_at: "2026-05-02T03:00:00Z".to_string(),
+            started_at: Some("2026-05-02T01:00:00Z".to_string()),
+            ended_at: Some("2026-05-02T03:00:00Z".to_string()),
             category_code: "work".to_string(),
             efficiency_score: Some(8),
             value_score: Some(8),
@@ -998,6 +1013,7 @@ fn project_system_list_detail_update_and_delete() {
             is_public_pool: false,
             project_allocations: vec![allocation.clone()],
             tag_ids: vec![tag_active.id.clone()],
+            ..Default::default()
         })
         .expect("create project time record");
     record_service
@@ -1030,15 +1046,18 @@ fn project_system_list_detail_update_and_delete() {
         })
         .expect("create project expense");
     record_service
-        .create_learning_record(&CreateLearningRecordInput {
+        .create_time_record(&CreateTimeRecordInput {
             user_id: user.id.clone(),
-            occurred_on: "2026-05-02".to_string(),
+            occurred_on: Some("2026-05-02".to_string()),
             started_at: Some("2026-05-02T04:00:00Z".to_string()),
             ended_at: Some("2026-05-02T05:00:00Z".to_string()),
-            content: "Domain study".to_string(),
-            duration_minutes: 60,
-            application_level_code: "applied".to_string(),
+            duration_minutes: Some(60),
+            category_code: "learning".to_string(),
+            content: Some("Domain study".to_string()),
+            application_level_code: Some("applied".to_string()),
             efficiency_score: Some(7),
+            value_score: None,
+            state_score: None,
             ai_assist_ratio: Some(25),
             note: Some("study".to_string()),
             source: Some("manual".to_string()),
@@ -1067,7 +1086,7 @@ fn project_system_list_detail_update_and_delete() {
         .iter()
         .find(|item| item.id == active_project.id)
         .expect("active project overview");
-    assert_eq!(active_overview.total_time_minutes, 120);
+    assert_eq!(active_overview.total_time_minutes, 180);
     assert_eq!(active_overview.total_income_cents, 120_000);
     assert_eq!(active_overview.total_expense_cents, 15_000);
 
@@ -1075,12 +1094,12 @@ fn project_system_list_detail_update_and_delete() {
         .get_project_detail(&user.id, &active_project.id, "Asia/Shanghai", 20)
         .expect("project detail")
         .expect("project detail exists");
-    assert_eq!(detail.total_time_minutes, 120);
+    assert_eq!(detail.total_time_minutes, 180);
     assert_eq!(detail.total_income_cents, 120_000);
     assert_eq!(detail.total_expense_cents, 15_000);
     assert_eq!(detail.direct_expense_cents, 15_000);
     assert_eq!(detail.total_learning_minutes, 60);
-    assert_eq!(detail.time_record_count, 1);
+    assert_eq!(detail.time_record_count, 2);
     assert_eq!(detail.income_record_count, 1);
     assert_eq!(detail.expense_record_count, 1);
     assert_eq!(detail.learning_record_count, 1);
@@ -1305,8 +1324,8 @@ fn cost_system_crud_and_rate_comparison() {
     record_service
         .create_time_record(&CreateTimeRecordInput {
             user_id: user.id.clone(),
-            started_at: "2026-06-10T01:00:00Z".to_string(),
-            ended_at: "2026-06-10T03:00:00Z".to_string(),
+            started_at: Some("2026-06-10T01:00:00Z".to_string()),
+            ended_at: Some("2026-06-10T03:00:00Z".to_string()),
             category_code: "work".to_string(),
             efficiency_score: Some(8),
             value_score: Some(8),
@@ -1317,6 +1336,7 @@ fn cost_system_crud_and_rate_comparison() {
             is_public_pool: false,
             project_allocations: vec![],
             tag_ids: vec![],
+            ..Default::default()
         })
         .expect("create current year work");
     record_service
@@ -1338,8 +1358,8 @@ fn cost_system_crud_and_rate_comparison() {
     record_service
         .create_time_record(&CreateTimeRecordInput {
             user_id: user.id.clone(),
-            started_at: "2025-03-10T01:00:00Z".to_string(),
-            ended_at: "2025-03-10T11:00:00Z".to_string(),
+            started_at: Some("2025-03-10T01:00:00Z".to_string()),
+            ended_at: Some("2025-03-10T11:00:00Z".to_string()),
             category_code: "work".to_string(),
             efficiency_score: Some(7),
             value_score: Some(7),
@@ -1350,6 +1370,7 @@ fn cost_system_crud_and_rate_comparison() {
             is_public_pool: false,
             project_allocations: vec![],
             tag_ids: vec![],
+            ..Default::default()
         })
         .expect("create previous year work");
     record_service
@@ -1505,8 +1526,8 @@ fn review_system_report_and_tag_detail() {
     record_service
         .create_time_record(&CreateTimeRecordInput {
             user_id: user.id.clone(),
-            started_at: "2026-06-14T02:00:00Z".to_string(),
-            ended_at: "2026-06-14T04:00:00Z".to_string(),
+            started_at: Some("2026-06-14T02:00:00Z".to_string()),
+            ended_at: Some("2026-06-14T04:00:00Z".to_string()),
             category_code: "work".to_string(),
             efficiency_score: Some(8),
             value_score: Some(9),
@@ -1517,13 +1538,14 @@ fn review_system_report_and_tag_detail() {
             is_public_pool: false,
             project_allocations: vec![allocation.clone()],
             tag_ids: vec![time_tag.id.clone()],
+            ..Default::default()
         })
         .expect("create current time");
     record_service
         .create_time_record(&CreateTimeRecordInput {
             user_id: user.id.clone(),
-            started_at: "2026-06-14T05:00:00Z".to_string(),
-            ended_at: "2026-06-14T06:00:00Z".to_string(),
+            started_at: Some("2026-06-14T05:00:00Z".to_string()),
+            ended_at: Some("2026-06-14T06:00:00Z".to_string()),
             category_code: "life".to_string(),
             efficiency_score: None,
             value_score: None,
@@ -1534,6 +1556,7 @@ fn review_system_report_and_tag_detail() {
             is_public_pool: true,
             project_allocations: vec![],
             tag_ids: vec![],
+            ..Default::default()
         })
         .expect("create life time");
     record_service
@@ -1595,15 +1618,18 @@ fn review_system_report_and_tag_detail() {
         })
         .expect("create subscription expense");
     record_service
-        .create_learning_record(&CreateLearningRecordInput {
+        .create_time_record(&CreateTimeRecordInput {
             user_id: user.id.clone(),
-            occurred_on: "2026-06-14".to_string(),
+            occurred_on: Some("2026-06-14".to_string()),
             started_at: Some("2026-06-14T06:00:00Z".to_string()),
             ended_at: Some("2026-06-14T07:00:00Z".to_string()),
-            content: "Read docs".to_string(),
-            duration_minutes: 60,
-            application_level_code: "applied".to_string(),
+            duration_minutes: Some(60),
+            category_code: "learning".to_string(),
+            content: Some("Read docs".to_string()),
+            application_level_code: Some("applied".to_string()),
             efficiency_score: Some(7),
+            value_score: None,
+            state_score: None,
             ai_assist_ratio: Some(30),
             note: Some("learning".to_string()),
             source: Some("manual".to_string()),
@@ -1616,8 +1642,8 @@ fn review_system_report_and_tag_detail() {
     record_service
         .create_time_record(&CreateTimeRecordInput {
             user_id: user.id.clone(),
-            started_at: "2026-06-13T02:00:00Z".to_string(),
-            ended_at: "2026-06-13T03:00:00Z".to_string(),
+            started_at: Some("2026-06-13T02:00:00Z".to_string()),
+            ended_at: Some("2026-06-13T03:00:00Z".to_string()),
             category_code: "work".to_string(),
             efficiency_score: Some(5),
             value_score: Some(5),
@@ -1628,6 +1654,7 @@ fn review_system_report_and_tag_detail() {
             is_public_pool: false,
             project_allocations: vec![],
             tag_ids: vec![time_tag.id.clone()],
+            ..Default::default()
         })
         .expect("create previous day work");
     record_service
@@ -1667,7 +1694,7 @@ fn review_system_report_and_tag_detail() {
         daily_review.window.kind,
         life_os_core::ReviewWindowKind::Day
     );
-    assert_eq!(daily_review.total_time_minutes, 180);
+    assert_eq!(daily_review.total_time_minutes, 240);
     assert_eq!(daily_review.total_work_minutes, 120);
     assert_eq!(daily_review.total_income_cents, 55_000);
     assert_eq!(daily_review.previous_income_cents, 20_000);
@@ -1678,7 +1705,7 @@ fn review_system_report_and_tag_detail() {
     assert_eq!(daily_review.time_debt_cents, Some(-17_500));
     assert!(daily_review.passive_cover_ratio.is_some());
     assert!(daily_review.ai_assist_rate.is_some());
-    assert_eq!(daily_review.time_allocations.len(), 2);
+    assert_eq!(daily_review.time_allocations.len(), 3);
     assert_eq!(daily_review.top_projects.len(), 1);
     assert_eq!(daily_review.sinkhole_projects.len(), 0);
     assert!(!daily_review.key_events.is_empty());
@@ -1805,8 +1832,8 @@ fn snapshot_system_recompute_and_project_details() {
     record_service
         .create_time_record(&CreateTimeRecordInput {
             user_id: user.id.clone(),
-            started_at: "2026-07-15T01:00:00Z".to_string(),
-            ended_at: "2026-07-15T03:00:00Z".to_string(),
+            started_at: Some("2026-07-15T01:00:00Z".to_string()),
+            ended_at: Some("2026-07-15T03:00:00Z".to_string()),
             category_code: "work".to_string(),
             efficiency_score: Some(8),
             value_score: Some(8),
@@ -1820,13 +1847,14 @@ fn snapshot_system_recompute_and_project_details() {
                 weight_ratio: 1.0,
             }],
             tag_ids: vec![],
+            ..Default::default()
         })
         .expect("create project a time");
     record_service
         .create_time_record(&CreateTimeRecordInput {
             user_id: user.id.clone(),
-            started_at: "2026-07-16T01:00:00Z".to_string(),
-            ended_at: "2026-07-16T02:00:00Z".to_string(),
+            started_at: Some("2026-07-16T01:00:00Z".to_string()),
+            ended_at: Some("2026-07-16T02:00:00Z".to_string()),
             category_code: "work".to_string(),
             efficiency_score: Some(7),
             value_score: Some(7),
@@ -1840,6 +1868,7 @@ fn snapshot_system_recompute_and_project_details() {
                 weight_ratio: 1.0,
             }],
             tag_ids: vec![],
+            ..Default::default()
         })
         .expect("create project b time");
     record_service
@@ -2074,7 +2103,7 @@ fn ai_service_rule_parse_config_and_commit_flow() {
         parse_result
             .items
             .iter()
-            .any(|item| item.kind == AiDraftKind::Learning)
+            .any(|item| item.kind == AiDraftKind::Time)
     );
 
     let parse_v2 = ai_service
@@ -2138,12 +2167,12 @@ fn ai_service_rule_parse_config_and_commit_flow() {
         .expect("count income");
     let learning_count: i64 = connection
         .query_row(
-            "SELECT COUNT(*) FROM learning_records WHERE user_id = ?1 AND source = 'external' AND parse_confidence IS NOT NULL",
+            "SELECT COUNT(*) FROM time_records WHERE user_id = ?1 AND category_code = 'learning' AND source = 'external' AND parse_confidence IS NOT NULL",
             [user.id.as_str()],
             |row| row.get(0),
         )
         .expect("count learning");
-    assert_eq!(time_count, 1);
+    assert_eq!(time_count, 2);
     assert_eq!(income_count, 1);
     assert_eq!(learning_count, 1);
 
@@ -2343,8 +2372,8 @@ fn backup_service_local_backup_and_restore() {
     record_service
         .create_time_record(&CreateTimeRecordInput {
             user_id: user.id.clone(),
-            started_at: "2026-04-25T01:00:00Z".to_string(),
-            ended_at: "2026-04-25T02:00:00Z".to_string(),
+            started_at: Some("2026-04-25T01:00:00Z".to_string()),
+            ended_at: Some("2026-04-25T02:00:00Z".to_string()),
             category_code: "work".to_string(),
             efficiency_score: Some(8),
             value_score: Some(8),
@@ -2355,6 +2384,7 @@ fn backup_service_local_backup_and_restore() {
             is_public_pool: false,
             project_allocations: Vec::new(),
             tag_ids: Vec::new(),
+            ..Default::default()
         })
         .expect("create time record");
 
@@ -2437,8 +2467,8 @@ fn backup_service_cloud_sync_roundtrip_with_mock_transport() {
     record_service
         .create_time_record(&CreateTimeRecordInput {
             user_id: user.id.clone(),
-            started_at: "2026-04-25T03:00:00Z".to_string(),
-            ended_at: "2026-04-25T04:30:00Z".to_string(),
+            started_at: Some("2026-04-25T03:00:00Z".to_string()),
+            ended_at: Some("2026-04-25T04:30:00Z".to_string()),
             category_code: "work".to_string(),
             efficiency_score: Some(7),
             value_score: Some(8),
@@ -2449,6 +2479,7 @@ fn backup_service_cloud_sync_roundtrip_with_mock_transport() {
             is_public_pool: false,
             project_allocations: Vec::new(),
             tag_ids: Vec::new(),
+            ..Default::default()
         })
         .expect("create time");
 

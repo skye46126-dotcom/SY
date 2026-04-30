@@ -52,8 +52,6 @@ pub fn validate_reviewable_draft(
         let has_time_window = has_value(fields, "start_time") && has_value(fields, "end_time");
         if !has_duration && !has_time_window {
             missing.push("duration_minutes_or_time_window".to_string());
-        } else if has_duration && !has_time_window {
-            warnings.push("time draft has duration but no explicit time window".to_string());
         }
     }
 
