@@ -9,7 +9,7 @@ class ManagementPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ModulePage(
-      title: '分组管理入口',
+      title: '管理',
       subtitle: 'Management',
       children: [
         ManagementListGroup(
@@ -63,18 +63,6 @@ class ManagementPage extends StatelessWidget {
               description: '维护类型选项，避免自由文本制造脏数据。',
               onTap: () =>
                   Navigator.of(context).pushNamed('/settings/dimensions'),
-            ),
-          ],
-        ),
-        ManagementListGroup(
-          eyebrow: 'System Management',
-          title: '系统管理',
-          muted: true,
-          items: [
-            ManagementEntry(
-              title: '设置',
-              description: '通用配置、AI 服务、同步和迁移入口。',
-              onTap: () => Navigator.of(context).pushNamed('/settings'),
             ),
           ],
         ),

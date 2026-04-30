@@ -19,10 +19,12 @@ class MoreActionMenu extends StatelessWidget {
     super.key,
     required this.items,
     this.tooltip = '更多操作',
+    this.icon = Icons.more_horiz_rounded,
   });
 
   final List<MoreActionMenuItem> items;
   final String tooltip;
+  final IconData icon;
 
   @override
   Widget build(BuildContext context) {
@@ -40,7 +42,7 @@ class MoreActionMenu extends StatelessWidget {
               borderRadius: BorderRadius.circular(18),
               border: Border.all(color: Colors.white.withValues(alpha: 0.72)),
             ),
-            child: const Icon(Icons.more_horiz_rounded),
+            child: Icon(icon),
           ),
         ),
       ),

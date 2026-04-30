@@ -301,6 +301,24 @@ void main() {
           detail: '45m',
         ),
       ],
+      reviewNotes: const [
+        ReviewNoteModel(
+          id: 'n1',
+          userId: 'u1',
+          occurredOn: '2026-04-27',
+          noteType: 'reflection',
+          title: '午觉反思',
+          content: '午觉过长影响晚上安排',
+          source: 'manual',
+          visibility: 'normal',
+          confidence: null,
+          rawText: null,
+          linkedRecordKind: null,
+          linkedRecordId: null,
+          createdAt: '2026-04-27T12:00:00Z',
+          updatedAt: '2026-04-27T12:00:00Z',
+        ),
+      ],
     );
 
     expect(metadata['page'], 'day_detail');
@@ -308,7 +326,10 @@ void main() {
     expect(summary['total_record_count'], 3);
     expect(summary['time_count'], 2);
     expect(summary['expense_count'], 1);
+    expect(summary['review_note_count'], 1);
     expect(summary['first_occurred_at'], '2026-04-27 09:00');
     expect(summary['last_occurred_at'], '2026-04-27 20:00');
+    final notes = metadata['review_notes']! as List<Object?>;
+    expect((notes.single! as Map<String, Object?>)['title'], '午觉反思');
   });
 }

@@ -63,7 +63,9 @@ pub use review::{
     ProjectProgressItem, ReviewReport, ReviewTagMetric, ReviewWindow, ReviewWindowKind,
     TimeCategoryAllocation,
 };
-pub use review_note::{CreateReviewNoteInput, IgnoredContext, ReviewNote, ReviewNoteDraft};
+pub use review_note::{
+    CreateReviewNoteInput, IgnoredContext, ReviewNote, ReviewNoteDraft, UpdateReviewNoteInput,
+};
 pub use snapshot::{MetricSnapshotSummary, ProjectMetricSnapshotSummary, SnapshotWindow};
 pub use sync::{
     BackupRecord, BackupResult, BackupType, CloudSyncConfig, CreateCloudSyncConfigInput,

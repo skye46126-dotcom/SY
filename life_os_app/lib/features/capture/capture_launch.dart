@@ -11,11 +11,15 @@ class CaptureLaunchConfig {
     this.initialType,
     this.mode = CaptureLaunchMode.manual,
     this.prefillText,
+    this.contextDate,
+    this.returnToDay = false,
   });
 
   final CaptureType? initialType;
   final CaptureLaunchMode mode;
   final String? prefillText;
+  final String? contextDate;
+  final bool returnToDay;
 
   bool get focusAiInput =>
       mode == CaptureLaunchMode.ai || mode == CaptureLaunchMode.voice;
@@ -38,6 +42,11 @@ class CaptureLaunchConfig {
       initialType: _parseType(uri.queryParameters['type']),
       mode: _parseMode(uri.queryParameters['mode']),
       prefillText: _normalizedText(uri.queryParameters['text']),
+      contextDate: _normalizedText(
+        uri.queryParameters['contextDate'] ??
+            uri.queryParameters['context_date'],
+      ),
+      returnToDay: _parseReturnToDay(uri.queryParameters['returnTo']),
     );
   }
 
@@ -63,5 +72,9 @@ class CaptureLaunchConfig {
   static String? _normalizedText(String? raw) {
     final trimmed = raw?.trim() ?? '';
     return trimmed.isEmpty ? null : trimmed;
+  }
+
+  static bool _parseReturnToDay(String? raw) {
+    return raw?.trim().toLowerCase() == 'day';
   }
 }

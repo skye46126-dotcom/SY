@@ -181,6 +181,69 @@ impl CreateReviewNoteInput {
     }
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct UpdateReviewNoteInput {
+    pub user_id: String,
+    pub occurred_on: String,
+    pub note_type: String,
+    pub title: String,
+    pub content: String,
+    pub visibility: String,
+    pub confidence: Option<f64>,
+    pub raw_text: Option<String>,
+    pub linked_record_kind: Option<String>,
+    pub linked_record_id: Option<String>,
+}
+
+impl UpdateReviewNoteInput {
+    pub fn validate(&self) -> Result<()> {
+        normalize_required_string("user_id", &self.user_id)?;
+        parse_date("occurred_on", &self.occurred_on)?;
+        normalize_note_type(&self.note_type)?;
+        normalize_required_string("title", &self.title)?;
+        normalize_required_string("content", &self.content)?;
+        normalize_note_visibility(&self.visibility)?;
+        validate_confidence(self.confidence)?;
+        if let Some(kind) = &self.linked_record_kind {
+            normalize_linked_record_kind(kind)?;
+        }
+        Ok(())
+    }
+
+    pub fn normalized_note_type(&self) -> Result<String> {
+        normalize_note_type(&self.note_type)
+    }
+
+    pub fn normalized_visibility(&self) -> Result<String> {
+        normalize_note_visibility(&self.visibility)
+    }
+
+    pub fn normalized_title(&self) -> String {
+        self.title.trim().to_string()
+    }
+
+    pub fn normalized_content(&self) -> String {
+        self.content.trim().to_string()
+    }
+
+    pub fn normalized_raw_text(&self) -> Option<String> {
+        normalize_optional_string(&self.raw_text)
+    }
+
+    pub fn normalized_linked_record_kind(&self) -> Result<Option<String>> {
+        self.linked_record_kind
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(normalize_linked_record_kind)
+            .transpose()
+    }
+
+    pub fn normalized_linked_record_id(&self) -> Option<String> {
+        normalize_optional_string(&self.linked_record_id)
+    }
+}
+
 fn normalize_note_type(value: &str) -> Result<String> {
     let normalized = normalize_code("note_type", value)?;
     match normalized.as_str() {

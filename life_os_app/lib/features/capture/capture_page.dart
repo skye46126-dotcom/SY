@@ -78,13 +78,13 @@ class _CapturePageState extends State<CapturePage> {
 
     final runtime = LifeOsScope.runtimeOf(context);
     final runtimeReady = runtime.isReady;
-    final date = runtime.todayDate;
+    final anchorDate = _captureDate(runtime);
 
     return AnimatedBuilder(
       animation: Listenable.merge([controller, runtime]),
       builder: (context, _) {
-        _ensureMetadataLoaded(runtime, controller);
-        _ensureQuickCaptureBufferLoaded(runtime, controller);
+        _ensureMetadataLoaded(runtime, controller, anchorDate);
+        _ensureQuickCaptureBufferLoaded(runtime, controller, anchorDate);
         if (!runtimeReady) {
           if (!_bootstrapMarked) {
             _bootstrapMarked = true;
@@ -98,7 +98,7 @@ class _CapturePageState extends State<CapturePage> {
         _applyDefaults(
           type: controller.selectedType,
           metadata: controller.metadata,
-          anchorDate: runtime.todayDate,
+          anchorDate: anchorDate,
         );
         final fieldControllers = {
           for (final field
@@ -106,14 +106,8 @@ class _CapturePageState extends State<CapturePage> {
             field.key: _controllerFor(field.key),
         };
         return ModulePage(
-          title: '快速录入中心',
+          title: '录入',
           subtitle: 'Capture',
-          actions: [
-            OutlinedButton(
-              onPressed: () => Navigator.of(context).pushNamed('/day/$date'),
-              child: const Text('当日详情'),
-            ),
-          ],
           children: [
             CaptureShell(
               selectedType: controller.selectedType,
@@ -133,7 +127,7 @@ class _CapturePageState extends State<CapturePage> {
                       _applyDefaults(
                         type: type,
                         metadata: controller.metadata,
-                        anchorDate: runtime.todayDate,
+                        anchorDate: anchorDate,
                         force: true,
                       );
                     },
@@ -141,7 +135,7 @@ class _CapturePageState extends State<CapturePage> {
                   const SizedBox(height: 20),
                   RecordFormSection(
                     selectedType: controller.selectedType,
-                    anchorDate: runtime.todayDate,
+                    anchorDate: anchorDate,
                     controllers: fieldControllers,
                     submitState: controller.manualSubmitState,
                     projectOptions: controller.projectOptions,
@@ -172,7 +166,7 @@ class _CapturePageState extends State<CapturePage> {
                       controller
                           .submitManual(
                         userId: runtime.userId,
-                        anchorDate: runtime.todayDate,
+                        anchorDate: anchorDate,
                         fields: {
                           for (final entry in fieldControllers.entries)
                             entry.key: entry.value.text,
@@ -188,8 +182,9 @@ class _CapturePageState extends State<CapturePage> {
                         _resetAfterSubmit(
                           type: controller.selectedType,
                           metadata: controller.metadata,
-                          anchorDate: runtime.todayDate,
+                          anchorDate: anchorDate,
                         );
+                        _finishSubmitSuccess(anchorDate);
                       });
                     },
                   ),
@@ -207,14 +202,14 @@ class _CapturePageState extends State<CapturePage> {
                       controller.parseAiInput(
                         userId: runtime.userId,
                         rawInput: _aiInputController.text,
-                        contextDate: runtime.todayDate,
+                        contextDate: anchorDate,
                       );
                     },
                     onAddToBufferPressed: () {
                       controller
                           .appendQuickCaptureBufferItem(
                         userId: runtime.userId,
-                        anchorDate: runtime.todayDate,
+                        anchorDate: anchorDate,
                         rawText: _aiInputController.text,
                       )
                           .then((success) {
@@ -249,6 +244,7 @@ class _CapturePageState extends State<CapturePage> {
                       return;
                     }
                     runtime.markRecordsChanged();
+                    _finishSubmitSuccess(anchorDate);
                   });
                 },
                 optionResolver: controller.optionsFor,
@@ -267,7 +263,7 @@ class _CapturePageState extends State<CapturePage> {
                   controller
                       .appendQuickCaptureBufferItem(
                     userId: runtime.userId,
-                    anchorDate: runtime.todayDate,
+                    anchorDate: anchorDate,
                     rawText: _aiInputController.text,
                   )
                       .then((success) {
@@ -281,7 +277,7 @@ class _CapturePageState extends State<CapturePage> {
                   controller
                       .processQuickCaptureBufferSession(
                     userId: runtime.userId,
-                    anchorDate: runtime.todayDate,
+                    anchorDate: anchorDate,
                     autoCommit: false,
                   )
                       .then((result) {
@@ -299,7 +295,7 @@ class _CapturePageState extends State<CapturePage> {
                   }
                   controller.deleteQuickCaptureBufferItem(
                     userId: runtime.userId,
-                    anchorDate: runtime.todayDate,
+                    anchorDate: anchorDate,
                     itemId: itemId,
                   );
                 },
@@ -347,9 +343,26 @@ class _CapturePageState extends State<CapturePage> {
     }
   }
 
+  String _captureDate(dynamic runtime) {
+    final contextDate = widget.launchConfig?.contextDate?.trim() ?? '';
+    return contextDate.isEmpty ? runtime.todayDate : contextDate;
+  }
+
+  void _finishSubmitSuccess(String anchorDate) {
+    if (widget.launchConfig?.returnToDay != true) {
+      return;
+    }
+    if (Navigator.of(context).canPop()) {
+      Navigator.of(context).pop(true);
+      return;
+    }
+    Navigator.of(context).pushReplacementNamed('/day/$anchorDate');
+  }
+
   void _ensureMetadataLoaded(
     dynamic runtime,
     CaptureController controller,
+    String anchorDate,
   ) {
     if (_metadataLoaded || !runtime.isReady) {
       return;
@@ -368,7 +381,7 @@ class _CapturePageState extends State<CapturePage> {
         _applyDefaults(
           type: controller.selectedType,
           metadata: controller.metadata,
-          anchorDate: runtime.todayDate,
+          anchorDate: anchorDate,
           force: true,
         );
       });
@@ -378,6 +391,7 @@ class _CapturePageState extends State<CapturePage> {
   void _ensureQuickCaptureBufferLoaded(
     dynamic runtime,
     CaptureController controller,
+    String anchorDate,
   ) {
     if (_quickCaptureBufferLoaded || !runtime.isReady) {
       return;
@@ -387,7 +401,7 @@ class _CapturePageState extends State<CapturePage> {
       if (!mounted) return;
       controller.loadQuickCaptureBuffer(
         userId: runtime.userId,
-        anchorDate: runtime.todayDate,
+        anchorDate: anchorDate,
       );
     });
   }
@@ -417,7 +431,7 @@ class _CapturePageState extends State<CapturePage> {
       await controller.parseAiInput(
         userId: runtime.userId,
         rawInput: transcript,
-        contextDate: runtime.todayDate,
+        contextDate: _captureDate(runtime),
       );
     } catch (error) {
       if (!mounted) {
@@ -566,7 +580,7 @@ class _CaptureBootstrapView extends StatelessWidget {
   Widget build(BuildContext context) {
     final prefillText = launchConfig?.prefillText?.trim();
     return ModulePage(
-      title: '快速录入中心',
+      title: '录入',
       subtitle: 'Capture Bootstrap',
       children: [
         const LinearProgressIndicator(),

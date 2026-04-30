@@ -1,7 +1,7 @@
 use rusqlite::{Connection, OptionalExtension, params};
 
 use crate::error::{LifeOsError, Result};
-use crate::models::{CreateReviewNoteInput, ReviewNote};
+use crate::models::{CreateReviewNoteInput, ReviewNote, UpdateReviewNoteInput};
 use crate::repositories::record_repository::{ensure_user_exists, new_id, now_string};
 
 pub struct ReviewNoteRepository;
@@ -78,6 +78,63 @@ impl ReviewNoteRepository {
             .map_err(Into::into)
     }
 
+    pub fn update(
+        connection: &mut Connection,
+        note_id: &str,
+        input: &UpdateReviewNoteInput,
+    ) -> Result<ReviewNote> {
+        input.validate()?;
+        ensure_user_exists(connection, &input.user_id)?;
+        ensure_note_exists(connection, note_id, &input.user_id)?;
+        let now = now_string();
+        connection.execute(
+            "UPDATE review_notes
+             SET occurred_on = ?1,
+                 note_type = ?2,
+                 title = ?3,
+                 content = ?4,
+                 visibility = ?5,
+                 confidence = ?6,
+                 raw_text = ?7,
+                 linked_record_kind = ?8,
+                 linked_record_id = ?9,
+                 updated_at = ?10
+             WHERE id = ?11
+               AND user_id = ?12",
+            params![
+                input.occurred_on,
+                input.normalized_note_type()?,
+                input.normalized_title(),
+                input.normalized_content(),
+                input.normalized_visibility()?,
+                input.confidence.map(|value| value.clamp(0.0, 1.0)),
+                input.normalized_raw_text(),
+                input.normalized_linked_record_kind()?,
+                input.normalized_linked_record_id(),
+                now,
+                note_id,
+                input.user_id,
+            ],
+        )?;
+        load_by_id(connection, note_id, &input.user_id)?.ok_or_else(|| {
+            LifeOsError::InvalidInput(format!("failed to load updated review note: {note_id}"))
+        })
+    }
+
+    pub fn hide(connection: &mut Connection, user_id: &str, note_id: &str) -> Result<()> {
+        ensure_user_exists(connection, user_id)?;
+        ensure_note_exists(connection, note_id, user_id)?;
+        connection.execute(
+            "UPDATE review_notes
+             SET visibility = 'hidden',
+                 updated_at = ?1
+             WHERE id = ?2
+               AND user_id = ?3",
+            params![now_string(), note_id, user_id],
+        )?;
+        Ok(())
+    }
+
     pub fn list_for_range(
         connection: &Connection,
         user_id: &str,
@@ -102,6 +159,15 @@ impl ReviewNoteRepository {
         rows.collect::<std::result::Result<Vec<_>, _>>()
             .map_err(Into::into)
     }
+}
+
+fn ensure_note_exists(connection: &Connection, id: &str, user_id: &str) -> Result<()> {
+    if load_by_id(connection, id, user_id)?.is_none() {
+        return Err(LifeOsError::InvalidInput(format!(
+            "review note not found: {id}"
+        )));
+    }
+    Ok(())
 }
 
 fn load_by_id(connection: &Connection, id: &str, user_id: &str) -> Result<Option<ReviewNote>> {

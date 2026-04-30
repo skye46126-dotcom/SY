@@ -6,13 +6,15 @@ void main() {
   group('CaptureLaunchConfig', () {
     test('parses capture quick launch route', () {
       final config = CaptureLaunchConfig.fromRouteName(
-        '/capture?type=learning&mode=ai&text=%E6%B5%8B%E8%AF%95',
+        '/capture?type=learning&mode=ai&text=%E6%B5%8B%E8%AF%95&contextDate=2026-04-20&returnTo=day',
       );
 
       expect(config, isNotNull);
       expect(config!.initialType, CaptureType.time);
       expect(config.mode, CaptureLaunchMode.ai);
       expect(config.prefillText, '测试');
+      expect(config.contextDate, '2026-04-20');
+      expect(config.returnToDay, isTrue);
       expect(config.focusAiInput, isTrue);
     });
 

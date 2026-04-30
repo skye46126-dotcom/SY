@@ -13,7 +13,7 @@ use crate::models::{
     CreateProjectInput, CreateReviewNoteInput, CreateTagInput, CreateTimeRecordInput,
     DimensionOptionInput, MonthlyCostBaselineInput, PrepareCaptureSessionInput,
     ProcessCaptureBufferSessionInput, ProcessCaptureInboxAndCommitInput, ProcessCaptureInboxInput,
-    RecordKind, RecurringCostRuleInput, UpdateOperatingSettingsInput,
+    RecordKind, RecurringCostRuleInput, UpdateOperatingSettingsInput, UpdateReviewNoteInput,
 };
 use crate::services::{
     AiService, BackupService, CaptureService, CostService, DataPackageExportInput, DemoDataService,
@@ -306,6 +306,18 @@ struct ReviewNotesForRangeRequest {
     user_id: String,
     start_date: String,
     end_date: String,
+}
+
+#[derive(Debug, serde::Deserialize)]
+struct UpdateReviewNoteRequest {
+    note_id: String,
+    input: UpdateReviewNoteInput,
+}
+
+#[derive(Debug, serde::Deserialize)]
+struct HideReviewNoteRequest {
+    user_id: String,
+    note_id: String,
 }
 
 #[derive(Debug, serde::Deserialize)]
@@ -1278,6 +1290,27 @@ fn invoke_inner(
                 .create_note(&request)
                 .map_err(BridgeInvokeError::from_core)?;
             Ok(success_response(data))
+        }
+        "update_review_note" => {
+            let request: UpdateReviewNoteRequest = parse_payload(payload_json)?;
+            let data = ReviewNoteService::new(database_path)
+                .update_note(&request.note_id, &request.input)
+                .map_err(BridgeInvokeError::from_core)?;
+            Ok(success_response(data))
+        }
+        "hide_review_note" => {
+            let request: HideReviewNoteRequest = parse_payload(payload_json)?;
+            ReviewNoteService::new(database_path)
+                .hide_note(&request.user_id, &request.note_id)
+                .map_err(BridgeInvokeError::from_core)?;
+            Ok(success_response(true))
+        }
+        "delete_review_note" => {
+            let request: HideReviewNoteRequest = parse_payload(payload_json)?;
+            ReviewNoteService::new(database_path)
+                .hide_note(&request.user_id, &request.note_id)
+                .map_err(BridgeInvokeError::from_core)?;
+            Ok(success_response(true))
         }
         "list_review_notes_for_date" => {
             let request: ReviewNotesForDateRequest = parse_payload(payload_json)?;

@@ -28,7 +28,7 @@ import 'shell_scaffold.dart';
 
 enum AppDestination {
   today('/today', '今日', Icons.stacked_line_chart_rounded),
-  capture('/capture', '记录', Icons.edit_note_rounded),
+  capture('/capture', '录入', Icons.edit_note_rounded),
   management('/management', '管理', Icons.grid_view_rounded),
   review('/review', '复盘', Icons.auto_graph_rounded);
 

@@ -1,18 +1,9 @@
-import 'dart:io';
-
 import 'package:flutter/material.dart';
 
 import '../../app/app.dart';
-import '../../features/export/application/export_orchestrator.dart';
-import '../../features/export/domain/export_artifact.dart';
-import '../../features/export/domain/export_range.dart';
-import '../../features/export/domain/export_request.dart';
 import '../../models/config_models.dart';
 import '../../models/cost_models.dart';
-import '../../services/export_metadata_builders.dart';
-import '../../services/image_export_service.dart';
 import '../../shared/view_state.dart';
-import '../../shared/widgets/export_document_dialog.dart';
 import '../../shared/widgets/more_action_menu.dart';
 import '../../shared/widgets/module_page.dart';
 import '../../shared/widgets/safe_pop.dart';
@@ -27,8 +18,6 @@ class CostManagementPage extends StatefulWidget {
 }
 
 class _CostManagementPageState extends State<CostManagementPage> {
-  final GlobalKey _exportBoundaryKey = GlobalKey();
-  ExportOrchestrator? _exportOrchestrator;
   ViewState<MonthlyCostBaselineModel> _baselineState = ViewState.initial();
   ViewState<List<RecurringCostRuleModel>> _recurringState = ViewState.initial();
   ViewState<List<CapexCostModel>> _capexState = ViewState.initial();
@@ -37,7 +26,6 @@ class _CostManagementPageState extends State<CostManagementPage> {
   String? _selectedMonth;
   String _rateWindowType = 'month';
   bool _loaded = false;
-  bool _isExporting = false;
 
   Future<void> _load() async {
     final runtime = LifeOsScope.runtimeOf(context);
@@ -94,8 +82,6 @@ class _CostManagementPageState extends State<CostManagementPage> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    _exportOrchestrator ??=
-        ExportOrchestrator(service: LifeOsScope.of(context));
     if (_loaded) return;
     _loaded = true;
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -118,23 +104,12 @@ class _CostManagementPageState extends State<CostManagementPage> {
         (_capexState.data ?? const []).where((item) => item.isActive).toList();
     final inactiveCapex =
         (_capexState.data ?? const []).where((item) => !item.isActive).toList();
-    final canExport = _baselineState.hasData &&
-        _recurringState.hasData &&
-        _capexState.hasData &&
-        _rateState.hasData;
     return ModulePage(
       title: '成本管理',
       subtitle: 'Cost Management',
-      exportBoundaryKey: _exportBoundaryKey,
       actions: [
         MoreActionMenu(
           items: [
-            MoreActionMenuItem(
-              label: _isExporting ? '正在导出' : '导出图片文档',
-              icon: Icons.ios_share_rounded,
-              enabled: canExport && !_isExporting,
-              onPressed: _exportCostDocument,
-            ),
             MoreActionMenuItem(
               label: '上月',
               icon: Icons.chevron_left_rounded,
@@ -354,64 +329,6 @@ class _CostManagementPageState extends State<CostManagementPage> {
     setState(() => _selectedMonth =
         '${next.year}-${next.month.toString().padLeft(2, '0')}');
     _load();
-  }
-
-  Future<void> _exportCostDocument() async {
-    if (_isExporting ||
-        !_baselineState.hasData ||
-        !_recurringState.hasData ||
-        !_capexState.hasData ||
-        !_rateState.hasData) {
-      return;
-    }
-
-    setState(() => _isExporting = true);
-    try {
-      final runtime = LifeOsScope.runtimeOf(context);
-      final month = _selectedMonth ?? runtime.todayDate.substring(0, 7);
-      final exportResult = await _exportOrchestrator!.export(
-        ExportRequest.snapshot(
-          title: 'cost-$month-$_rateWindowType',
-          module: 'cost',
-          range:
-              _rateWindowType == 'year' ? ExportRange.year : ExportRange.month,
-          boundaryKey: _exportBoundaryKey,
-          metadata: buildCostExportMetadata(
-            month: month,
-            rateWindowType: _rateWindowType,
-            baseline: _baselineState.data,
-            rate: _rateState.data,
-            recurringRules: _recurringState.data ?? const [],
-            capexItems: _capexState.data ?? const [],
-          ),
-        ),
-      );
-      final artifact = exportResult.primaryArtifact;
-      if (!mounted) return;
-      await showExportDocumentDialog(
-          context, _artifactToImageDocument(artifact));
-    } catch (error) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('导出成本图片文档失败：$error')),
-      );
-    } finally {
-      if (mounted) {
-        setState(() => _isExporting = false);
-      }
-    }
-  }
-
-  ExportedImageDocument _artifactToImageDocument(ExportArtifact artifact) {
-    return ExportedImageDocument(
-      module: artifact.module,
-      title: artifact.title,
-      exportedAt: artifact.createdAt,
-      directoryPath: File(artifact.filePath).parent.path,
-      imagePath: artifact.filePath,
-      metadataPath: artifact.metadataPath,
-      metadata: Map<String, dynamic>.from(artifact.metadata.toJson()),
-    );
   }
 
   Future<void> _editBaseline() async {

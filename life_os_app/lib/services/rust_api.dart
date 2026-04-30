@@ -76,6 +76,30 @@ abstract class RustApi {
     required String timezone,
   });
 
+  Future<List<ReviewNoteModel>> listReviewNotesForDate({
+    required String userId,
+    required String occurredOn,
+  });
+
+  Future<ReviewNoteModel> createReviewNote({
+    required ReviewNoteMutationInput input,
+  });
+
+  Future<ReviewNoteModel> updateReviewNote({
+    required String noteId,
+    required ReviewNoteMutationInput input,
+  });
+
+  Future<void> hideReviewNote({
+    required String userId,
+    required String noteId,
+  });
+
+  Future<void> deleteReviewNote({
+    required String userId,
+    required String noteId,
+  });
+
   Future<List<TagModel>> getTags({
     required String userId,
   });
@@ -572,6 +596,45 @@ class UnimplementedRustApi implements RustApi {
     required String timezone,
   }) async {
     _notReady('getReviewReport');
+  }
+
+  @override
+  Future<List<ReviewNoteModel>> listReviewNotesForDate({
+    required String userId,
+    required String occurredOn,
+  }) async {
+    _notReady('listReviewNotesForDate');
+  }
+
+  @override
+  Future<ReviewNoteModel> createReviewNote({
+    required ReviewNoteMutationInput input,
+  }) async {
+    _notReady('createReviewNote');
+  }
+
+  @override
+  Future<ReviewNoteModel> updateReviewNote({
+    required String noteId,
+    required ReviewNoteMutationInput input,
+  }) async {
+    _notReady('updateReviewNote');
+  }
+
+  @override
+  Future<void> hideReviewNote({
+    required String userId,
+    required String noteId,
+  }) async {
+    _notReady('hideReviewNote');
+  }
+
+  @override
+  Future<void> deleteReviewNote({
+    required String userId,
+    required String noteId,
+  }) async {
+    _notReady('deleteReviewNote');
   }
 
   @override

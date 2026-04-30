@@ -202,6 +202,7 @@ Map<String, Object?> buildDayDetailExportMetadata({
   required String anchorDate,
   required String timezone,
   required List<RecentRecordItem> records,
+  List<ReviewNoteModel> reviewNotes = const [],
 }) {
   int countFor(RecordKind kind) =>
       records.where((item) => item.kind == kind).length;
@@ -214,8 +215,22 @@ Map<String, Object?> buildDayDetailExportMetadata({
       'time_count': countFor(RecordKind.time),
       'income_count': countFor(RecordKind.income),
       'expense_count': countFor(RecordKind.expense),
+      'review_note_count': reviewNotes.length,
       'first_occurred_at': records.isEmpty ? null : records.first.occurredAt,
       'last_occurred_at': records.isEmpty ? null : records.last.occurredAt,
     },
+    'review_notes': reviewNotes
+        .map(
+          (note) => {
+            'id': note.id,
+            'occurred_on': note.occurredOn,
+            'note_type': note.noteType,
+            'title': note.title,
+            'content': note.content,
+            'source': note.source,
+            'visibility': note.visibility,
+          },
+        )
+        .toList(),
   };
 }

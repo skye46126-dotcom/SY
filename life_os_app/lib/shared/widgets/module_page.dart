@@ -26,7 +26,13 @@ class ModulePage extends StatelessWidget {
       children: [
         Text(subtitle, style: textTheme.labelSmall),
         const SizedBox(height: 8),
-        Text(title, style: textTheme.headlineMedium),
+        Text(
+          title,
+          style: textTheme.headlineMedium?.copyWith(
+            fontSize: 30,
+            letterSpacing: 0,
+          ),
+        ),
       ],
     );
 

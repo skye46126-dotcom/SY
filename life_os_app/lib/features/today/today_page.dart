@@ -1,32 +1,17 @@
-import 'dart:io';
-
 import 'package:flutter/material.dart';
 
 import '../../app/app.dart';
 import '../../app/app_runtime.dart';
-import '../../features/export/application/export_orchestrator.dart';
-import '../../features/export/domain/export_artifact.dart';
-import '../../features/export/domain/export_range.dart';
-import '../../features/export/domain/export_request.dart';
 import '../../models/overview_models.dart';
 import '../../models/project_models.dart';
 import '../../models/record_models.dart';
 import '../../models/tag_models.dart';
-import '../../services/export_metadata_builders.dart';
-import '../../services/image_export_service.dart';
 import '../../shared/view_state.dart';
 import '../../shared/widgets/apple_dashboard.dart';
-import '../../shared/widgets/export_document_dialog.dart';
+import '../../shared/widgets/more_action_menu.dart';
 import '../../shared/widgets/state_views.dart';
 import '../review/widgets/record_editor_dialog.dart';
-import '../review/review_page.dart';
 import 'today_controller.dart';
-
-enum _TodayScope {
-  today,
-  week,
-  month,
-}
 
 class TodayPage extends StatefulWidget {
   const TodayPage({super.key});
@@ -36,20 +21,15 @@ class TodayPage extends StatefulWidget {
 }
 
 class _TodayPageState extends State<TodayPage> {
-  final GlobalKey _exportBoundaryKey = GlobalKey();
-  ExportOrchestrator? _exportOrchestrator;
   TodayController? _controller;
   AppRuntimeController? _runtime;
   bool _hasLoaded = false;
-  bool _isExporting = false;
   int _lastSeenRecordsVersion = -1;
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
     _controller ??= TodayController(LifeOsScope.of(context));
-    _exportOrchestrator ??=
-        ExportOrchestrator(service: LifeOsScope.of(context));
     final runtime = LifeOsScope.runtimeOf(context);
     if (!identical(_runtime, runtime)) {
       _runtime?.removeListener(_handleRuntimeChanged);
@@ -160,109 +140,26 @@ class _TodayPageState extends State<TodayPage> {
         return AppleDashboardPage(
           title: '今日经营状态',
           subtitle: _formatDateLabel(runtime.todayDate),
-          exportBoundaryKey: _exportBoundaryKey,
-          trailing: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              AppleCircleButton(
-                icon: Icons.style_outlined,
-                onPressed: () =>
-                    Navigator.of(context).pushNamed('/settings/poster-export'),
+          trailing: MoreActionMenu(
+            icon: Icons.settings_outlined,
+            tooltip: '今日设置',
+            items: [
+              MoreActionMenuItem(
+                label: '日详情',
+                icon: Icons.today_outlined,
+                onPressed: () => Navigator.of(context)
+                    .pushNamed('/day/${runtime.todayDate}'),
               ),
-              const SizedBox(width: 12),
-              AppleCircleButton(
-                icon: _isExporting
-                    ? Icons.downloading_rounded
-                    : Icons.image_outlined,
-                onPressed:
-                    data == null || _isExporting ? null : _exportTodayDashboard,
-              ),
-              const SizedBox(width: 12),
-              AppleCircleButton(
-                icon: Icons.notifications_none_rounded,
+              MoreActionMenuItem(
+                label: '设置',
+                icon: Icons.settings_outlined,
                 onPressed: () => Navigator.of(context).pushNamed('/settings'),
               ),
-            ],
-          ),
-          controls: AppleSegmentedControl<_TodayScope>(
-            value: _TodayScope.today,
-            onChanged: _handleScopeChange,
-            options: const [
-              AppleSegmentOption(value: _TodayScope.today, label: '今天'),
-              AppleSegmentOption(value: _TodayScope.week, label: '本周'),
-              AppleSegmentOption(value: _TodayScope.month, label: '本月'),
             ],
           ),
           children: dashboardChildren,
         );
       },
-    );
-  }
-
-  void _handleScopeChange(_TodayScope next) {
-    if (next == _TodayScope.today) {
-      return;
-    }
-    Navigator.of(context).pushReplacementNamed(
-      '/review',
-      arguments: next == _TodayScope.week
-          ? ReviewPageRouteArgs.window('week')
-          : ReviewPageRouteArgs.window('month'),
-    );
-  }
-
-  Future<void> _exportTodayDashboard() async {
-    final controller = _controller;
-    final data = controller?.state.data;
-    if (controller == null || data == null || _isExporting) {
-      return;
-    }
-
-    setState(() => _isExporting = true);
-    try {
-      final runtime = LifeOsScope.runtimeOf(context);
-      final exportResult = await _exportOrchestrator!.export(
-        ExportRequest.snapshot(
-          title: 'today-${runtime.todayDate}',
-          module: 'today',
-          range: ExportRange.today,
-          boundaryKey: _exportBoundaryKey,
-          metadata: buildTodayExportMetadata(
-            overview: data.overview,
-            summary: data.summary,
-            alerts: data.alerts,
-            recentRecordCount: data.recentRecords.length,
-            anchorDate: runtime.todayDate,
-            timezone: runtime.timezone,
-            snapshot: data.snapshot,
-          ),
-        ),
-      );
-      final artifact = exportResult.primaryArtifact;
-      if (!mounted) return;
-      await showExportDocumentDialog(
-          context, _artifactToImageDocument(artifact));
-    } catch (error) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('导出今日图片文档失败：$error')),
-      );
-    } finally {
-      if (mounted) {
-        setState(() => _isExporting = false);
-      }
-    }
-  }
-
-  ExportedImageDocument _artifactToImageDocument(ExportArtifact artifact) {
-    return ExportedImageDocument(
-      module: artifact.module,
-      title: artifact.title,
-      exportedAt: artifact.createdAt,
-      directoryPath: File(artifact.filePath).parent.path,
-      imagePath: artifact.filePath,
-      metadataPath: artifact.metadataPath,
-      metadata: Map<String, dynamic>.from(artifact.metadata.toJson()),
     );
   }
 

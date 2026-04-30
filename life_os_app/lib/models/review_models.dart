@@ -53,6 +53,81 @@ class ReviewNoteModel {
   }
 }
 
+class ReviewNoteMutationInput {
+  const ReviewNoteMutationInput({
+    required this.userId,
+    required this.occurredOn,
+    required this.noteType,
+    required this.title,
+    required this.content,
+    this.source = 'manual',
+    this.visibility = 'normal',
+    this.confidence,
+    this.rawText,
+    this.linkedRecordKind,
+    this.linkedRecordId,
+  });
+
+  final String userId;
+  final String occurredOn;
+  final String noteType;
+  final String title;
+  final String content;
+  final String source;
+  final String visibility;
+  final double? confidence;
+  final String? rawText;
+  final String? linkedRecordKind;
+  final String? linkedRecordId;
+
+  factory ReviewNoteMutationInput.fromModel(ReviewNoteModel note) {
+    return ReviewNoteMutationInput(
+      userId: note.userId,
+      occurredOn: note.occurredOn,
+      noteType: note.noteType,
+      title: note.title,
+      content: note.content,
+      source: note.source,
+      visibility: note.visibility,
+      confidence: note.confidence,
+      rawText: note.rawText,
+      linkedRecordKind: note.linkedRecordKind,
+      linkedRecordId: note.linkedRecordId,
+    );
+  }
+
+  Map<String, Object?> toCreateJson() {
+    return {
+      'user_id': userId,
+      'occurred_on': occurredOn,
+      'note_type': noteType,
+      'title': title,
+      'content': content,
+      'source': source,
+      'visibility': visibility,
+      'confidence': confidence,
+      'raw_text': rawText,
+      'linked_record_kind': linkedRecordKind,
+      'linked_record_id': linkedRecordId,
+    };
+  }
+
+  Map<String, Object?> toUpdateJson() {
+    return {
+      'user_id': userId,
+      'occurred_on': occurredOn,
+      'note_type': noteType,
+      'title': title,
+      'content': content,
+      'visibility': visibility,
+      'confidence': confidence,
+      'raw_text': rawText,
+      'linked_record_kind': linkedRecordKind,
+      'linked_record_id': linkedRecordId,
+    };
+  }
+}
+
 enum ReviewWindowKind {
   day,
   week,

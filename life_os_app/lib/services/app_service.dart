@@ -180,6 +180,43 @@ class AppService {
     );
   }
 
+  Future<List<ReviewNoteModel>> listReviewNotesForDate({
+    required String userId,
+    required String occurredOn,
+  }) {
+    return api.listReviewNotesForDate(
+      userId: userId,
+      occurredOn: occurredOn,
+    );
+  }
+
+  Future<ReviewNoteModel> createReviewNote({
+    required ReviewNoteMutationInput input,
+  }) {
+    return api.createReviewNote(input: input);
+  }
+
+  Future<ReviewNoteModel> updateReviewNote({
+    required String noteId,
+    required ReviewNoteMutationInput input,
+  }) {
+    return api.updateReviewNote(noteId: noteId, input: input);
+  }
+
+  Future<void> hideReviewNote({
+    required String userId,
+    required String noteId,
+  }) {
+    return api.hideReviewNote(userId: userId, noteId: noteId);
+  }
+
+  Future<void> deleteReviewNote({
+    required String userId,
+    required String noteId,
+  }) {
+    return api.deleteReviewNote(userId: userId, noteId: noteId);
+  }
+
   Future<List<TagModel>> getTags({
     required String userId,
   }) {

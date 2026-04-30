@@ -1,19 +1,11 @@
-import 'dart:io';
-
 import 'package:flutter/material.dart';
 
 import '../../app/app.dart';
-import '../../features/export/application/export_orchestrator.dart';
-import '../../features/export/domain/export_artifact.dart';
-import '../../features/export/domain/export_range.dart';
-import '../../features/export/domain/export_request.dart';
 import '../../models/project_models.dart';
 import '../../models/record_models.dart';
+import '../../models/review_models.dart';
 import '../../models/tag_models.dart';
-import '../../services/export_metadata_builders.dart';
-import '../../services/image_export_service.dart';
 import '../../shared/view_state.dart';
-import '../../shared/widgets/export_document_dialog.dart';
 import '../../shared/widgets/glass_panel.dart';
 import '../../shared/widgets/module_page.dart';
 import '../../shared/widgets/section_card.dart';
@@ -32,12 +24,19 @@ class DayDetailPage extends StatefulWidget {
   State<DayDetailPage> createState() => _DayDetailPageState();
 }
 
+class DayDetailData {
+  const DayDetailData({
+    required this.records,
+    required this.reviewNotes,
+  });
+
+  final List<RecentRecordItem> records;
+  final List<ReviewNoteModel> reviewNotes;
+}
+
 class _DayDetailPageState extends State<DayDetailPage> {
-  final GlobalKey _exportBoundaryKey = GlobalKey();
-  ExportOrchestrator? _exportOrchestrator;
-  ViewState<List<RecentRecordItem>> _state = ViewState.initial();
+  ViewState<DayDetailData> _state = ViewState.initial();
   bool _loaded = false;
-  bool _isExporting = false;
 
   Future<void> _load() async {
     setState(() {
@@ -45,16 +44,21 @@ class _DayDetailPageState extends State<DayDetailPage> {
     });
     try {
       final runtime = LifeOsScope.runtimeOf(context);
-      final records = await LifeOsScope.of(context).getRecordsForDate(
+      final service = LifeOsScope.of(context);
+      final records = await service.getRecordsForDate(
         userId: runtime.userId,
         date: widget.anchorDate,
         timezone: runtime.timezone,
       );
+      final reviewNotes = await service.listReviewNotesForDate(
+        userId: runtime.userId,
+        occurredOn: widget.anchorDate,
+      );
       if (!mounted) return;
       setState(() {
-        _state = records.isEmpty
-            ? ViewState.empty('当天没有记录。')
-            : ViewState.ready(records);
+        _state = ViewState.ready(
+          DayDetailData(records: records, reviewNotes: reviewNotes),
+        );
       });
     } on UnimplementedError {
       if (!mounted) return;
@@ -72,8 +76,6 @@ class _DayDetailPageState extends State<DayDetailPage> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    _exportOrchestrator ??=
-        ExportOrchestrator(service: LifeOsScope.of(context));
     if (_loaded) {
       return;
     }
@@ -86,17 +88,17 @@ class _DayDetailPageState extends State<DayDetailPage> {
 
   @override
   Widget build(BuildContext context) {
-    final records = _state.data ?? const <RecentRecordItem>[];
+    final data = _state.data;
+    final records = data?.records ?? const <RecentRecordItem>[];
+    final reviewNotes = data?.reviewNotes ?? const <ReviewNoteModel>[];
     return ModulePage(
       title: '日详情',
       subtitle: widget.anchorDate,
-      exportBoundaryKey: _exportBoundaryKey,
       children: [
         _DayActionRow(
-          isExporting: _isExporting,
-          canExport: _state.hasData,
-          onExport: _exportDayDetailDocument,
-          onAddRecord: () => Navigator.of(context).pushNamed('/capture'),
+          onAddRecord: _openHistoricalCapture,
+          onAddReviewNote: _createReviewNote,
+          onPickDate: _pickDate,
         ),
         if (_state.status == ViewStatus.loading)
           const SectionLoadingView(label: '正在读取当日记录'),
@@ -108,18 +110,48 @@ class _DayDetailPageState extends State<DayDetailPage> {
           SectionCard(
             eyebrow: 'Records',
             title: '当日流水',
-            child: Column(
-              children: [
-                for (var index = 0; index < records.length; index++) ...[
-                  if (index > 0) const SizedBox(height: 12),
-                  _DayRecordCard(
-                    record: records[index],
-                    onEdit: () => _editRecord(records[index]),
-                    onDelete: () => _deleteRecord(records[index]),
+            child: records.isEmpty
+                ? const SectionMessageView(
+                    icon: Icons.calendar_month_outlined,
+                    title: '当天没有记录',
+                    description: '可以从上方新增记录补录这一天。',
+                  )
+                : Column(
+                    children: [
+                      for (var index = 0; index < records.length; index++) ...[
+                        if (index > 0) const SizedBox(height: 12),
+                        _DayRecordCard(
+                          record: records[index],
+                          onEdit: () => _editRecord(records[index]),
+                          onDelete: () => _deleteRecord(records[index]),
+                        ),
+                      ],
+                    ],
                   ),
-                ],
-              ],
-            ),
+          ),
+          SectionCard(
+            eyebrow: 'Review Notes',
+            title: '复盘素材',
+            child: reviewNotes.isEmpty
+                ? const SectionMessageView(
+                    icon: Icons.rate_review_outlined,
+                    title: '暂无复盘素材',
+                    description: '可以从上方新增素材补上当天反思、风险或上下文。',
+                  )
+                : Column(
+                    children: [
+                      for (var index = 0;
+                          index < reviewNotes.length;
+                          index++) ...[
+                        if (index > 0) const SizedBox(height: 12),
+                        _ReviewNoteCard(
+                          note: reviewNotes[index],
+                          onEdit: () => _editReviewNote(reviewNotes[index]),
+                          onDelete: () => _deleteReviewNote(reviewNotes[index]),
+                        ),
+                      ],
+                    ],
+                  ),
           ),
         ] else if (_state.status != ViewStatus.loading)
           SectionCard(
@@ -135,52 +167,114 @@ class _DayDetailPageState extends State<DayDetailPage> {
     );
   }
 
-  Future<void> _exportDayDetailDocument() async {
-    final records = _state.data;
-    if (records == null || _isExporting) {
+  Future<void> _openHistoricalCapture() async {
+    final changed = await Navigator.of(context).pushNamed<bool>(
+      '/capture?type=time&mode=manual&contextDate=${Uri.encodeQueryComponent(widget.anchorDate)}&returnTo=day',
+    );
+    if (!mounted || changed != true) {
       return;
     }
-    setState(() => _isExporting = true);
-    try {
-      final runtime = LifeOsScope.runtimeOf(context);
-      final exportResult = await _exportOrchestrator!.export(
-        ExportRequest.snapshot(
-          title: 'day-detail-${widget.anchorDate}',
-          module: 'day_detail',
-          range: ExportRange.today,
-          boundaryKey: _exportBoundaryKey,
-          metadata: buildDayDetailExportMetadata(
-            anchorDate: widget.anchorDate,
-            timezone: runtime.timezone,
-            records: records,
-          ),
-        ),
-      );
-      final artifact = exportResult.primaryArtifact;
-      if (!mounted) return;
-      await showExportDocumentDialog(
-          context, _artifactToImageDocument(artifact));
-    } catch (error) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('导出日详情图片文档失败：$error')),
-      );
-    } finally {
-      if (mounted) {
-        setState(() => _isExporting = false);
-      }
-    }
+    await _load();
   }
 
-  ExportedImageDocument _artifactToImageDocument(ExportArtifact artifact) {
-    return ExportedImageDocument(
-      module: artifact.module,
-      title: artifact.title,
-      exportedAt: artifact.createdAt,
-      directoryPath: File(artifact.filePath).parent.path,
-      imagePath: artifact.filePath,
-      metadataPath: artifact.metadataPath,
-      metadata: Map<String, dynamic>.from(artifact.metadata.toJson()),
+  Future<void> _pickDate() async {
+    final initialDate = DateTime.tryParse(widget.anchorDate) ?? DateTime.now();
+    final selected = await showDatePicker(
+      context: context,
+      initialDate: initialDate,
+      firstDate: DateTime(2000),
+      lastDate: DateTime(2100),
+    );
+    if (selected == null || !mounted) {
+      return;
+    }
+    final next = _formatDate(selected);
+    if (next == widget.anchorDate) {
+      return;
+    }
+    Navigator.of(context).pushReplacementNamed('/day/$next');
+  }
+
+  Future<void> _createReviewNote() async {
+    final runtime = LifeOsScope.runtimeOf(context);
+    final service = LifeOsScope.of(context);
+    final result = await ReviewNoteEditorDialog.show(
+      context,
+      userId: runtime.userId,
+      anchorDate: widget.anchorDate,
+    );
+    final input = result?.input;
+    if (input == null) {
+      return;
+    }
+    await service.createReviewNote(input: input);
+    if (!mounted) return;
+    await _load();
+  }
+
+  Future<void> _editReviewNote(ReviewNoteModel note) async {
+    final service = LifeOsScope.of(context);
+    final result = await ReviewNoteEditorDialog.show(
+      context,
+      userId: note.userId,
+      anchorDate: widget.anchorDate,
+      note: note,
+    );
+    if (result == null) {
+      return;
+    }
+    if (result.delete) {
+      await _deleteReviewNote(note, confirm: false);
+      return;
+    }
+    final input = result.input;
+    if (input == null) {
+      return;
+    }
+    await service.updateReviewNote(
+      noteId: note.id,
+      input: input,
+    );
+    if (!mounted) return;
+    await _load();
+  }
+
+  Future<void> _deleteReviewNote(
+    ReviewNoteModel note, {
+    bool confirm = true,
+  }) async {
+    final service = LifeOsScope.of(context);
+    if (confirm) {
+      final confirmed = await _confirmDeleteReviewNote();
+      if (confirmed != true) {
+        return;
+      }
+    }
+    await service.deleteReviewNote(
+      userId: note.userId,
+      noteId: note.id,
+    );
+    if (!mounted) return;
+    await _load();
+  }
+
+  Future<bool?> _confirmDeleteReviewNote() {
+    return showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('删除素材'),
+        content: const Text('删除后，这条素材不会出现在日详情和复盘报告中。'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('删除'),
+          ),
+        ],
+      ),
     );
   }
 
@@ -262,16 +356,14 @@ class _DayDetailPageState extends State<DayDetailPage> {
 
 class _DayActionRow extends StatelessWidget {
   const _DayActionRow({
-    required this.isExporting,
-    required this.canExport,
-    required this.onExport,
     required this.onAddRecord,
+    required this.onAddReviewNote,
+    required this.onPickDate,
   });
 
-  final bool isExporting;
-  final bool canExport;
-  final VoidCallback onExport;
   final VoidCallback onAddRecord;
+  final VoidCallback onAddReviewNote;
+  final VoidCallback onPickDate;
 
   @override
   Widget build(BuildContext context) {
@@ -279,13 +371,17 @@ class _DayActionRow extends StatelessWidget {
       spacing: 12,
       runSpacing: 12,
       children: [
-        OutlinedButton(
-          onPressed: canExport && !isExporting ? onExport : null,
-          child: Text(isExporting ? '正在导出' : '导出图片文档'),
-        ),
         ElevatedButton(
           onPressed: onAddRecord,
           child: const Text('新增时间记录'),
+        ),
+        OutlinedButton(
+          onPressed: onAddReviewNote,
+          child: const Text('新增复盘素材'),
+        ),
+        OutlinedButton(
+          onPressed: onPickDate,
+          child: const Text('切换日期'),
         ),
       ],
     );
@@ -452,6 +548,315 @@ class _DayRecordCard extends StatelessWidget {
   }
 }
 
+class _ReviewNoteCard extends StatelessWidget {
+  const _ReviewNoteCard({
+    required this.note,
+    required this.onEdit,
+    required this.onDelete,
+  });
+
+  final ReviewNoteModel note;
+  final VoidCallback onEdit;
+  final VoidCallback onDelete;
+
+  @override
+  Widget build(BuildContext context) {
+    final linked = [
+      if ((note.source).trim().isNotEmpty) _sourceLabel(note.source),
+      if ((note.linkedRecordKind ?? '').trim().isNotEmpty)
+        '关联 ${note.linkedRecordKind}',
+    ].join(' · ');
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.62),
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.72)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    _SummaryPill(
+                      label: _reviewNoteTypeLabel(note.noteType),
+                      color: const Color(0xFF64748B),
+                    ),
+                    _SummaryPill(
+                      label: _visibilityLabel(note.visibility),
+                      color: const Color(0xFF475569),
+                    ),
+                  ],
+                ),
+              ),
+              PopupMenuButton<String>(
+                onSelected: (value) {
+                  switch (value) {
+                    case 'edit':
+                      onEdit();
+                    case 'delete':
+                      onDelete();
+                  }
+                },
+                itemBuilder: (context) => const [
+                  PopupMenuItem(value: 'edit', child: Text('编辑')),
+                  PopupMenuItem(value: 'delete', child: Text('删除')),
+                ],
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Text(
+            note.title,
+            style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                  fontSize: 22,
+                ),
+          ),
+          const SizedBox(height: 8),
+          Text(note.content, style: Theme.of(context).textTheme.bodyLarge),
+          if (linked.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Text(linked, style: Theme.of(context).textTheme.bodySmall),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class ReviewNoteEditorDialog extends StatefulWidget {
+  const ReviewNoteEditorDialog._({
+    required this.userId,
+    required this.anchorDate,
+    this.note,
+  });
+
+  final String userId;
+  final String anchorDate;
+  final ReviewNoteModel? note;
+
+  static Future<ReviewNoteEditorResult?> show(
+    BuildContext context, {
+    required String userId,
+    required String anchorDate,
+    ReviewNoteModel? note,
+  }) {
+    return showDialog<ReviewNoteEditorResult>(
+      context: context,
+      builder: (context) => ReviewNoteEditorDialog._(
+        userId: userId,
+        anchorDate: anchorDate,
+        note: note,
+      ),
+    );
+  }
+
+  @override
+  State<ReviewNoteEditorDialog> createState() => _ReviewNoteEditorDialogState();
+}
+
+class ReviewNoteEditorResult {
+  const ReviewNoteEditorResult.save(this.input) : delete = false;
+
+  const ReviewNoteEditorResult.delete()
+      : input = null,
+        delete = true;
+
+  final ReviewNoteMutationInput? input;
+  final bool delete;
+}
+
+class _ReviewNoteEditorDialogState extends State<ReviewNoteEditorDialog> {
+  late final TextEditingController _dateController;
+  late final TextEditingController _titleController;
+  late final TextEditingController _contentController;
+  late final TextEditingController _rawTextController;
+  String _noteType = 'reflection';
+  String _visibility = 'normal';
+
+  @override
+  void initState() {
+    super.initState();
+    final note = widget.note;
+    _dateController = TextEditingController(
+      text: note?.occurredOn.trim().isNotEmpty == true
+          ? note!.occurredOn
+          : widget.anchorDate,
+    );
+    _titleController = TextEditingController(text: note?.title ?? '');
+    _contentController = TextEditingController(text: note?.content ?? '');
+    _rawTextController = TextEditingController(text: note?.rawText ?? '');
+    _noteType = _normalizeOption(
+      note?.noteType,
+      _reviewNoteTypeOptions,
+      fallback: 'reflection',
+    );
+    _visibility = _normalizeOption(
+      note?.visibility,
+      _reviewNoteVisibilityOptions,
+      fallback: 'normal',
+    );
+  }
+
+  @override
+  void dispose() {
+    _dateController.dispose();
+    _titleController.dispose();
+    _contentController.dispose();
+    _rawTextController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: Text(widget.note == null ? '新增复盘素材' : '编辑复盘素材'),
+      content: SizedBox(
+        width: 520,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: _dateController,
+                decoration: const InputDecoration(labelText: '发生日期 YYYY-MM-DD'),
+              ),
+              const SizedBox(height: 12),
+              DropdownButtonFormField<String>(
+                initialValue: _noteType,
+                decoration: const InputDecoration(labelText: '类型'),
+                items: [
+                  for (final option in _reviewNoteTypeOptions)
+                    DropdownMenuItem(
+                      value: option,
+                      child: Text(_reviewNoteTypeLabel(option)),
+                    ),
+                ],
+                onChanged: (value) {
+                  if (value != null) {
+                    setState(() => _noteType = value);
+                  }
+                },
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: _titleController,
+                decoration: const InputDecoration(labelText: '标题'),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: _contentController,
+                decoration: const InputDecoration(labelText: '内容'),
+                minLines: 3,
+                maxLines: 8,
+              ),
+              const SizedBox(height: 12),
+              DropdownButtonFormField<String>(
+                initialValue: _visibility,
+                decoration: const InputDecoration(labelText: '可见性'),
+                items: [
+                  for (final option in _reviewNoteVisibilityOptions)
+                    DropdownMenuItem(
+                      value: option,
+                      child: Text(_visibilityLabel(option)),
+                    ),
+                ],
+                onChanged: (value) {
+                  if (value != null) {
+                    setState(() => _visibility = value);
+                  }
+                },
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: _rawTextController,
+                decoration: const InputDecoration(labelText: '原始文本'),
+                minLines: 2,
+                maxLines: 5,
+              ),
+            ],
+          ),
+        ),
+      ),
+      actions: [
+        if (widget.note != null)
+          TextButton(
+            onPressed: _delete,
+            child: const Text('删除'),
+          ),
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('取消'),
+        ),
+        FilledButton(
+          onPressed: _submit,
+          child: const Text('保存'),
+        ),
+      ],
+    );
+  }
+
+  void _submit() {
+    final date = _dateController.text.trim();
+    final title = _titleController.text.trim();
+    final content = _contentController.text.trim();
+    if (date.isEmpty || title.isEmpty || content.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('日期、标题和内容不能为空')),
+      );
+      return;
+    }
+    Navigator.of(context).pop(
+      ReviewNoteEditorResult.save(
+        ReviewNoteMutationInput(
+          userId: widget.userId,
+          occurredOn: date,
+          noteType: _noteType,
+          title: title,
+          content: content,
+          source: widget.note?.source ?? 'manual',
+          visibility: _visibility,
+          confidence: widget.note?.confidence,
+          rawText: _nullableText(_rawTextController.text),
+          linkedRecordKind: widget.note?.linkedRecordKind,
+          linkedRecordId: widget.note?.linkedRecordId,
+        ),
+      ),
+    );
+  }
+
+  Future<void> _delete() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('删除素材'),
+        content: const Text('删除后，这条素材不会出现在日详情和复盘报告中。'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('删除'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) {
+      return;
+    }
+    Navigator.of(context).pop(const ReviewNoteEditorResult.delete());
+  }
+}
+
 class _SummaryPill extends StatelessWidget {
   const _SummaryPill({
     required this.label,
@@ -512,6 +917,79 @@ Color _kindColor(RecordKind kind) {
     RecordKind.income => const Color(0xFF059669),
     RecordKind.expense => const Color(0xFFDC2626),
   };
+}
+
+const _reviewNoteTypeOptions = [
+  'reflection',
+  'feeling',
+  'plan',
+  'idea',
+  'context',
+  'ai_usage',
+  'risk',
+  'summary',
+];
+
+const _reviewNoteVisibilityOptions = [
+  'compact',
+  'normal',
+  'hidden',
+];
+
+String _reviewNoteTypeLabel(String value) {
+  return switch (value) {
+    'reflection' => '反思',
+    'feeling' => '感受',
+    'plan' => '计划',
+    'idea' => '想法',
+    'context' => '上下文',
+    'ai_usage' => 'AI',
+    'risk' => '风险',
+    'summary' => '总结',
+    _ => value,
+  };
+}
+
+String _visibilityLabel(String value) {
+  return switch (value) {
+    'compact' => '紧凑',
+    'normal' => '正常',
+    'hidden' => '隐藏',
+    _ => value,
+  };
+}
+
+String _sourceLabel(String value) {
+  return switch (value) {
+    'manual' => '手动',
+    'ai_capture' => 'AI 捕获',
+    'import' => '导入',
+    _ => value,
+  };
+}
+
+String _normalizeOption(
+  String? value,
+  List<String> options, {
+  required String fallback,
+}) {
+  final normalized = value?.trim() ?? '';
+  if (options.contains(normalized)) {
+    return normalized;
+  }
+  return fallback;
+}
+
+String? _nullableText(String value) {
+  final trimmed = value.trim();
+  return trimmed.isEmpty ? null : trimmed;
+}
+
+String _formatDate(DateTime value) {
+  final year = value.year.toString().padLeft(4, '0');
+  final month = value.month.toString().padLeft(2, '0');
+  final day = value.day.toString().padLeft(2, '0');
+  return '$year-$month-$day';
 }
 
 String _formatOccurredAt(String value) {

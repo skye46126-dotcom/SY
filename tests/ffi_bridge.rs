@@ -36,6 +36,17 @@ fn bridge_call(database_path: &str, method: &str, payload: Value) -> Value {
         .expect("bridge success response should include data")
 }
 
+fn bridge_error(database_path: &str, method: &str, payload: Value) -> BridgeError {
+    let response: BridgeResponse<Value> =
+        serde_json::from_str(&invoke_json(database_path, method, &payload.to_string()))
+            .expect("bridge response should be valid JSON");
+    assert!(
+        !response.ok,
+        "bridge call should fail for method `{method}`"
+    );
+    response.error.expect("error response should include error")
+}
+
 fn test_ai_api_key() -> Option<String> {
     env::var("LIFE_OS_TEST_AI_API_KEY")
         .ok()
@@ -84,6 +95,118 @@ skyos解析数据，方案讨论
 学习需要一直到处结果，看是否匹配，是否可以被消费，API使用 [REDACTED_API_KEY]"#
                 .to_string()
         })
+}
+
+#[test]
+fn review_note_bridge_can_update_and_hide_notes() {
+    let directory = tempdir().expect("tempdir");
+    let database_path = directory.path().join("life_os.db");
+    let database_path = database_path.to_string_lossy().to_string();
+
+    let user = bridge_call(&database_path, "init_database", json!({}));
+    let user_id = user["id"].as_str().expect("user id").to_string();
+
+    let created = bridge_call(
+        &database_path,
+        "create_review_note",
+        json!({
+            "user_id": user_id,
+            "occurred_on": "2026-04-20",
+            "note_type": "reflection",
+            "title": "起床复盘",
+            "content": "起床后第一件事太困，冥想效果不好",
+            "source": "manual",
+            "visibility": "normal",
+            "confidence": 0.9,
+            "raw_text": "原始复盘",
+            "linked_record_kind": null,
+            "linked_record_id": null,
+        }),
+    );
+    let note_id = created["id"].as_str().expect("note id").to_string();
+
+    let updated = bridge_call(
+        &database_path,
+        "update_review_note",
+        json!({
+            "note_id": note_id,
+            "input": {
+                "user_id": user_id,
+                "occurred_on": "2026-04-21",
+                "note_type": "risk",
+                "title": "睡眠风险",
+                "content": "午觉过久会压缩晚上安排",
+                "visibility": "compact",
+                "confidence": 0.7,
+                "raw_text": "午觉风险",
+                "linked_record_kind": "time",
+                "linked_record_id": "time-1",
+            }
+        }),
+    );
+    assert_eq!(updated["occurred_on"], "2026-04-21");
+    assert_eq!(updated["note_type"], "risk");
+    assert_eq!(updated["linked_record_kind"], "time");
+
+    let old_day = bridge_call(
+        &database_path,
+        "list_review_notes_for_date",
+        json!({
+            "user_id": user_id,
+            "occurred_on": "2026-04-20",
+        }),
+    );
+    assert_eq!(old_day.as_array().expect("old day notes").len(), 0);
+
+    let new_day = bridge_call(
+        &database_path,
+        "list_review_notes_for_date",
+        json!({
+            "user_id": user_id,
+            "occurred_on": "2026-04-21",
+        }),
+    );
+    assert_eq!(new_day.as_array().expect("new day notes").len(), 1);
+
+    let invalid = bridge_error(
+        &database_path,
+        "update_review_note",
+        json!({
+            "note_id": note_id,
+            "input": {
+                "user_id": user_id,
+                "occurred_on": "2026-04-21",
+                "note_type": "risk",
+                "title": "睡眠风险",
+                "content": "午觉过久会压缩晚上安排",
+                "visibility": "normal",
+                "confidence": 0.7,
+                "raw_text": null,
+                "linked_record_kind": "learning",
+                "linked_record_id": "legacy-learning-1",
+            }
+        }),
+    );
+    assert_eq!(invalid.code, "invalid_input");
+
+    bridge_call(
+        &database_path,
+        "delete_review_note",
+        json!({
+            "user_id": user_id,
+            "note_id": note_id,
+        }),
+    );
+
+    let hidden_day = bridge_call(
+        &database_path,
+        "list_review_notes_for_date",
+        json!({
+            "user_id": user_id,
+            "occurred_on": "2026-04-21",
+        }),
+    );
+    assert_eq!(hidden_day.as_array().expect("hidden day notes").len(), 0);
 }
 
 #[test]

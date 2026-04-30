@@ -1,22 +1,13 @@
-import 'dart:io';
-
 import 'package:flutter/material.dart';
 
 import '../../app/app.dart';
-import '../../features/export/application/export_orchestrator.dart';
-import '../../features/export/domain/export_artifact.dart';
-import '../../features/export/domain/export_range.dart';
-import '../../features/export/domain/export_request.dart';
 import '../../models/config_models.dart';
 import '../../models/project_models.dart';
 import '../../models/record_models.dart';
 import '../../models/snapshot_models.dart';
 import '../../models/tag_models.dart';
 import '../../services/app_service.dart';
-import '../../services/export_metadata_builders.dart';
-import '../../services/image_export_service.dart';
 import '../../shared/view_state.dart';
-import '../../shared/widgets/export_document_dialog.dart';
 import '../../shared/widgets/module_page.dart';
 import '../../shared/widgets/safe_pop.dart';
 import '../../shared/widgets/section_card.dart';
@@ -69,20 +60,15 @@ class ProjectDetailPage extends StatefulWidget {
 }
 
 class _ProjectDetailPageState extends State<ProjectDetailPage> {
-  final GlobalKey _exportBoundaryKey = GlobalKey();
-  ExportOrchestrator? _exportOrchestrator;
   ProjectDetailController? _controller;
   ViewState<ProjectMetricSnapshotSummaryModel?> _snapshotState =
       ViewState.initial();
   bool _loaded = false;
-  bool _isExporting = false;
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
     _controller ??= ProjectDetailController(LifeOsScope.of(context));
-    _exportOrchestrator ??=
-        ExportOrchestrator(service: LifeOsScope.of(context));
     if (_loaded) {
       return;
     }
@@ -119,14 +105,7 @@ class _ProjectDetailPageState extends State<ProjectDetailPage> {
         return ModulePage(
           title: '项目详情',
           subtitle: 'Project Detail',
-          exportBoundaryKey: _exportBoundaryKey,
           actions: [
-            OutlinedButton(
-              onPressed: detail == null || _isExporting
-                  ? null
-                  : _exportProjectDocument,
-              child: Text(_isExporting ? '正在导出' : '导出图片文档'),
-            ),
             ElevatedButton(
               onPressed: () => _openProjectEditDialog(detail),
               child: const Text('完整编辑'),
@@ -303,54 +282,6 @@ class _ProjectDetailPageState extends State<ProjectDetailPage> {
     } catch (error) {
       setState(() => _snapshotState = ViewState.error(error.toString()));
     }
-  }
-
-  Future<void> _exportProjectDocument() async {
-    final detail = _controller?.state.data;
-    if (detail == null || _isExporting) {
-      return;
-    }
-
-    setState(() => _isExporting = true);
-    try {
-      final exportResult = await _exportOrchestrator!.export(
-        ExportRequest.snapshot(
-          title: 'project-${detail.name}-${detail.analysisEndDate}',
-          module: 'project',
-          range: ExportRange.month,
-          boundaryKey: _exportBoundaryKey,
-          metadata: buildProjectExportMetadata(
-            detail: detail,
-            snapshot: _snapshotState.data,
-          ),
-        ),
-      );
-      final artifact = exportResult.primaryArtifact;
-      if (!mounted) return;
-      await showExportDocumentDialog(
-          context, _artifactToImageDocument(artifact));
-    } catch (error) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('导出项目图片文档失败：$error')),
-      );
-    } finally {
-      if (mounted) {
-        setState(() => _isExporting = false);
-      }
-    }
-  }
-
-  ExportedImageDocument _artifactToImageDocument(ExportArtifact artifact) {
-    return ExportedImageDocument(
-      module: artifact.module,
-      title: artifact.title,
-      exportedAt: artifact.createdAt,
-      directoryPath: File(artifact.filePath).parent.path,
-      imagePath: artifact.filePath,
-      metadataPath: artifact.metadataPath,
-      metadata: Map<String, dynamic>.from(artifact.metadata.toJson()),
-    );
   }
 
   Future<void> _openProjectStateDialog(ProjectDetail? detail) async {

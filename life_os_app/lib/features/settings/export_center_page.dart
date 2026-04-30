@@ -10,7 +10,6 @@ import '../../features/export/domain/export_history_item.dart';
 import '../../features/export/domain/export_request.dart';
 import '../../features/export/domain/export_type.dart';
 import '../../features/export/infrastructure/export_archive_service.dart';
-import '../../models/project_models.dart';
 import '../../models/sync_models.dart';
 import '../../services/export_share_service.dart';
 import '../../services/image_export_service.dart';
@@ -24,13 +23,11 @@ class ExportCenterData {
   const ExportCenterData({
     required this.exportDirectoryPath,
     required this.latestBackup,
-    required this.projects,
     required this.exportHistory,
   });
 
   final String exportDirectoryPath;
   final BackupResultModel? latestBackup;
-  final List<ProjectOverview> projects;
   final List<ExportHistoryItem> exportHistory;
 }
 
@@ -46,7 +43,6 @@ class _ExportCenterPageState extends State<ExportCenterPage> {
   ExportOrchestrator? _exportOrchestrator;
   ViewState<ExportCenterData> _state = ViewState.initial();
   ViewState<BackupResultModel> _backupActionState = ViewState.initial();
-  String? _selectedProjectId;
   String _historyQuery = '';
   ExportType? _historyTypeFilter;
   ExportFormat? _historyFormatFilter;
@@ -76,19 +72,13 @@ class _ExportCenterPageState extends State<ExportCenterPage> {
         userId: runtime.userId,
         backupType: 'manual',
       );
-      final projects = await service.getProjects(userId: runtime.userId);
       final exportHistory = await _archiveService.listHistory(limit: 100);
       if (!mounted) return;
       setState(() {
-        _selectedProjectId = _resolveProjectSelection(
-          current: _selectedProjectId,
-          projects: projects,
-        );
         _state = ViewState.ready(
           ExportCenterData(
             exportDirectoryPath: exportDirectoryPath,
             latestBackup: latestBackup,
-            projects: projects,
             exportHistory: exportHistory,
           ),
         );
@@ -102,11 +92,6 @@ class _ExportCenterPageState extends State<ExportCenterPage> {
   @override
   Widget build(BuildContext context) {
     final data = _state.data;
-    final runtime = LifeOsScope.runtimeOf(context);
-    final selectedProject = data?.projects
-        .where((item) => item.id == _selectedProjectId)
-        .cast<ProjectOverview?>()
-        .firstWhere((item) => item != null, orElse: () => null);
     final historyItems = _filteredHistory(data?.exportHistory ?? const []);
 
     return ModulePage(
@@ -138,7 +123,7 @@ class _ExportCenterPageState extends State<ExportCenterPage> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      '导出模块现在分成三条链：数据库备份、可读归档、状态图片文档。当前已经把图片文档导出做成统一模块，并与数据库备份并列收拢到这个入口。',
+                      '导出模块现在分成三条链：数据库备份、可读归档、状态海报。业务页面不再放置截图或图片导出按钮，相关能力统一从这里进入。',
                       style: Theme.of(context).textTheme.bodyLarge,
                     ),
                     const SizedBox(height: 16),
@@ -227,9 +212,9 @@ class _ExportCenterPageState extends State<ExportCenterPage> {
                             description: '导出完整数据库副本，用于恢复、迁移与审计。',
                           ),
                           const _ExportTrackCard(
-                            title: '图片文档',
+                            title: '状态海报',
                             icon: Icons.image_outlined,
-                            description: '导出经营页面视觉文档，并附带同名 JSON 元数据。',
+                            description: '使用独立模板导出状态图片，并附带同名 JSON 元数据。',
                           ),
                           const _ExportTrackCard(
                             title: '可读归档',
@@ -267,7 +252,7 @@ class _ExportCenterPageState extends State<ExportCenterPage> {
           eyebrow: 'Exports',
           title: '导出入口',
           child: _state.status == ViewStatus.loading
-              ? const SectionLoadingView(label: '正在读取图片导出入口')
+              ? const SectionLoadingView(label: '正在读取导出入口')
               : _state.status == ViewStatus.error
                   ? SectionMessageView(
                       icon: Icons.image_not_supported_outlined,
@@ -278,7 +263,7 @@ class _ExportCenterPageState extends State<ExportCenterPage> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          '这些页面已经接入统一的图片导出服务。进入页面后，可以直接在页面顶部触发导出，产出 `png + json metadata`。',
+                          '图片、报告和数据备份统一从设置页发起；业务页面只保留记录、查看和编辑入口。',
                           style: Theme.of(context).textTheme.bodyMedium,
                         ),
                         const SizedBox(height: 16),
@@ -314,73 +299,6 @@ class _ExportCenterPageState extends State<ExportCenterPage> {
                                 primaryLabel: '打开海报导出',
                                 onPrimaryTap: () => Navigator.of(context)
                                     .pushNamed('/settings/poster-export'),
-                              ),
-                              _ExportModuleCard(
-                                title: '今日经营状态',
-                                icon: Icons.today_rounded,
-                                description: '导出现金流、健康度、目标进度与最近记录。',
-                                note: 'Today 页面已支持直接导出。',
-                                primaryLabel: '打开 Today',
-                                onPrimaryTap: () =>
-                                    Navigator.of(context).pushNamed('/today'),
-                              ),
-                              _ExportModuleCard(
-                                title: '周期复盘',
-                                icon: Icons.auto_graph_rounded,
-                                description: '导出周期趋势、AI 效率、项目复盘与历史流水。',
-                                note: 'Review 页面已支持直接导出。',
-                                primaryLabel: '打开 Review',
-                                onPrimaryTap: () =>
-                                    Navigator.of(context).pushNamed('/review'),
-                              ),
-                              _ExportModuleCard(
-                                title: '成本管理',
-                                icon: Icons.account_balance_wallet_outlined,
-                                description: '导出月基线、时薪比较、周期规则与 CAPEX 状态。',
-                                note: 'Cost 页面已接入统一导出边界。',
-                                primaryLabel: '打开 Cost',
-                                onPrimaryTap: () => Navigator.of(context)
-                                    .pushNamed('/cost-management'),
-                              ),
-                              _ExportModuleCard(
-                                title: '项目详情',
-                                icon: Icons.folder_open_rounded,
-                                description: '导出项目经营判断、全成本 ROI 与最近月度快照。',
-                                note: selectedProject == null
-                                    ? '先选择一个项目，再进入详情页导出。'
-                                    : '当前目标：${selectedProject.name}',
-                                primaryLabel: '打开项目详情',
-                                onPrimaryTap: selectedProject == null
-                                    ? null
-                                    : () => Navigator.of(context).pushNamed(
-                                        '/projects/${selectedProject.id}'),
-                                child: DropdownButtonFormField<String>(
-                                  initialValue: _selectedProjectId,
-                                  isExpanded: true,
-                                  decoration: const InputDecoration(
-                                    labelText: '导出目标项目',
-                                  ),
-                                  items: [
-                                    for (final item
-                                        in data?.projects ?? const [])
-                                      DropdownMenuItem<String>(
-                                        value: item.id,
-                                        child: Text(item.name),
-                                      ),
-                                  ],
-                                  onChanged: (value) {
-                                    setState(() => _selectedProjectId = value);
-                                  },
-                                ),
-                              ),
-                              _ExportModuleCard(
-                                title: '日详情',
-                                icon: Icons.calendar_month_rounded,
-                                description: '导出指定日期的流水明细与记录结构。',
-                                note: '当前默认打开今天的明细页后导出。',
-                                primaryLabel: '打开今日明细',
-                                onPrimaryTap: () => Navigator.of(context)
-                                    .pushNamed('/day/${runtime.todayDate}'),
                               ),
                             ];
                             if (compact) {
@@ -839,17 +757,6 @@ class _ExportCenterPageState extends State<ExportCenterPage> {
     }
   }
 
-  String? _resolveProjectSelection({
-    required String? current,
-    required List<ProjectOverview> projects,
-  }) {
-    if (projects.isEmpty) return null;
-    if (current != null && projects.any((item) => item.id == current)) {
-      return current;
-    }
-    return projects.first.id;
-  }
-
   String _fileSize(int sizeBytes) {
     if (sizeBytes <= 0) return '0 B';
     if (sizeBytes < 1024) return '$sizeBytes B';
@@ -1223,7 +1130,6 @@ class _ExportModuleCard extends StatelessWidget {
     required this.description,
     required this.note,
     required this.primaryLabel,
-    this.child,
     this.onPrimaryTap,
   });
 
@@ -1232,7 +1138,6 @@ class _ExportModuleCard extends StatelessWidget {
   final String description;
   final String note;
   final String primaryLabel;
-  final Widget? child;
   final VoidCallback? onPrimaryTap;
 
   @override
@@ -1255,10 +1160,6 @@ class _ExportModuleCard extends StatelessWidget {
           Text(description, style: Theme.of(context).textTheme.bodyMedium),
           const SizedBox(height: 10),
           Text(note, style: Theme.of(context).textTheme.bodySmall),
-          if (child != null) ...[
-            const SizedBox(height: 14),
-            child!,
-          ],
           const SizedBox(height: 16),
           SizedBox(
             width: double.infinity,

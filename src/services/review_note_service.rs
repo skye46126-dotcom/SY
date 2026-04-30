@@ -2,7 +2,7 @@ use std::path::Path;
 
 use crate::db::Database;
 use crate::error::Result;
-use crate::models::{CreateReviewNoteInput, ReviewNote};
+use crate::models::{CreateReviewNoteInput, ReviewNote, UpdateReviewNoteInput};
 use crate::repositories::review_note_repository::ReviewNoteRepository;
 
 #[derive(Debug, Clone)]
@@ -31,6 +31,18 @@ impl ReviewNoteService {
         self.database.initialize()?;
         let connection = self.database.connect()?;
         ReviewNoteRepository::list_for_date(&connection, user_id, occurred_on)
+    }
+
+    pub fn update_note(&self, note_id: &str, input: &UpdateReviewNoteInput) -> Result<ReviewNote> {
+        self.database.initialize()?;
+        let mut connection = self.database.connect()?;
+        ReviewNoteRepository::update(&mut connection, note_id, input)
+    }
+
+    pub fn hide_note(&self, user_id: &str, note_id: &str) -> Result<()> {
+        self.database.initialize()?;
+        let mut connection = self.database.connect()?;
+        ReviewNoteRepository::hide(&mut connection, user_id, note_id)
     }
 
     pub fn list_notes_for_range(

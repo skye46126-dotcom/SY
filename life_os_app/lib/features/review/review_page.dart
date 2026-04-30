@@ -1,19 +1,10 @@
-import 'dart:io';
-
 import 'package:flutter/material.dart';
 
 import '../../app/app.dart';
-import '../../features/export/application/export_orchestrator.dart';
-import '../../features/export/domain/export_artifact.dart';
-import '../../features/export/domain/export_range.dart';
-import '../../features/export/domain/export_request.dart';
 import '../../models/record_models.dart';
 import '../../models/review_models.dart';
-import '../../services/export_metadata_builders.dart';
-import '../../services/image_export_service.dart';
 import '../../shared/view_state.dart';
 import '../../shared/widgets/apple_dashboard.dart';
-import '../../shared/widgets/export_document_dialog.dart';
 import '../../shared/widgets/more_action_menu.dart';
 import '../../shared/widgets/state_views.dart';
 import 'review_controller.dart';
@@ -37,19 +28,14 @@ class ReviewPage extends StatefulWidget {
 }
 
 class _ReviewPageState extends State<ReviewPage> {
-  final GlobalKey _exportBoundaryKey = GlobalKey();
-  ExportOrchestrator? _exportOrchestrator;
   ReviewController? _controller;
   bool _loaded = false;
-  bool _isExporting = false;
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
     _controller ??= ReviewController(LifeOsScope.of(context))
       ..selectedKind = widget.initialKind;
-    _exportOrchestrator ??=
-        ExportOrchestrator(service: LifeOsScope.of(context));
     if (_loaded) {
       return;
     }
@@ -136,7 +122,6 @@ class _ReviewPageState extends State<ReviewPage> {
         return AppleDashboardPage(
           title: '周期复盘',
           subtitle: _windowSubtitle(report?.window, controller.selectedKind),
-          exportBoundaryKey: _exportBoundaryKey,
           trailing: MoreActionMenu(
             items: [
               MoreActionMenuItem(
@@ -155,26 +140,10 @@ class _ReviewPageState extends State<ReviewPage> {
                 onPressed: () => Navigator.of(context).pushNamed('/projects'),
               ),
               MoreActionMenuItem(
-                label: '状态海报',
-                icon: Icons.style_outlined,
-                onPressed: () =>
-                    Navigator.of(context).pushNamed('/settings/poster-export'),
-              ),
-              MoreActionMenuItem(
                 label: '导出中心',
                 icon: Icons.inventory_2_outlined,
                 onPressed: () =>
                     Navigator.of(context).pushNamed('/settings/export-center'),
-              ),
-              MoreActionMenuItem(
-                label: _isExporting ? '正在导出' : '导出图片文档',
-                icon: _isExporting
-                    ? Icons.downloading_rounded
-                    : Icons.image_outlined,
-                enabled: !_isExporting && report != null,
-                onPressed: report == null || _isExporting
-                    ? null
-                    : _exportReviewDashboard,
               ),
               MoreActionMenuItem(
                 label: 'AI Chat',
@@ -270,74 +239,6 @@ class _ReviewPageState extends State<ReviewPage> {
     );
     if (end == null) return;
     await controller.setCustomRange(start, end, userId, timezone);
-  }
-
-  Future<void> _exportReviewDashboard() async {
-    final controller = _controller;
-    final data = controller?.state.data;
-    if (controller == null || data == null || _isExporting) {
-      return;
-    }
-
-    setState(() => _isExporting = true);
-    try {
-      final report = data.report;
-      final exportResult = await _exportOrchestrator!.export(
-        ExportRequest.snapshot(
-          title:
-              'review-${data.selectedKind.name}-${report.window.startDate}-${report.window.endDate}',
-          module: 'review',
-          range: _mapRange(data.selectedKind),
-          boundaryKey: _exportBoundaryKey,
-          metadata: buildReviewExportMetadata(
-            report: report,
-            windowKind: data.selectedKind,
-            anchorDate: data.anchorDate,
-            snapshot: data.snapshot,
-          ),
-        ),
-      );
-      final artifact = exportResult.primaryArtifact;
-      if (!mounted) return;
-      await showExportDocumentDialog(
-          context, _artifactToImageDocument(artifact));
-    } catch (error) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('导出复盘图片文档失败：$error')),
-      );
-    } finally {
-      if (mounted) {
-        setState(() => _isExporting = false);
-      }
-    }
-  }
-
-  ExportRange _mapRange(ReviewWindowKind kind) {
-    switch (kind) {
-      case ReviewWindowKind.day:
-        return ExportRange.today;
-      case ReviewWindowKind.week:
-        return ExportRange.week;
-      case ReviewWindowKind.month:
-        return ExportRange.month;
-      case ReviewWindowKind.year:
-        return ExportRange.year;
-      case ReviewWindowKind.range:
-        return ExportRange.custom;
-    }
-  }
-
-  ExportedImageDocument _artifactToImageDocument(ExportArtifact artifact) {
-    return ExportedImageDocument(
-      module: artifact.module,
-      title: artifact.title,
-      exportedAt: artifact.createdAt,
-      directoryPath: File(artifact.filePath).parent.path,
-      imagePath: artifact.filePath,
-      metadataPath: artifact.metadataPath,
-      metadata: Map<String, dynamic>.from(artifact.metadata.toJson()),
-    );
   }
 
   void _openProject(String projectId) {

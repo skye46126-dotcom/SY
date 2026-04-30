@@ -666,6 +666,60 @@ class NativeRustApi implements RustApi {
   }
 
   @override
+  Future<List<ReviewNoteModel>> listReviewNotesForDate({
+    required String userId,
+    required String occurredOn,
+  }) async {
+    final data = _call('list_review_notes_for_date', {
+      'user_id': userId,
+      'occurred_on': occurredOn,
+    });
+    return _parseList(data, ReviewNoteModel.fromJson);
+  }
+
+  @override
+  Future<ReviewNoteModel> createReviewNote({
+    required ReviewNoteMutationInput input,
+  }) async {
+    final data = _call('create_review_note', input.toCreateJson());
+    return ReviewNoteModel.fromJson((data as Map).cast<String, dynamic>());
+  }
+
+  @override
+  Future<ReviewNoteModel> updateReviewNote({
+    required String noteId,
+    required ReviewNoteMutationInput input,
+  }) async {
+    final data = _call('update_review_note', {
+      'note_id': noteId,
+      'input': input.toUpdateJson(),
+    });
+    return ReviewNoteModel.fromJson((data as Map).cast<String, dynamic>());
+  }
+
+  @override
+  Future<void> hideReviewNote({
+    required String userId,
+    required String noteId,
+  }) async {
+    _call('hide_review_note', {
+      'user_id': userId,
+      'note_id': noteId,
+    });
+  }
+
+  @override
+  Future<void> deleteReviewNote({
+    required String userId,
+    required String noteId,
+  }) async {
+    _call('delete_review_note', {
+      'user_id': userId,
+      'note_id': noteId,
+    });
+  }
+
+  @override
   Future<Map<String, Object?>?> parseAiCapture({
     required String userId,
     required String rawInput,
