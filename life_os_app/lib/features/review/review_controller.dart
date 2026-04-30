@@ -23,6 +23,7 @@ class ReviewController extends ChangeNotifier {
   ReviewController(this._service);
 
   final AppService _service;
+  int _activeLoadId = 0;
   ReviewWindowKind selectedKind = ReviewWindowKind.day;
   DateTime anchorDate = DateTime.now();
   DateTime? customStartDate;
@@ -33,28 +34,29 @@ class ReviewController extends ChangeNotifier {
     required String userId,
     required String timezone,
   }) async {
+    final loadId = ++_activeLoadId;
     state = ViewState.loading();
     notifyListeners();
     try {
       final window = _buildWindow(selectedKind);
-      final report = await _service.getReviewReport(
+      final windowType = _snapshotWindowType(selectedKind);
+      final snapshotDate = window.startDate;
+      final reportFuture = _service.getReviewReport(
         userId: userId,
         window: window,
         timezone: timezone,
       );
-      MetricSnapshotSummaryModel? snapshot;
-      final windowType = _snapshotWindowType(selectedKind);
-      if (windowType != null) {
-        snapshot = await _service.getSnapshot(
+      final snapshotFuture = windowType == null
+          ? Future<MetricSnapshotSummaryModel?>.value(null)
+          : _loadSnapshot(
               userId: userId,
-              snapshotDate: report?.window.startDate ?? window.startDate,
-              windowType: windowType,
-            ) ??
-            await _service.recomputeSnapshot(
-              userId: userId,
-              snapshotDate: report?.window.startDate ?? window.startDate,
+              snapshotDate: snapshotDate,
               windowType: windowType,
             );
+      final report = await reportFuture;
+      final snapshot = await snapshotFuture;
+      if (loadId != _activeLoadId) {
+        return;
       }
       if (report == null) {
         state = ViewState.empty('当前窗口没有返回复盘报告。');
@@ -69,11 +71,36 @@ class ReviewController extends ChangeNotifier {
         );
       }
     } on UnimplementedError {
+      if (loadId != _activeLoadId) {
+        return;
+      }
       state = ViewState.unavailable('复盘接口尚未接入 Rust。');
     } catch (error) {
+      if (loadId != _activeLoadId) {
+        return;
+      }
       state = ViewState.error(error.toString());
     }
-    notifyListeners();
+    if (loadId == _activeLoadId) {
+      notifyListeners();
+    }
+  }
+
+  Future<MetricSnapshotSummaryModel> _loadSnapshot({
+    required String userId,
+    required String snapshotDate,
+    required String windowType,
+  }) async {
+    return await _service.getSnapshot(
+          userId: userId,
+          snapshotDate: snapshotDate,
+          windowType: windowType,
+        ) ??
+        await _service.recomputeSnapshot(
+          userId: userId,
+          snapshotDate: snapshotDate,
+          windowType: windowType,
+        );
   }
 
   Future<void> changeWindow(
@@ -165,7 +192,8 @@ class ReviewController extends ChangeNotifier {
         final previousEnd = DateTime(anchor.year, anchor.month, 0);
         return ReviewWindow(
           kind: kind,
-          periodName: '${anchor.year}-${anchor.month.toString().padLeft(2, '0')}',
+          periodName:
+              '${anchor.year}-${anchor.month.toString().padLeft(2, '0')}',
           startDate: _date(start),
           endDate: _date(end),
           previousStartDate: _date(previousStart),
@@ -212,7 +240,8 @@ class ReviewController extends ChangeNotifier {
     }
   }
 
-  DateTime _shiftAnchor(DateTime current, ReviewWindowKind kind, int direction) {
+  DateTime _shiftAnchor(
+      DateTime current, ReviewWindowKind kind, int direction) {
     switch (kind) {
       case ReviewWindowKind.day:
         return current.add(Duration(days: direction));

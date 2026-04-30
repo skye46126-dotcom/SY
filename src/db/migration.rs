@@ -36,6 +36,11 @@ const MIGRATIONS: &[Migration] = &[
         name: "capture_inbox",
         sql: include_str!("../../migrations/0005_capture_inbox.sql"),
     },
+    Migration {
+        version: 6,
+        name: "capture_buffer",
+        sql: include_str!("../../migrations/0006_capture_buffer.sql"),
+    },
 ];
 
 pub fn run_migrations(connection: &mut Connection) -> Result<()> {

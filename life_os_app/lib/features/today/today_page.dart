@@ -108,6 +108,54 @@ class _TodayPageState extends State<TodayPage> {
         final state = controller.state;
         final data = state.data;
         final runtime = LifeOsScope.runtimeOf(context);
+        final dashboardChildren = <Widget>[
+          if (state.status == ViewStatus.loading && data == null)
+            const AppleDashboardCard(
+              child: SectionLoadingView(label: '正在读取经营状态'),
+            ),
+          if (data == null && state.status != ViewStatus.loading)
+            _TodaySummaryCard(
+              overview: null,
+              summary: null,
+              message: state.message,
+            ),
+          if (data != null) ...[
+            _TodaySummaryCard(
+              overview: data.overview,
+              summary: data.summary,
+              message: state.message,
+            ),
+            _TodayKpiStrip(
+              overview: data.overview,
+              summary: data.summary,
+            ),
+            _TodayCashflowCard(
+              overview: data.overview,
+              summary: data.summary,
+              message: state.message,
+            ),
+            _AdaptiveColumns(
+              children: [
+                _TodayTimeStructureCard(overview: data.overview),
+                _TodayGoalProgressCard(goalProgress: data.goalProgress),
+              ],
+            ),
+            _AdaptiveColumns(
+              children: [
+                _TodayAlertsCard(alerts: data.alerts),
+                _TodayRecentRecordsCard(
+                  records: data.recentRecords,
+                  message: state.message,
+                  onEdit: _editRecord,
+                  onCopy: _copyRecord,
+                  onDelete: _deleteRecord,
+                  onViewAll: () => Navigator.of(context)
+                      .pushNamed('/day/${runtime.todayDate}'),
+                ),
+              ],
+            ),
+          ],
+        ];
 
         return AppleDashboardPage(
           title: '今日经营状态',
@@ -145,46 +193,7 @@ class _TodayPageState extends State<TodayPage> {
               AppleSegmentOption(value: _TodayScope.month, label: '本月'),
             ],
           ),
-          children: [
-            if (state.status == ViewStatus.loading)
-              const AppleDashboardCard(
-                child: SectionLoadingView(label: '正在读取经营状态'),
-              ),
-            _TodaySummaryCard(
-              overview: data?.overview,
-              summary: data?.summary,
-              message: state.message,
-            ),
-            _TodayKpiStrip(
-              overview: data?.overview,
-              summary: data?.summary,
-            ),
-            _TodayCashflowCard(
-              overview: data?.overview,
-              summary: data?.summary,
-              message: state.message,
-            ),
-            _AdaptiveColumns(
-              children: [
-                _TodayTimeStructureCard(overview: data?.overview),
-                _TodayGoalProgressCard(goalProgress: data?.goalProgress),
-              ],
-            ),
-            _AdaptiveColumns(
-              children: [
-                _TodayAlertsCard(alerts: data?.alerts),
-                _TodayRecentRecordsCard(
-                  records: data?.recentRecords,
-                  message: state.message,
-                  onEdit: _editRecord,
-                  onCopy: _copyRecord,
-                  onDelete: _deleteRecord,
-                  onViewAll: () => Navigator.of(context)
-                      .pushNamed('/day/${runtime.todayDate}'),
-                ),
-              ],
-            ),
-          ],
+          children: dashboardChildren,
         );
       },
     );

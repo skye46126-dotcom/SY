@@ -22,16 +22,21 @@ class ShellScaffold extends StatefulWidget {
 
 class _ShellScaffoldState extends State<ShellScaffold> {
   late AppDestination _destination;
+  late final Map<AppDestination, Widget> _pageCache;
 
   @override
   void initState() {
     super.initState();
     _destination = widget.destination;
+    _pageCache = {
+      widget.destination: widget.child,
+    };
   }
 
   @override
   void didUpdateWidget(covariant ShellScaffold oldWidget) {
     super.didUpdateWidget(oldWidget);
+    _pageCache[widget.destination] = widget.child;
     if (oldWidget.destination != widget.destination) {
       _destination = widget.destination;
     }
@@ -41,14 +46,14 @@ class _ShellScaffoldState extends State<ShellScaffold> {
     if (next == _destination) {
       return;
     }
-    setState(() => _destination = next);
+    setState(() {
+      _pageCache.putIfAbsent(next, () => _buildPage(next));
+      _destination = next;
+    });
   }
 
-  Widget _buildCurrentPage() {
-    if (_destination == widget.destination) {
-      return widget.child;
-    }
-    switch (_destination) {
+  Widget _buildPage(AppDestination destination) {
+    switch (destination) {
       case AppDestination.today:
         return const TodayPage();
       case AppDestination.capture:
@@ -64,6 +69,13 @@ class _ShellScaffoldState extends State<ShellScaffold> {
   Widget build(BuildContext context) {
     final isCompact = MediaQuery.sizeOf(context).width < 860;
     final destinations = AppDestination.values;
+    final pages = [
+      for (final item in destinations)
+        KeyedSubtree(
+          key: ValueKey(item),
+          child: _pageCache[item] ?? const SizedBox.shrink(),
+        ),
+    ];
 
     return Scaffold(
       body: SafeArea(
@@ -88,7 +100,12 @@ class _ShellScaffoldState extends State<ShellScaffold> {
                   ],
                 ),
               ),
-            Expanded(child: _buildCurrentPage()),
+            Expanded(
+              child: IndexedStack(
+                index: _destination.index,
+                children: pages,
+              ),
+            ),
           ],
         ),
       ),

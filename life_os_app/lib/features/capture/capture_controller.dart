@@ -45,9 +45,13 @@ class CaptureController extends ChangeNotifier {
   CaptureType selectedType = CaptureType.time;
   AiCaptureParseMode selectedAiParseMode = AiCaptureParseMode.auto;
   ViewState<Map<String, Object?>> aiState = ViewState.initial();
-  ViewState<void> submitState = ViewState.initial();
+  ViewState<void> manualSubmitState = ViewState.initial();
+  ViewState<void> aiCommitState = ViewState.initial();
+  ViewState<Map<String, Object?>> quickCaptureBufferState = ViewState.initial();
+  ViewState<void> quickCaptureBufferActionState = ViewState.initial();
   ViewState<CaptureMetadataModel> metadataState = ViewState.initial();
   String? lastAiCommitSummary;
+  String? lastQuickCaptureBufferSummary;
 
   CaptureMetadataModel? get metadata => metadataState.data;
 
@@ -114,6 +118,8 @@ class CaptureController extends ChangeNotifier {
     required String rawInput,
     required String contextDate,
   }) async {
+    lastAiCommitSummary = null;
+    aiCommitState = ViewState.initial();
     aiState = ViewState.loading();
     notifyListeners();
     try {
@@ -142,8 +148,191 @@ class CaptureController extends ChangeNotifier {
   }
 
   void updateAiDraftEnvelope(Map<String, Object?> draftEnvelope) {
+    aiCommitState = ViewState.initial();
     aiState = ViewState.ready(draftEnvelope);
     notifyListeners();
+  }
+
+  Future<void> loadQuickCaptureBuffer({
+    required String userId,
+    required String anchorDate,
+  }) async {
+    quickCaptureBufferState = ViewState.loading();
+    notifyListeners();
+    try {
+      final session = await _service.invokeRaw(
+        method: 'get_or_create_active_capture_buffer_session',
+        payload: {
+          'user_id': userId,
+          'source': 'app_capture',
+          'entry_point': 'capture_workspace',
+          'context_date': anchorDate,
+          'route_hint': '/capture?mode=ai',
+          'mode_hint': 'ai',
+        },
+      );
+      final sessionMap = (session as Map).cast<String, Object?>();
+      final listed = await _service.invokeRaw(
+        method: 'list_capture_buffer_items',
+        payload: {
+          'user_id': userId,
+          'session_id': sessionMap['id'],
+        },
+      );
+      final listedMap = (listed as Map).cast<String, Object?>();
+      quickCaptureBufferState = ViewState.ready({
+        'session': sessionMap,
+        'items': ((listedMap['items'] as List?) ?? const []).toList(),
+      });
+    } catch (error) {
+      quickCaptureBufferState = ViewState.error(error.toString());
+    }
+    notifyListeners();
+  }
+
+  Future<bool> appendQuickCaptureBufferItem({
+    required String userId,
+    required String anchorDate,
+    required String rawText,
+    String inputKind = 'text',
+  }) async {
+    final trimmed = rawText.trim();
+    if (trimmed.isEmpty) {
+      quickCaptureBufferActionState = ViewState.error('请输入要加入缓存的内容');
+      notifyListeners();
+      return false;
+    }
+    lastQuickCaptureBufferSummary = null;
+    quickCaptureBufferActionState = ViewState.loading();
+    notifyListeners();
+    try {
+      final sessionId = currentQuickCaptureSessionId;
+      await _service.invokeRaw(
+        method: 'append_capture_buffer_item',
+        payload: {
+          'user_id': userId,
+          'session_id': sessionId,
+          'source': 'app_capture',
+          'entry_point': 'capture_workspace',
+          'raw_text': trimmed,
+          'context_date': anchorDate,
+          'route_hint': '/capture?mode=ai',
+          'mode_hint': 'ai',
+          'input_kind': inputKind,
+        },
+      );
+      await loadQuickCaptureBuffer(userId: userId, anchorDate: anchorDate);
+      final count = quickCaptureBufferItemCount;
+      lastQuickCaptureBufferSummary = '已加入缓存池，当前共 $count 条';
+      quickCaptureBufferActionState = ViewState.ready(null);
+      notifyListeners();
+      return true;
+    } catch (error) {
+      quickCaptureBufferActionState = ViewState.error(error.toString());
+      notifyListeners();
+      return false;
+    }
+  }
+
+  Future<bool> deleteQuickCaptureBufferItem({
+    required String userId,
+    required String anchorDate,
+    required String itemId,
+  }) async {
+    final sessionId = currentQuickCaptureSessionId;
+    if (sessionId == null || sessionId.isEmpty) {
+      quickCaptureBufferActionState = ViewState.error('当前没有可操作的缓存会话');
+      notifyListeners();
+      return false;
+    }
+    lastQuickCaptureBufferSummary = null;
+    quickCaptureBufferActionState = ViewState.loading();
+    notifyListeners();
+    try {
+      await _service.invokeRaw(
+        method: 'delete_capture_buffer_item',
+        payload: {
+          'user_id': userId,
+          'session_id': sessionId,
+          'item_id': itemId,
+        },
+      );
+      await loadQuickCaptureBuffer(userId: userId, anchorDate: anchorDate);
+      lastQuickCaptureBufferSummary = '已移除 1 条缓存内容';
+      quickCaptureBufferActionState = ViewState.ready(null);
+      notifyListeners();
+      return true;
+    } catch (error) {
+      quickCaptureBufferActionState = ViewState.error(error.toString());
+      notifyListeners();
+      return false;
+    }
+  }
+
+  Future<Map<String, Object?>?> processQuickCaptureBufferSession({
+    required String userId,
+    required String anchorDate,
+    bool autoCommit = false,
+  }) async {
+    final sessionId = currentQuickCaptureSessionId;
+    if (sessionId == null || sessionId.isEmpty) {
+      quickCaptureBufferActionState = ViewState.error('当前没有可整理的缓存内容');
+      notifyListeners();
+      return null;
+    }
+    lastQuickCaptureBufferSummary = null;
+    quickCaptureBufferActionState = ViewState.loading();
+    notifyListeners();
+    try {
+      final result = await _service.invokeRaw(
+        method: 'process_capture_buffer_session',
+        payload: {
+          'user_id': userId,
+          'session_id': sessionId,
+          'auto_commit': autoCommit,
+        },
+      );
+      final resultMap = (result as Map).cast<String, Object?>();
+      final processResult = ((resultMap['process_result'] as Map?) ?? const {})
+          .cast<String, Object?>();
+      final draftEnvelope =
+          ((processResult['draft_envelope'] as Map?) ?? const {})
+              .cast<String, Object?>();
+      if (draftEnvelope.isNotEmpty) {
+        draftEnvelope['context_date'] ??= anchorDate;
+        aiCommitState = ViewState.initial();
+        aiState = ViewState.ready(draftEnvelope);
+      }
+      await loadQuickCaptureBuffer(userId: userId, anchorDate: anchorDate);
+      lastQuickCaptureBufferSummary =
+          autoCommit ? '缓存内容已整理并尝试自动入库' : '缓存内容已整理，草稿已送入审核区';
+      quickCaptureBufferActionState = ViewState.ready(null);
+      notifyListeners();
+      return resultMap;
+    } catch (error) {
+      quickCaptureBufferActionState = ViewState.error(error.toString());
+      notifyListeners();
+      return null;
+    }
+  }
+
+  String? get currentQuickCaptureSessionId {
+    final data = quickCaptureBufferState.data;
+    if (data == null) {
+      return null;
+    }
+    final session =
+        ((data['session'] as Map?) ?? const {}).cast<String, Object?>();
+    final id = session['id']?.toString().trim() ?? '';
+    return id.isEmpty ? null : id;
+  }
+
+  int get quickCaptureBufferItemCount {
+    final data = quickCaptureBufferState.data;
+    if (data == null) {
+      return 0;
+    }
+    return ((data['items'] as List?) ?? const []).length;
   }
 
   Future<bool> submitManual({
@@ -153,7 +342,8 @@ class CaptureController extends ChangeNotifier {
     required List<String> projectIds,
     required List<String> tagIds,
   }) async {
-    submitState = ViewState.loading();
+    lastAiCommitSummary = null;
+    manualSubmitState = ViewState.loading();
     notifyListeners();
     try {
       switch (selectedType) {
@@ -236,11 +426,11 @@ class CaptureController extends ChangeNotifier {
             'tag_ids': tagIds,
           });
       }
-      submitState = ViewState.ready(null);
+      manualSubmitState = ViewState.ready(null);
       notifyListeners();
       return true;
     } catch (error) {
-      submitState = ViewState.error(error.toString());
+      manualSubmitState = ViewState.error(error.toString());
       notifyListeners();
       return false;
     }
@@ -250,7 +440,8 @@ class CaptureController extends ChangeNotifier {
     required String userId,
     required Map<String, Object?> draftEnvelope,
   }) async {
-    submitState = ViewState.loading();
+    lastAiCommitSummary = null;
+    aiCommitState = ViewState.loading();
     notifyListeners();
     try {
       final items = ((draftEnvelope['items'] as List?) ?? const [])
@@ -294,11 +485,11 @@ class CaptureController extends ChangeNotifier {
           .length;
       lastAiCommitSummary =
           '已入库：$committed 条；复盘素材：$notes 条；需确认跳过：$needsReview 条；失败：$failures 条';
-      submitState = ViewState.ready(null);
+      aiCommitState = ViewState.ready(null);
       notifyListeners();
       return failures == 0;
     } catch (error) {
-      submitState = ViewState.error(error.toString());
+      aiCommitState = ViewState.error(error.toString());
       notifyListeners();
       return false;
     }

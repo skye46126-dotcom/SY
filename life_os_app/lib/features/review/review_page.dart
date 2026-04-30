@@ -82,8 +82,56 @@ class _ReviewPageState extends State<ReviewPage> {
     return AnimatedBuilder(
       animation: controller,
       builder: (context, _) {
+        final state = controller.state;
         final pageData = controller.state.data;
         final report = pageData?.report;
+        final reviewChildren = <Widget>[
+          if (state.status == ViewStatus.loading && report == null)
+            const AppleDashboardCard(
+              child: SectionLoadingView(label: '正在读取周期报告'),
+            ),
+          if (report == null && state.status != ViewStatus.loading)
+            _ReviewCoreSummaryCard(
+              report: null,
+              message: state.message,
+            ),
+          if (report != null) ...[
+            _ReviewCoreSummaryCard(
+              report: report,
+              message: state.message,
+            ),
+            _ReviewOverviewCard(report: report),
+            _ReviewNotesCard(report: report),
+            _AdaptiveColumns(
+              children: [
+                _ReviewTrendCard(report: report),
+                _ReviewTimeAnalysisCard(
+                  report: report,
+                  onTagTap: (metric) => _openTagDetail(
+                    context,
+                    scope: 'time',
+                    tagName: metric.tagName,
+                    report: report,
+                  ),
+                ),
+              ],
+            ),
+            _AdaptiveColumns(
+              children: [
+                _ReviewAiEfficiencyCard(report: report),
+                _ReviewProjectCard(
+                  report: report,
+                  onProjectTap: _openProject,
+                ),
+              ],
+            ),
+            _ReviewHistoryCard(
+              items: _historyItems(report),
+              onViewAll: () =>
+                  _showHistorySheet(context, _historyItems(report)),
+            ),
+          ],
+        ];
 
         return AppleDashboardPage(
           title: '周期复盘',
@@ -192,49 +240,7 @@ class _ReviewPageState extends State<ReviewPage> {
               ),
             ],
           ),
-          children: [
-            if (controller.state.status == ViewStatus.loading)
-              const AppleDashboardCard(
-                child: SectionLoadingView(label: '正在读取周期报告'),
-              ),
-            _ReviewCoreSummaryCard(
-              report: report,
-              message: controller.state.message,
-            ),
-            _ReviewOverviewCard(report: report),
-            _ReviewNotesCard(report: report),
-            _AdaptiveColumns(
-              children: [
-                _ReviewTrendCard(report: report),
-                _ReviewTimeAnalysisCard(
-                  report: report,
-                  onTagTap: report == null
-                      ? null
-                      : (metric) => _openTagDetail(
-                            context,
-                            scope: 'time',
-                            tagName: metric.tagName,
-                            report: report,
-                          ),
-                ),
-              ],
-            ),
-            _AdaptiveColumns(
-              children: [
-                _ReviewAiEfficiencyCard(report: report),
-                _ReviewProjectCard(
-                  report: report,
-                  onProjectTap: _openProject,
-                ),
-              ],
-            ),
-            _ReviewHistoryCard(
-              items: report == null ? const [] : _historyItems(report),
-              onViewAll: report == null
-                  ? null
-                  : () => _showHistorySheet(context, _historyItems(report)),
-            ),
-          ],
+          children: reviewChildren,
         );
       },
     );

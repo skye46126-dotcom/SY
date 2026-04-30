@@ -115,6 +115,16 @@ class NativeRustApi implements RustApi {
     );
   }
 
+  Future<dynamic> _callAsync(String method, Map<String, Object?> payload) {
+    return Isolate.run(
+      () => _callWithLibrary(
+        databasePath: databasePath,
+        method: method,
+        payload: payload,
+      ),
+    );
+  }
+
   @override
   Future<dynamic> invokeRaw({
     required String method,
@@ -232,7 +242,7 @@ class NativeRustApi implements RustApi {
     required String timezone,
     required int limit,
   }) async {
-    final data = _call('get_recent_records', {
+    final data = await _callAsync('get_recent_records', {
       'user_id': userId,
       'timezone': timezone,
       'limit': limit,
@@ -272,7 +282,7 @@ class NativeRustApi implements RustApi {
     required String snapshotDate,
     required String windowType,
   }) async {
-    final data = _call('get_snapshot', {
+    final data = await _callAsync('get_snapshot', {
       'user_id': userId,
       'snapshot_date': snapshotDate,
       'window_type': windowType,
@@ -287,7 +297,7 @@ class NativeRustApi implements RustApi {
     required String userId,
     required String windowType,
   }) async {
-    final data = _call('get_latest_snapshot', {
+    final data = await _callAsync('get_latest_snapshot', {
       'user_id': userId,
       'window_type': windowType,
     });
@@ -302,7 +312,7 @@ class NativeRustApi implements RustApi {
     required String snapshotDate,
     required String windowType,
   }) async {
-    final data = _call('recompute_snapshot', {
+    final data = await _callAsync('recompute_snapshot', {
       'user_id': userId,
       'snapshot_date': snapshotDate,
       'window_type': windowType,
@@ -585,7 +595,7 @@ class NativeRustApi implements RustApi {
     required String anchorDate,
     required String timezone,
   }) async {
-    final data = _call('get_today_overview', {
+    final data = await _callAsync('get_today_overview', {
       'user_id': userId,
       'anchor_date': anchorDate,
       'timezone': timezone,
@@ -602,7 +612,7 @@ class NativeRustApi implements RustApi {
     required String anchorDate,
     required String timezone,
   }) async {
-    final data = _call('get_today_goal_progress', {
+    final data = await _callAsync('get_today_goal_progress', {
       'user_id': userId,
       'anchor_date': anchorDate,
       'timezone': timezone,
@@ -617,7 +627,7 @@ class NativeRustApi implements RustApi {
     required String anchorDate,
     required String timezone,
   }) async {
-    final data = _call('get_today_alerts', {
+    final data = await _callAsync('get_today_alerts', {
       'user_id': userId,
       'anchor_date': anchorDate,
       'timezone': timezone,
@@ -631,7 +641,7 @@ class NativeRustApi implements RustApi {
     required String anchorDate,
     required String timezone,
   }) async {
-    final data = _call('get_today_summary', {
+    final data = await _callAsync('get_today_summary', {
       'user_id': userId,
       'anchor_date': anchorDate,
       'timezone': timezone,
@@ -653,7 +663,7 @@ class NativeRustApi implements RustApi {
       'end_date': window.endDate,
       'timezone': timezone,
     };
-    final data = _call('get_review_report', payload);
+    final data = await _callAsync('get_review_report', payload);
     if (data == null) {
       return null;
     }

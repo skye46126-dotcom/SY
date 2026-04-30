@@ -7,6 +7,7 @@ import '../../../models/config_models.dart';
 import '../../../models/project_models.dart';
 import '../../../models/tag_models.dart';
 import '../../../shared/view_state.dart';
+import '../../../shared/widgets/record_editor_surface.dart';
 import '../../../shared/widgets/section_card.dart';
 import '../../../shared/widgets/segmented_control.dart';
 import '../../../shared/widgets/state_views.dart';
@@ -14,49 +15,33 @@ import '../../../shared/widgets/tag_selector.dart';
 import '../capture_controller.dart';
 import 'record_form_section.dart';
 
-class AiCaptureSection extends StatelessWidget {
-  const AiCaptureSection({
+class AiCaptureComposerSection extends StatelessWidget {
+  const AiCaptureComposerSection({
     super.key,
-    required this.aiState,
     required this.inputController,
     required this.inputFocusNode,
     required this.autofocusInput,
     required this.parseMode,
     required this.onParseModeChanged,
     required this.onParsePressed,
-    required this.onDraftChanged,
-    required this.onCommitPressed,
-    required this.optionResolver,
-    required this.sourceSuggestions,
-    required this.projectOptions,
-    required this.tags,
+    required this.onAddToBufferPressed,
+    this.quickBufferCount = 0,
   });
 
-  final ViewState<Map<String, Object?>> aiState;
   final TextEditingController inputController;
   final FocusNode inputFocusNode;
   final bool autofocusInput;
   final AiCaptureParseMode parseMode;
   final ValueChanged<AiCaptureParseMode> onParseModeChanged;
   final VoidCallback onParsePressed;
-  final ValueChanged<Map<String, Object?>> onDraftChanged;
-  final VoidCallback onCommitPressed;
-  final List<DimensionOptionModel> Function(CaptureFieldOptions key)
-      optionResolver;
-  final List<String> sourceSuggestions;
-  final List<ProjectOption> projectOptions;
-  final List<TagModel> tags;
+  final VoidCallback onAddToBufferPressed;
+  final int quickBufferCount;
 
   @override
   Widget build(BuildContext context) {
     return SectionCard(
       eyebrow: 'AI Capture',
-      title: '自然语言录入',
-      trailing: ElevatedButton.icon(
-        onPressed: onParsePressed,
-        icon: const Icon(Icons.auto_awesome_rounded, size: 18),
-        label: const Text('解析草稿'),
-      ),
+      title: '原始记录输入',
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -68,7 +53,7 @@ class AiCaptureSection extends StatelessWidget {
             maxLines: 8,
             decoration: const InputDecoration(
               labelText: '输入自然语言',
-              hintText: '输入当天原始记录，解析后逐条确认和修改。',
+              hintText: '输入当天原始记录，解析后进入审核区逐条确认。',
             ),
           ),
           const SizedBox(height: 12),
@@ -105,7 +90,85 @@ class AiCaptureSection extends StatelessWidget {
           ),
           const SizedBox(height: 10),
           const _CaptureInputHints(),
-          const SizedBox(height: 16),
+          const SizedBox(height: 14),
+          Wrap(
+            spacing: 12,
+            runSpacing: 12,
+            children: [
+              ElevatedButton.icon(
+                onPressed: onParsePressed,
+                icon: const Icon(Icons.auto_awesome_rounded, size: 18),
+                label: const Text('开始解析'),
+              ),
+              OutlinedButton.icon(
+                onPressed: onAddToBufferPressed,
+                icon: const Icon(Icons.inbox_outlined, size: 18),
+                label: Text(
+                  quickBufferCount > 0 ? '加入缓存池 · $quickBufferCount' : '加入缓存池',
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class DraftReviewCenterSection extends StatelessWidget {
+  const DraftReviewCenterSection({
+    super.key,
+    required this.aiState,
+    required this.onDraftChanged,
+    required this.onCommitPressed,
+    required this.optionResolver,
+    required this.sourceSuggestions,
+    required this.projectOptions,
+    required this.tags,
+    required this.commitState,
+    this.lastCommitSummary,
+  });
+
+  final ViewState<Map<String, Object?>> aiState;
+  final ValueChanged<Map<String, Object?>> onDraftChanged;
+  final VoidCallback onCommitPressed;
+  final List<DimensionOptionModel> Function(CaptureFieldOptions key)
+      optionResolver;
+  final List<String> sourceSuggestions;
+  final List<ProjectOption> projectOptions;
+  final List<TagModel> tags;
+  final ViewState<void> commitState;
+  final String? lastCommitSummary;
+
+  @override
+  Widget build(BuildContext context) {
+    return SectionCard(
+      eyebrow: 'AI Review',
+      title: '草稿审核',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (commitState.status == ViewStatus.loading) ...[
+            const SectionLoadingView(label: '正在提交已确认内容'),
+            const SizedBox(height: 12),
+          ],
+          if (commitState.status == ViewStatus.error) ...[
+            SectionMessageView(
+              icon: Icons.error_outline_rounded,
+              title: '提交失败',
+              description: commitState.message ?? '请检查草稿后重试。',
+            ),
+            const SizedBox(height: 12),
+          ],
+          if (commitState.status == ViewStatus.data &&
+              (lastCommitSummary?.trim().isNotEmpty ?? false)) ...[
+            SectionMessageView(
+              icon: Icons.check_circle_outline_rounded,
+              title: '提交完成',
+              description: lastCommitSummary!,
+            ),
+            const SizedBox(height: 12),
+          ],
           switch (aiState.status) {
             ViewStatus.loading => const _LlmParsingView(),
             ViewStatus.data => _DraftListPreview(
@@ -861,9 +924,6 @@ class _DraftItemCard extends StatelessWidget {
             .map((item) => item.toString())
             .where((item) => item.trim().isNotEmpty)
             .toList();
-    final fieldMap =
-        ((item['fields'] as Map?) ?? const {}).cast<String, Object?>();
-    final definitions = _draftFieldDefinitionsFor(kind);
     final userConfirmed = item['user_confirmed'] == true;
     final canApprove = status == 'needs_review' && onApprovalChanged != null;
     final links = ((item['links'] as Map?) ?? const {}).cast<String, Object?>();
@@ -871,6 +931,7 @@ class _DraftItemCard extends StatelessWidget {
     final selectedTagIds = _selectedTagIds(links);
     final unresolvedProjects = _unresolvedLinkNames(links['projects']);
     final unresolvedTags = _unresolvedLinkNames(links['tags']);
+    final summary = _draftSummaryText(item);
 
     return Container(
       width: double.infinity,
@@ -980,102 +1041,258 @@ class _DraftItemCard extends StatelessWidget {
             ),
           ],
           const SizedBox(height: 10),
-          TextFormField(
-            initialValue: item['title']?.toString() ?? '',
-            decoration: const InputDecoration(labelText: '标题'),
-            onChanged: (value) => _updateTopLevel('title', value),
+          Text(
+            item['title']?.toString().trim().isNotEmpty == true
+                ? item['title']!.toString()
+                : '未命名草稿',
+            style: Theme.of(context).textTheme.titleMedium,
           ),
-          const SizedBox(height: 8),
-          for (final definition in definitions) ...[
-            _FieldEditor(
-              definition: definition,
-              field:
-                  (fieldMap[definition.key] as Map?)?.cast<String, Object?>() ??
-                      const {},
-              options: definition.optionsKey == null
-                  ? const []
-                  : optionResolver(definition.optionsKey!),
-              sourceSuggestions: sourceSuggestions,
-              missingRequired: missingRequired.contains(definition.key),
-              blockingError: _blockingErrorForField(
-                definition.key,
-                blockingErrors,
-              ),
-              onChanged: (value) => _updateField(definition.key, value),
+          if (summary.isNotEmpty) ...[
+            const SizedBox(height: 6),
+            Text(
+              summary,
+              style: Theme.of(context).textTheme.bodyMedium,
             ),
+          ],
+          if (selectedProjectIds.isNotEmpty ||
+              selectedTagIds.isNotEmpty ||
+              unresolvedProjects.isNotEmpty ||
+              unresolvedTags.isNotEmpty) ...[
             const SizedBox(height: 8),
-          ],
-          for (final entry in fieldMap.entries.where(
-            (entry) =>
-                _visibleField(entry.key) &&
-                definitions.every((definition) => definition.key != entry.key),
-          )) ...[
-            _FieldEditor(
-              definition: _fallbackDefinitionFor(entry.key),
-              field: (entry.value as Map?)?.cast<String, Object?>() ?? const {},
-              options: const [],
-              sourceSuggestions: sourceSuggestions,
-              missingRequired: missingRequired.contains(entry.key),
-              blockingError: _blockingErrorForField(
-                entry.key,
-                blockingErrors,
-              ),
-              onChanged: (value) => _updateField(entry.key, value),
-            ),
-            const SizedBox(height: 8),
-          ],
-          if (projectOptions.isNotEmpty) ...[
-            const SizedBox(height: 4),
-            _ProjectLinkSelector(
-              selectedIds: selectedProjectIds,
-              projectOptions: projectOptions,
-              onToggle: _toggleProjectLink,
-            ),
-          ],
-          if (unresolvedProjects.isNotEmpty) ...[
-            const SizedBox(height: 8),
-            _UnresolvedLinkRow(
-              title: '未解析项目引用',
-              names: unresolvedProjects,
-              onRemove: _removeProjectLinkByName,
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                if (selectedProjectIds.isNotEmpty)
+                  _Pill(
+                    label: '项目 ${selectedProjectIds.length}',
+                    color: const Color(0xFF2563EB),
+                  ),
+                if (selectedTagIds.isNotEmpty)
+                  _Pill(
+                    label: '标签 ${selectedTagIds.length}',
+                    color: const Color(0xFF7C3AED),
+                  ),
+                if (unresolvedProjects.isNotEmpty)
+                  _Pill(
+                    label: '未解析项目 ${unresolvedProjects.length}',
+                    color: const Color(0xFFD97706),
+                  ),
+                if (unresolvedTags.isNotEmpty)
+                  _Pill(
+                    label: '未解析标签 ${unresolvedTags.length}',
+                    color: const Color(0xFFD97706),
+                  ),
+              ],
             ),
           ],
-          if (tags.isNotEmpty) ...[
-            const SizedBox(height: 12),
-            TagSelector(
-              title: '标签',
-              selectedIds: selectedTagIds,
-              labels: {
-                for (final tag in tags)
-                  tag.id: '${tag.emoji ?? ''} ${tag.name}'.trim(),
-              },
-              onToggle: _toggleTagLink,
-            ),
-          ],
-          if (unresolvedTags.isNotEmpty) ...[
-            const SizedBox(height: 8),
-            _UnresolvedLinkRow(
-              title: '未解析标签引用',
-              names: unresolvedTags,
-              onRemove: _removeTagLinkByName,
-            ),
-          ],
-          TextFormField(
-            initialValue: item['note']?.toString() ?? '',
-            decoration: const InputDecoration(labelText: '备注'),
-            minLines: 1,
-            maxLines: 3,
-            onChanged: (value) => _updateTopLevel('note', value),
-          ),
           if ((item['raw_text']?.toString() ?? '').trim().isNotEmpty) ...[
             const SizedBox(height: 8),
             Text(
               '原文：${item['raw_text']}',
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
               style: Theme.of(context).textTheme.bodySmall,
             ),
           ],
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: () => _openEditor(context),
+                  icon: const Icon(Icons.tune_rounded, size: 18),
+                  label: const Text('编辑详情'),
+                ),
+              ),
+            ],
+          ),
         ],
       ),
+    );
+  }
+
+  Future<void> _openEditor(BuildContext context) async {
+    final kind = item['kind']?.toString() ?? 'unknown';
+    final rootContext = Navigator.of(context, rootNavigator: true).context;
+    Map<String, Object?> draft = Map<String, Object?>.from(item);
+    final result = await showModalBottomSheet<Map<String, Object?>>(
+      context: rootContext,
+      useRootNavigator: true,
+      isScrollControlled: true,
+      showDragHandle: false,
+      backgroundColor: Colors.transparent,
+      builder: (context) => FractionallySizedBox(
+        heightFactor: 0.94,
+        child: StatefulBuilder(
+          builder: (context, setSheetState) {
+            return RecordEditorSurface(
+              title: '编辑${_kindLabel(kind)}草稿',
+              subtitle: '草稿 #${index + 1}',
+              onCancel: () => Navigator.of(context).pop(),
+              onSave: () => Navigator.of(context).pop(draft),
+              child: _DraftItemEditorFields(
+                item: draft,
+                optionResolver: optionResolver,
+                sourceSuggestions: sourceSuggestions,
+                projectOptions: projectOptions,
+                tags: tags,
+                onChanged: (next) {
+                  draft = next;
+                  setSheetState(() {});
+                },
+              ),
+            );
+          },
+        ),
+      ),
+    );
+    if (result != null) {
+      onChanged(result);
+    }
+  }
+}
+
+class _DraftItemEditorFields extends StatelessWidget {
+  const _DraftItemEditorFields({
+    required this.item,
+    required this.optionResolver,
+    required this.sourceSuggestions,
+    required this.projectOptions,
+    required this.tags,
+    required this.onChanged,
+  });
+
+  final Map<String, Object?> item;
+  final List<DimensionOptionModel> Function(CaptureFieldOptions key)
+      optionResolver;
+  final List<String> sourceSuggestions;
+  final List<ProjectOption> projectOptions;
+  final List<TagModel> tags;
+  final ValueChanged<Map<String, Object?>> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final kind = item['kind']?.toString() ?? 'unknown';
+    final validation =
+        ((item['validation'] as Map?) ?? const {}).cast<String, Object?>();
+    final missingRequired =
+        ((validation['missing_required'] as List?) ?? const [])
+            .map((item) => item.toString())
+            .where((item) => item.trim().isNotEmpty)
+            .toSet();
+    final blockingErrors =
+        ((validation['blocking_errors'] as List?) ?? const [])
+            .map((item) => item.toString())
+            .where((item) => item.trim().isNotEmpty)
+            .toList();
+    final fieldMap =
+        ((item['fields'] as Map?) ?? const {}).cast<String, Object?>();
+    final definitions = _draftFieldDefinitionsFor(kind);
+    final links = ((item['links'] as Map?) ?? const {}).cast<String, Object?>();
+    final selectedProjectIds = _selectedProjectIds(links);
+    final selectedTagIds = _selectedTagIds(links);
+    final unresolvedProjects = _unresolvedLinkNames(links['projects']);
+    final unresolvedTags = _unresolvedLinkNames(links['tags']);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        TextFormField(
+          initialValue: item['title']?.toString() ?? '',
+          decoration: const InputDecoration(labelText: '标题'),
+          onChanged: (value) => _updateTopLevel('title', value),
+        ),
+        const SizedBox(height: 8),
+        for (final definition in definitions) ...[
+          _FieldEditor(
+            definition: definition,
+            field:
+                (fieldMap[definition.key] as Map?)?.cast<String, Object?>() ??
+                    const {},
+            options: definition.optionsKey == null
+                ? const []
+                : optionResolver(definition.optionsKey!),
+            sourceSuggestions: sourceSuggestions,
+            missingRequired: missingRequired.contains(definition.key),
+            blockingError: _blockingErrorForField(
+              definition.key,
+              blockingErrors,
+            ),
+            onChanged: (value) => _updateField(definition.key, value),
+          ),
+          const SizedBox(height: 8),
+        ],
+        for (final entry in fieldMap.entries.where(
+          (entry) =>
+              _visibleDraftField(entry.key) &&
+              definitions.every((definition) => definition.key != entry.key),
+        )) ...[
+          _FieldEditor(
+            definition: _fallbackDefinitionFor(entry.key),
+            field: (entry.value as Map?)?.cast<String, Object?>() ?? const {},
+            options: const [],
+            sourceSuggestions: sourceSuggestions,
+            missingRequired: missingRequired.contains(entry.key),
+            blockingError: _blockingErrorForField(
+              entry.key,
+              blockingErrors,
+            ),
+            onChanged: (value) => _updateField(entry.key, value),
+          ),
+          const SizedBox(height: 8),
+        ],
+        if (projectOptions.isNotEmpty) ...[
+          const SizedBox(height: 4),
+          _ProjectLinkSelector(
+            selectedIds: selectedProjectIds,
+            projectOptions: projectOptions,
+            onToggle: _toggleProjectLink,
+          ),
+        ],
+        if (unresolvedProjects.isNotEmpty) ...[
+          const SizedBox(height: 8),
+          _UnresolvedLinkRow(
+            title: '未解析项目引用',
+            names: unresolvedProjects,
+            onRemove: _removeProjectLinkByName,
+          ),
+        ],
+        if (tags.isNotEmpty) ...[
+          const SizedBox(height: 12),
+          TagSelector(
+            title: '标签',
+            selectedIds: selectedTagIds,
+            labels: {
+              for (final tag in tags)
+                tag.id: '${tag.emoji ?? ''} ${tag.name}'.trim(),
+            },
+            onToggle: _toggleTagLink,
+          ),
+        ],
+        if (unresolvedTags.isNotEmpty) ...[
+          const SizedBox(height: 8),
+          _UnresolvedLinkRow(
+            title: '未解析标签引用',
+            names: unresolvedTags,
+            onRemove: _removeTagLinkByName,
+          ),
+        ],
+        TextFormField(
+          initialValue: item['note']?.toString() ?? '',
+          decoration: const InputDecoration(labelText: '备注'),
+          minLines: 1,
+          maxLines: 3,
+          onChanged: (value) => _updateTopLevel('note', value),
+        ),
+        if ((item['raw_text']?.toString() ?? '').trim().isNotEmpty) ...[
+          const SizedBox(height: 8),
+          Text(
+            '原文：${item['raw_text']}',
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+        ],
+      ],
     );
   }
 
@@ -1189,14 +1406,6 @@ class _DraftItemCard extends StatelessWidget {
     next['links'] = nextLinks;
     next['user_confirmed'] = true;
     onChanged(next);
-  }
-
-  bool _visibleField(String key) {
-    return !{
-      'raw',
-      'reference_kind',
-      'reference_text',
-    }.contains(key);
   }
 }
 
@@ -1500,6 +1709,77 @@ class _UnresolvedLinkRow extends StatelessWidget {
       ],
     );
   }
+}
+
+String _draftSummaryText(Map<String, Object?> item) {
+  final kind = item['kind']?.toString() ?? 'unknown';
+  final fields = ((item['fields'] as Map?) ?? const {}).cast<String, Object?>();
+  final values = switch (kind) {
+    'time_record' => [
+        _fieldMapValue(fields, 'date'),
+        _timeRangeText(
+          _fieldMapValue(fields, 'start_time'),
+          _fieldMapValue(fields, 'end_time'),
+        ),
+        _fieldMapValue(fields, 'category'),
+        _fieldMapValue(fields, 'description'),
+      ],
+    'learning_record' => [
+        _fieldMapValue(fields, 'content'),
+        _fieldMapValue(fields, 'duration_minutes').isEmpty
+            ? ''
+            : '${_fieldMapValue(fields, 'duration_minutes')} 分钟',
+        _timeRangeText(
+          _fieldMapValue(fields, 'start_time'),
+          _fieldMapValue(fields, 'end_time'),
+        ),
+      ],
+    'income_record' => [
+        _fieldMapValue(fields, 'date'),
+        _fieldMapValue(fields, 'amount').isEmpty
+            ? ''
+            : '${_fieldMapValue(fields, 'amount')} 元',
+        _fieldMapValue(fields, 'source'),
+        _fieldMapValue(fields, 'type'),
+      ],
+    'expense_record' => [
+        _fieldMapValue(fields, 'date'),
+        _fieldMapValue(fields, 'amount').isEmpty
+            ? ''
+            : '${_fieldMapValue(fields, 'amount')} 元',
+        _fieldMapValue(fields, 'category'),
+      ],
+    _ => <String>[
+        item['title']?.toString() ?? '',
+      ],
+  };
+  return values.where((value) => value.trim().isNotEmpty).join(' · ');
+}
+
+String _fieldMapValue(Map<String, Object?> fields, String key) {
+  final field = fields[key];
+  if (field is! Map) {
+    return '';
+  }
+  return field['value']?.toString() ?? '';
+}
+
+String _timeRangeText(String start, String end) {
+  if (start.isEmpty && end.isEmpty) {
+    return '';
+  }
+  if (start.isNotEmpty && end.isNotEmpty) {
+    return '$start-$end';
+  }
+  return start.isNotEmpty ? start : end;
+}
+
+bool _visibleDraftField(String key) {
+  return !{
+    'raw',
+    'reference_kind',
+    'reference_text',
+  }.contains(key);
 }
 
 String? _blockingErrorForField(String key, List<String> blockingErrors) {

@@ -476,6 +476,95 @@ fn ffi_bridge_can_prepare_capture_session_profile() {
 }
 
 #[test]
+fn ffi_bridge_can_buffer_multiple_items_and_process_once() {
+    let directory = tempdir().expect("tempdir");
+    let database_path = directory.path().join("life_os.db");
+    let database_path = database_path.to_string_lossy().to_string();
+
+    let user = bridge_call(&database_path, "init_database", json!({}));
+    let user_id = user["id"].as_str().expect("user id").to_string();
+
+    let session = bridge_call(
+        &database_path,
+        "get_or_create_active_capture_buffer_session",
+        json!({
+            "user_id": user_id,
+            "source": "quick_capture",
+            "entry_point": "quick_capture",
+            "context_date": "2026-04-25",
+            "route_hint": "/capture?mode=ai",
+            "mode_hint": "ai",
+            "parser_mode_hint": "Rule"
+        }),
+    );
+
+    bridge_call(
+        &database_path,
+        "append_capture_buffer_item",
+        json!({
+            "user_id": user["id"],
+            "session_id": session["id"],
+            "source": "quick_capture",
+            "entry_point": "quick_capture",
+            "context_date": "2026-04-25",
+            "route_hint": "/capture?mode=ai",
+            "mode_hint": "ai",
+            "parser_mode_hint": "Rule",
+            "raw_text": "今天学习 Rust FFI 1小时",
+            "input_kind": "text"
+        }),
+    );
+    bridge_call(
+        &database_path,
+        "append_capture_buffer_item",
+        json!({
+            "user_id": user["id"],
+            "session_id": session["id"],
+            "source": "quick_capture",
+            "entry_point": "quick_capture",
+            "context_date": "2026-04-25",
+            "route_hint": "/capture?mode=ai",
+            "mode_hint": "ai",
+            "parser_mode_hint": "Rule",
+            "raw_text": "效率 8，AI 30",
+            "input_kind": "text"
+        }),
+    );
+
+    let listed = bridge_call(
+        &database_path,
+        "list_capture_buffer_items",
+        json!({
+            "user_id": user["id"],
+            "session_id": session["id"]
+        }),
+    );
+    assert_eq!(listed["items"].as_array().map(Vec::len), Some(2));
+
+    let processed = bridge_call(
+        &database_path,
+        "process_capture_buffer_session",
+        json!({
+            "user_id": user["id"],
+            "session_id": session["id"],
+            "auto_commit": false
+        }),
+    );
+    assert!(
+        processed["combined_text"]
+            .as_str()
+            .is_some_and(|text| text.contains("今天学习 Rust FFI 1小时"))
+    );
+    assert_eq!(
+        processed["process_result"]["draft_envelope"]["items"]
+            .as_array()
+            .map(Vec::len),
+        Some(1)
+    );
+    assert!(processed["auto_commit_result"].is_null());
+}
+
+#[test]
 fn ffi_bridge_exports_data_package_files_from_rust() {
     let directory = tempdir().expect("tempdir");
     let database_path = directory.path().join("life_os.db");

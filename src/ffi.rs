@@ -6,13 +6,15 @@ use serde_json::Value;
 
 use crate::error::LifeOsError;
 use crate::models::{
-    AiCaptureCommitInput, AiCommitInput, AiParseInput, CapexCostInput, CaptureInboxStatus,
-    CommitCaptureDraftEnvelopeInput, CreateAiServiceConfigInput, CreateCaptureInboxEntryInput,
+    AiCaptureCommitInput, AiCommitInput, AiParseInput, AppendCaptureBufferItemInput,
+    CapexCostInput, CaptureInboxStatus, CommitCaptureDraftEnvelopeInput,
+    CreateAiServiceConfigInput, CreateCaptureBufferSessionInput, CreateCaptureInboxEntryInput,
     CreateCloudSyncConfigInput, CreateExpenseRecordInput, CreateIncomeRecordInput,
     CreateLearningRecordInput, CreateProjectInput, CreateReviewNoteInput, CreateTagInput,
     CreateTimeRecordInput, DimensionOptionInput, MonthlyCostBaselineInput,
-    PrepareCaptureSessionInput, ProcessCaptureInboxAndCommitInput, ProcessCaptureInboxInput,
-    RecordKind, RecurringCostRuleInput, UpdateOperatingSettingsInput,
+    PrepareCaptureSessionInput, ProcessCaptureBufferSessionInput,
+    ProcessCaptureInboxAndCommitInput, ProcessCaptureInboxInput, RecordKind,
+    RecurringCostRuleInput, UpdateOperatingSettingsInput,
 };
 use crate::services::{
     AiService, BackupService, CaptureService, CostService, DataPackageExportInput, DemoDataService,
@@ -446,6 +448,19 @@ struct GetCaptureInboxRequest {
     inbox_id: String,
 }
 
+#[derive(Debug, serde::Deserialize)]
+struct CaptureBufferSessionRequest {
+    user_id: String,
+    session_id: String,
+}
+
+#[derive(Debug, serde::Deserialize)]
+struct DeleteCaptureBufferItemRequest {
+    user_id: String,
+    session_id: String,
+    item_id: String,
+}
+
 fn success_response<T: Serialize>(data: T) -> String {
     serde_json::to_string(&BridgeResponse {
         ok: true,
@@ -513,6 +528,41 @@ fn invoke_inner(
             let request: UserScopedRequest = parse_payload(payload_json)?;
             let data = DemoDataService::new(database_path)
                 .clear_demo_data(&request.user_id)
+                .map_err(BridgeInvokeError::from_core)?;
+            Ok(success_response(data))
+        }
+        "get_or_create_active_capture_buffer_session" => {
+            let request: CreateCaptureBufferSessionInput = parse_payload(payload_json)?;
+            let data = CaptureService::new(database_path)
+                .get_or_create_active_capture_buffer_session(&request)
+                .map_err(BridgeInvokeError::from_core)?;
+            Ok(success_response(data))
+        }
+        "append_capture_buffer_item" => {
+            let request: AppendCaptureBufferItemInput = parse_payload(payload_json)?;
+            let data = CaptureService::new(database_path)
+                .append_capture_buffer_item(&request)
+                .map_err(BridgeInvokeError::from_core)?;
+            Ok(success_response(data))
+        }
+        "list_capture_buffer_items" => {
+            let request: CaptureBufferSessionRequest = parse_payload(payload_json)?;
+            let data = CaptureService::new(database_path)
+                .list_capture_buffer_items(&request.user_id, &request.session_id)
+                .map_err(BridgeInvokeError::from_core)?;
+            Ok(success_response(data))
+        }
+        "delete_capture_buffer_item" => {
+            let request: DeleteCaptureBufferItemRequest = parse_payload(payload_json)?;
+            let data = CaptureService::new(database_path)
+                .delete_capture_buffer_item(&request.user_id, &request.session_id, &request.item_id)
+                .map_err(BridgeInvokeError::from_core)?;
+            Ok(success_response(data))
+        }
+        "process_capture_buffer_session" => {
+            let request: ProcessCaptureBufferSessionInput = parse_payload(payload_json)?;
+            let data = CaptureService::new(database_path)
+                .process_capture_buffer_session(&request)
                 .map_err(BridgeInvokeError::from_core)?;
             Ok(success_response(data))
         }

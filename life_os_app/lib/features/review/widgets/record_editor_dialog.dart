@@ -6,6 +6,7 @@ import '../../../models/project_models.dart';
 import '../../../models/record_models.dart';
 import '../../../models/tag_models.dart';
 import '../../../shared/view_state.dart';
+import '../../../shared/widgets/record_editor_surface.dart';
 import '../../../shared/widgets/safe_pop.dart';
 import '../../../shared/widgets/state_views.dart';
 import '../../capture/capture_controller.dart';
@@ -85,6 +86,24 @@ class RecordEditorDialog extends StatefulWidget {
   final List<ProjectOption> projectOptions;
   final List<TagModel> tags;
 
+  static Future<RecordEditorResult?> show(
+    BuildContext context, {
+    required RecordEditorDialog dialog,
+  }) {
+    final rootContext = Navigator.of(context, rootNavigator: true).context;
+    return showModalBottomSheet<RecordEditorResult>(
+      context: rootContext,
+      useRootNavigator: true,
+      isScrollControlled: true,
+      showDragHandle: false,
+      backgroundColor: Colors.transparent,
+      builder: (context) => FractionallySizedBox(
+        heightFactor: 0.94,
+        child: dialog,
+      ),
+    );
+  }
+
   @override
   State<RecordEditorDialog> createState() => _RecordEditorDialogState();
 }
@@ -115,101 +134,88 @@ class _RecordEditorDialogState extends State<RecordEditorDialog> {
   @override
   Widget build(BuildContext context) {
     final captureType = _captureTypeFor(widget.kind);
-    return AlertDialog(
-      title: Text('编辑${widget.kind.label}记录'),
-      content: SizedBox(
-        width: 720,
-        child: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              if (_metadataState.status == ViewStatus.loading)
-                const Padding(
-                  padding: EdgeInsets.only(bottom: 12),
-                  child: SectionLoadingView(label: '正在读取维度选项'),
-                ),
-              if (_metadataState.status == ViewStatus.error)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 12),
-                  child: SectionMessageView(
-                    icon: Icons.error_outline_rounded,
-                    title: '维度元数据读取失败',
-                    description: _metadataState.message ?? '请稍后重试。',
-                  ),
-                ),
-              AdaptiveRecordForm(
-                fields: captureFieldDefinitionsFor(captureType),
-                controllers: _controllers,
-                anchorDate: widget.anchorDate,
-                optionResolver: _optionsFor,
-                sourceSuggestions:
-                    _metadataState.data?.incomeSourceSuggestions ?? const [],
+    return RecordEditorSurface(
+      title: '编辑${widget.kind.label}记录',
+      subtitle: widget.anchorDate,
+      onCancel: () => safePop<void>(context),
+      onSave: () => safePop(context, _buildResult()),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (_metadataState.status == ViewStatus.loading)
+            const Padding(
+              padding: EdgeInsets.only(bottom: 12),
+              child: SectionLoadingView(label: '正在读取维度选项'),
+            ),
+          if (_metadataState.status == ViewStatus.error)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: SectionMessageView(
+                icon: Icons.error_outline_rounded,
+                title: '维度元数据读取失败',
+                description: _metadataState.message ?? '请稍后重试。',
               ),
-              const SizedBox(height: 16),
-              if (widget.projectOptions.isNotEmpty) ...[
-                Text('项目', style: Theme.of(context).textTheme.titleMedium),
-                const SizedBox(height: 8),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: [
-                    for (final item in widget.projectOptions)
-                      FilterChip(
-                        label: Text(item.name),
-                        selected: _selectedProjectIds.contains(item.id),
-                        onSelected: (_) {
-                          setState(() {
-                            if (_selectedProjectIds.contains(item.id)) {
-                              _selectedProjectIds.remove(item.id);
-                            } else {
-                              _selectedProjectIds.add(item.id);
-                            }
-                          });
-                        },
-                      ),
-                  ],
-                ),
-                const SizedBox(height: 16),
-              ],
-              if (widget.tags.isNotEmpty) ...[
-                Text('标签', style: Theme.of(context).textTheme.titleMedium),
-                const SizedBox(height: 8),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: [
-                    for (final tag in widget.tags)
-                      FilterChip(
-                        label: Text('${tag.emoji ?? ''} ${tag.name}'),
-                        selected: _selectedTagIds.contains(tag.id),
-                        onSelected: (_) {
-                          setState(() {
-                            if (_selectedTagIds.contains(tag.id)) {
-                              _selectedTagIds.remove(tag.id);
-                            } else {
-                              _selectedTagIds.add(tag.id);
-                            }
-                          });
-                        },
-                      ),
-                  ],
-                ),
-              ],
-            ],
+            ),
+          AdaptiveRecordForm(
+            fields: captureFieldDefinitionsFor(captureType),
+            controllers: _controllers,
+            anchorDate: widget.anchorDate,
+            optionResolver: _optionsFor,
+            sourceSuggestions:
+                _metadataState.data?.incomeSourceSuggestions ?? const [],
           ),
-        ),
+          const SizedBox(height: 16),
+          if (widget.projectOptions.isNotEmpty) ...[
+            Text('项目', style: Theme.of(context).textTheme.titleMedium),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                for (final item in widget.projectOptions)
+                  FilterChip(
+                    label: Text(item.name),
+                    selected: _selectedProjectIds.contains(item.id),
+                    onSelected: (_) {
+                      setState(() {
+                        if (_selectedProjectIds.contains(item.id)) {
+                          _selectedProjectIds.remove(item.id);
+                        } else {
+                          _selectedProjectIds.add(item.id);
+                        }
+                      });
+                    },
+                  ),
+              ],
+            ),
+            const SizedBox(height: 16),
+          ],
+          if (widget.tags.isNotEmpty) ...[
+            Text('标签', style: Theme.of(context).textTheme.titleMedium),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                for (final tag in widget.tags)
+                  FilterChip(
+                    label: Text('${tag.emoji ?? ''} ${tag.name}'),
+                    selected: _selectedTagIds.contains(tag.id),
+                    onSelected: (_) {
+                      setState(() {
+                        if (_selectedTagIds.contains(tag.id)) {
+                          _selectedTagIds.remove(tag.id);
+                        } else {
+                          _selectedTagIds.add(tag.id);
+                        }
+                      });
+                    },
+                  ),
+              ],
+            ),
+          ],
+        ],
       ),
-      actions: [
-        TextButton(
-          onPressed: () => safePop<void>(context),
-          child: const Text('取消'),
-        ),
-        ElevatedButton(
-          onPressed: () => safePop(context, _buildResult()),
-          child: const Text('保存'),
-        ),
-      ],
     );
   }
 

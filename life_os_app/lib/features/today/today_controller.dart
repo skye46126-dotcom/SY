@@ -28,6 +28,7 @@ class TodayController extends ChangeNotifier {
   TodayController(this._service);
 
   final AppService _service;
+  int _activeLoadId = 0;
 
   ViewState<TodayPageData> state = ViewState.initial();
 
@@ -36,44 +37,48 @@ class TodayController extends ChangeNotifier {
     required String anchorDate,
     required String timezone,
   }) async {
+    final loadId = ++_activeLoadId;
     state = ViewState.loading();
     notifyListeners();
 
     try {
-      final overview = await _service.getTodayOverview(
+      final overviewFuture = _service.getTodayOverview(
         userId: userId,
         anchorDate: anchorDate,
         timezone: timezone,
       );
-      final recentRecords = await _service.getRecentRecords(
+      final recentRecordsFuture = _service.getRecentRecords(
         userId: userId,
         timezone: timezone,
       );
-      final summary = await _service.getTodaySummary(
-        userId: userId,
-        anchorDate: anchorDate,
-        timezone: timezone,
-      );
-      final goalProgress = await _service.getTodayGoalProgress(
+      final summaryFuture = _service.getTodaySummary(
         userId: userId,
         anchorDate: anchorDate,
         timezone: timezone,
       );
-      final alerts = await _service.getTodayAlerts(
+      final goalProgressFuture = _service.getTodayGoalProgress(
         userId: userId,
         anchorDate: anchorDate,
         timezone: timezone,
       );
-      final snapshot = await _service.getSnapshot(
-            userId: userId,
-            snapshotDate: anchorDate,
-            windowType: 'day',
-          ) ??
-          await _service.recomputeSnapshot(
-            userId: userId,
-            snapshotDate: anchorDate,
-            windowType: 'day',
-          );
+      final alertsFuture = _service.getTodayAlerts(
+        userId: userId,
+        anchorDate: anchorDate,
+        timezone: timezone,
+      );
+      final snapshotFuture = _loadSnapshot(
+        userId: userId,
+        snapshotDate: anchorDate,
+      );
+      final overview = await overviewFuture;
+      final recentRecords = await recentRecordsFuture;
+      final summary = await summaryFuture;
+      final goalProgress = await goalProgressFuture;
+      final alerts = await alertsFuture;
+      final snapshot = await snapshotFuture;
+      if (loadId != _activeLoadId) {
+        return;
+      }
 
       if (overview == null) {
         state = ViewState.empty('TodayOverview 尚未返回任何数据。');
@@ -90,11 +95,35 @@ class TodayController extends ChangeNotifier {
         );
       }
     } on UnimplementedError {
+      if (loadId != _activeLoadId) {
+        return;
+      }
       state = ViewState.unavailable('Rust FFI 尚未接入，当前页面只保留真实结构和状态容器。');
     } catch (error) {
+      if (loadId != _activeLoadId) {
+        return;
+      }
       state = ViewState.error(error.toString());
     }
 
-    notifyListeners();
+    if (loadId == _activeLoadId) {
+      notifyListeners();
+    }
+  }
+
+  Future<MetricSnapshotSummaryModel> _loadSnapshot({
+    required String userId,
+    required String snapshotDate,
+  }) async {
+    return await _service.getSnapshot(
+          userId: userId,
+          snapshotDate: snapshotDate,
+          windowType: 'day',
+        ) ??
+        await _service.recomputeSnapshot(
+          userId: userId,
+          snapshotDate: snapshotDate,
+          windowType: 'day',
+        );
   }
 }

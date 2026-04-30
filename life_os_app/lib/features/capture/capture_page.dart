@@ -8,7 +8,9 @@ import '../../shared/widgets/module_page.dart';
 import 'capture_launch.dart';
 import 'capture_controller.dart';
 import 'widgets/ai_capture_section.dart';
+import 'widgets/capture_shell.dart';
 import 'widgets/capture_type_selector.dart';
+import 'widgets/quick_capture_pool_section.dart';
 import 'widgets/record_form_section.dart';
 
 class CapturePage extends StatefulWidget {
@@ -31,10 +33,12 @@ class _CapturePageState extends State<CapturePage> {
   final Set<String> _selectedProjectIds = {};
   final Set<String> _selectedTagIds = {};
   bool _metadataLoaded = false;
+  bool _quickCaptureBufferLoaded = false;
   bool _launchConfigApplied = false;
   bool _voiceCaptureStarted = false;
   bool _bootstrapMarked = false;
   CaptureType? _lastAppliedType;
+  CaptureWorkspaceTab _activeTab = CaptureWorkspaceTab.compose;
 
   @override
   void initState() {
@@ -80,6 +84,7 @@ class _CapturePageState extends State<CapturePage> {
       animation: Listenable.merge([controller, runtime]),
       builder: (context, _) {
         _ensureMetadataLoaded(runtime, controller);
+        _ensureQuickCaptureBufferLoaded(runtime, controller);
         if (!runtimeReady) {
           if (!_bootstrapMarked) {
             _bootstrapMarked = true;
@@ -110,108 +115,195 @@ class _CapturePageState extends State<CapturePage> {
             ),
           ],
           children: [
-            CaptureTypeSelector(
+            CaptureShell(
               selectedType: controller.selectedType,
-              onChanged: (type) {
-                controller.selectType(type);
-                _applyDefaults(
-                  type: type,
-                  metadata: controller.metadata,
-                  anchorDate: runtime.todayDate,
-                  force: true,
-                );
-              },
-            ),
-            RecordFormSection(
-              selectedType: controller.selectedType,
-              anchorDate: runtime.todayDate,
-              controllers: fieldControllers,
-              submitState: controller.submitState,
-              projectOptions: controller.projectOptions,
-              tags: controller.tags,
-              selectedProjectIds: _selectedProjectIds,
-              selectedTagIds: _selectedTagIds,
-              optionResolver: controller.optionsFor,
-              sourceSuggestions: controller.incomeSourceSuggestions,
-              onProjectToggle: (projectId) {
-                setState(() {
-                  if (_selectedProjectIds.contains(projectId)) {
-                    _selectedProjectIds.remove(projectId);
-                  } else {
-                    _selectedProjectIds.add(projectId);
-                  }
-                });
-              },
-              onTagToggle: (tagId) {
-                setState(() {
-                  if (_selectedTagIds.contains(tagId)) {
-                    _selectedTagIds.remove(tagId);
-                  } else {
-                    _selectedTagIds.add(tagId);
-                  }
-                });
-              },
-              onSubmit: () {
-                controller
-                    .submitManual(
-                  userId: runtime.userId,
-                  anchorDate: runtime.todayDate,
-                  fields: {
-                    for (final entry in fieldControllers.entries)
-                      entry.key: entry.value.text,
-                  },
-                  projectIds: _selectedProjectIds.toList(),
-                  tagIds: _selectedTagIds.toList(),
-                )
-                    .then((success) {
-                  if (!mounted || !success) {
-                    return;
-                  }
-                  runtime.markRecordsChanged();
-                  _resetAfterSubmit(
-                    type: controller.selectedType,
-                    metadata: controller.metadata,
-                    anchorDate: runtime.todayDate,
-                  );
-                });
-              },
-            ),
-            AiCaptureSection(
               aiState: controller.aiState,
-              inputController: _aiInputController,
-              inputFocusNode: _aiInputFocusNode,
-              autofocusInput: widget.launchConfig?.focusAiInput ?? false,
-              parseMode: controller.selectedAiParseMode,
-              onParseModeChanged: controller.selectAiParseMode,
-              onParsePressed: () {
-                controller.parseAiInput(
-                  userId: runtime.userId,
-                  rawInput: _aiInputController.text,
-                  contextDate: runtime.todayDate,
-                );
+              activeTab: _activeTab,
+              onTabChanged: (tab) {
+                setState(() => _activeTab = tab);
               },
-              onDraftChanged: controller.updateAiDraftEnvelope,
-              onCommitPressed: () {
-                final draft = controller.aiState.data;
-                if (draft == null) {
-                  return;
-                }
-                controller
-                    .commitAiDrafts(
-                  userId: runtime.userId,
-                  draftEnvelope: draft,
-                )
-                    .then((success) {
-                  if (!mounted || !success) {
+              quickCaptureBufferCount: controller.quickCaptureBufferItemCount,
+              composeChild: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  CaptureTypeSelector(
+                    selectedType: controller.selectedType,
+                    onChanged: (type) {
+                      controller.selectType(type);
+                      _applyDefaults(
+                        type: type,
+                        metadata: controller.metadata,
+                        anchorDate: runtime.todayDate,
+                        force: true,
+                      );
+                    },
+                  ),
+                  const SizedBox(height: 20),
+                  RecordFormSection(
+                    selectedType: controller.selectedType,
+                    anchorDate: runtime.todayDate,
+                    controllers: fieldControllers,
+                    submitState: controller.manualSubmitState,
+                    projectOptions: controller.projectOptions,
+                    tags: controller.tags,
+                    selectedProjectIds: _selectedProjectIds,
+                    selectedTagIds: _selectedTagIds,
+                    optionResolver: controller.optionsFor,
+                    sourceSuggestions: controller.incomeSourceSuggestions,
+                    onProjectToggle: (projectId) {
+                      setState(() {
+                        if (_selectedProjectIds.contains(projectId)) {
+                          _selectedProjectIds.remove(projectId);
+                        } else {
+                          _selectedProjectIds.add(projectId);
+                        }
+                      });
+                    },
+                    onTagToggle: (tagId) {
+                      setState(() {
+                        if (_selectedTagIds.contains(tagId)) {
+                          _selectedTagIds.remove(tagId);
+                        } else {
+                          _selectedTagIds.add(tagId);
+                        }
+                      });
+                    },
+                    onSubmit: () {
+                      controller
+                          .submitManual(
+                        userId: runtime.userId,
+                        anchorDate: runtime.todayDate,
+                        fields: {
+                          for (final entry in fieldControllers.entries)
+                            entry.key: entry.value.text,
+                        },
+                        projectIds: _selectedProjectIds.toList(),
+                        tagIds: _selectedTagIds.toList(),
+                      )
+                          .then((success) {
+                        if (!mounted || !success) {
+                          return;
+                        }
+                        runtime.markRecordsChanged();
+                        _resetAfterSubmit(
+                          type: controller.selectedType,
+                          metadata: controller.metadata,
+                          anchorDate: runtime.todayDate,
+                        );
+                      });
+                    },
+                  ),
+                  const SizedBox(height: 20),
+                  AiCaptureComposerSection(
+                    inputController: _aiInputController,
+                    inputFocusNode: _aiInputFocusNode,
+                    autofocusInput: widget.launchConfig?.focusAiInput ?? false,
+                    parseMode: controller.selectedAiParseMode,
+                    onParseModeChanged: controller.selectAiParseMode,
+                    onParsePressed: () {
+                      setState(() {
+                        _activeTab = CaptureWorkspaceTab.review;
+                      });
+                      controller.parseAiInput(
+                        userId: runtime.userId,
+                        rawInput: _aiInputController.text,
+                        contextDate: runtime.todayDate,
+                      );
+                    },
+                    onAddToBufferPressed: () {
+                      controller
+                          .appendQuickCaptureBufferItem(
+                        userId: runtime.userId,
+                        anchorDate: runtime.todayDate,
+                        rawText: _aiInputController.text,
+                      )
+                          .then((success) {
+                        if (!mounted || !success) {
+                          return;
+                        }
+                        _aiInputController.clear();
+                        setState(() {
+                          _activeTab = CaptureWorkspaceTab.cache;
+                        });
+                      });
+                    },
+                    quickBufferCount: controller.quickCaptureBufferItemCount,
+                  ),
+                ],
+              ),
+              reviewChild: DraftReviewCenterSection(
+                aiState: controller.aiState,
+                onDraftChanged: controller.updateAiDraftEnvelope,
+                onCommitPressed: () {
+                  final draft = controller.aiState.data;
+                  if (draft == null) {
                     return;
                   }
-                  runtime.markRecordsChanged();
-                });
-              },
-              optionResolver: controller.optionsFor,
-              sourceSuggestions: controller.incomeSourceSuggestions,
-              projectOptions: controller.projectOptions,
-              tags: controller.tags,
+                  controller
+                      .commitAiDrafts(
+                    userId: runtime.userId,
+                    draftEnvelope: draft,
+                  )
+                      .then((success) {
+                    if (!mounted || !success) {
+                      return;
+                    }
+                    runtime.markRecordsChanged();
+                  });
+                },
+                optionResolver: controller.optionsFor,
+                sourceSuggestions: controller.incomeSourceSuggestions,
+                projectOptions: controller.projectOptions,
+                tags: controller.tags,
+                commitState: controller.aiCommitState,
+                lastCommitSummary: controller.lastAiCommitSummary,
+              ),
+              cacheChild: QuickCapturePoolSection(
+                bufferState: controller.quickCaptureBufferState,
+                actionState: controller.quickCaptureBufferActionState,
+                inputController: _aiInputController,
+                lastActionSummary: controller.lastQuickCaptureBufferSummary,
+                onAppendPressed: () {
+                  controller
+                      .appendQuickCaptureBufferItem(
+                    userId: runtime.userId,
+                    anchorDate: runtime.todayDate,
+                    rawText: _aiInputController.text,
+                  )
+                      .then((success) {
+                    if (!mounted || !success) {
+                      return;
+                    }
+                    _aiInputController.clear();
+                  });
+                },
+                onProcessPressed: () {
+                  controller
+                      .processQuickCaptureBufferSession(
+                    userId: runtime.userId,
+                    anchorDate: runtime.todayDate,
+                    autoCommit: false,
+                  )
+                      .then((result) {
+                    if (!mounted || result == null) {
+                      return;
+                    }
+                    setState(() {
+                      _activeTab = CaptureWorkspaceTab.review;
+                    });
+                  });
+                },
+                onDeletePressed: (itemId) {
+                  if (itemId.trim().isEmpty) {
+                    return;
+                  }
+                  controller.deleteQuickCaptureBufferItem(
+                    userId: runtime.userId,
+                    anchorDate: runtime.todayDate,
+                    itemId: itemId,
+                  );
+                },
+              ),
             ),
           ],
         );
@@ -283,6 +375,23 @@ class _CapturePageState extends State<CapturePage> {
     });
   }
 
+  void _ensureQuickCaptureBufferLoaded(
+    dynamic runtime,
+    CaptureController controller,
+  ) {
+    if (_quickCaptureBufferLoaded || !runtime.isReady) {
+      return;
+    }
+    _quickCaptureBufferLoaded = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      controller.loadQuickCaptureBuffer(
+        userId: runtime.userId,
+        anchorDate: runtime.todayDate,
+      );
+    });
+  }
+
   Future<void> _startVoiceCapture() async {
     final controller = _controller;
     if (controller == null) {
@@ -301,6 +410,9 @@ class _CapturePageState extends State<CapturePage> {
       }
       _aiInputController.text = transcript;
       _aiInputFocusNode.requestFocus();
+      setState(() {
+        _activeTab = CaptureWorkspaceTab.review;
+      });
       final runtime = LifeOsScope.runtimeOf(context);
       await controller.parseAiInput(
         userId: runtime.userId,

@@ -1,4 +1,5 @@
 pub mod ai_repository;
+pub mod capture_buffer_repository;
 pub mod capture_inbox_repository;
 pub mod cost_repository;
 pub mod project_repository;

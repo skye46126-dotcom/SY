@@ -6,11 +6,15 @@ use crate::db::Database;
 use crate::error::{LifeOsError, Result};
 use crate::models::{
     AiCaptureCommitInput, AiCaptureCommitResult, AiDraftKind, AiParseDraft, AiParseInput,
+    AppendCaptureBufferItemInput, CaptureBufferAppendResult, CaptureBufferItemsResult,
+    CaptureBufferProcessResult, CaptureBufferSession, CaptureBufferSessionStatus,
     CaptureInboxAutoCommitResult, CaptureInboxEntry, CaptureInboxProcessResult, CaptureInboxStatus,
     CaptureSessionProfile, CommitCaptureDraftEnvelopeInput, CommitReviewableDraftInput,
-    CreateCaptureInboxEntryInput, DraftStatus, ParserMode, PrepareCaptureSessionInput,
+    CreateCaptureBufferSessionInput, CreateCaptureInboxEntryInput, DraftStatus, ParserMode,
+    PrepareCaptureSessionInput, ProcessCaptureBufferSessionInput,
     ProcessCaptureInboxAndCommitInput, ProcessCaptureInboxInput, ReviewNoteDraft, TypedDraftKind,
 };
+use crate::repositories::capture_buffer_repository::CaptureBufferRepository;
 use crate::repositories::capture_inbox_repository::CaptureInboxRepository;
 use crate::services::ai_service::AiService;
 
@@ -37,6 +41,199 @@ impl CaptureService {
         self.database.initialize()?;
         let mut connection = self.database.connect()?;
         CaptureInboxRepository::enqueue(&mut connection, input)
+    }
+
+    pub fn get_or_create_active_capture_buffer_session(
+        &self,
+        input: &CreateCaptureBufferSessionInput,
+    ) -> Result<CaptureBufferSession> {
+        self.database.initialize()?;
+        input.validate()?;
+        let mut connection = self.database.connect()?;
+        if let Some(existing) =
+            CaptureBufferRepository::get_active_session(&connection, &input.user_id)?
+        {
+            return Ok(existing);
+        }
+        CaptureBufferRepository::create_session(&mut connection, input)
+    }
+
+    pub fn append_capture_buffer_item(
+        &self,
+        input: &AppendCaptureBufferItemInput,
+    ) -> Result<CaptureBufferAppendResult> {
+        self.database.initialize()?;
+        input.validate()?;
+        let mut connection = self.database.connect()?;
+        let session = match input.session_id.as_deref() {
+            Some(session_id) => {
+                CaptureBufferRepository::get_session(&connection, &input.user_id, session_id)?
+                    .ok_or_else(|| {
+                        LifeOsError::InvalidInput(format!(
+                            "capture buffer session not found: {session_id}"
+                        ))
+                    })?
+            }
+            None => {
+                if let Some(active) =
+                    CaptureBufferRepository::get_active_session(&connection, &input.user_id)?
+                {
+                    active
+                } else {
+                    CaptureBufferRepository::create_session(
+                        &mut connection,
+                        &CreateCaptureBufferSessionInput {
+                            user_id: input.user_id.clone(),
+                            source: input.source.clone(),
+                            entry_point: input
+                                .normalized_entry_point()
+                                .unwrap_or_else(|| "quick_capture".to_string()),
+                            context_date: input.context_date.clone(),
+                            route_hint: input.route_hint.clone(),
+                            mode_hint: input.mode_hint.clone(),
+                            parser_mode_hint: input.parser_mode_hint.clone(),
+                        },
+                    )?
+                }
+            }
+        };
+        if session.status != CaptureBufferSessionStatus::Active {
+            return Err(LifeOsError::InvalidInput(format!(
+                "capture buffer session is not active: {}",
+                session.id
+            )));
+        }
+        let item = CaptureBufferRepository::append_item(
+            &mut connection,
+            &session,
+            &input.raw_text,
+            &input.normalized_source()?,
+            &input.normalized_input_kind()?,
+        )?;
+        let session =
+            CaptureBufferRepository::get_session(&connection, &input.user_id, &session.id)?
+                .ok_or_else(|| {
+                    LifeOsError::InvalidInput(format!(
+                        "capture buffer session not found: {}",
+                        session.id
+                    ))
+                })?;
+        Ok(CaptureBufferAppendResult { session, item })
+    }
+
+    pub fn list_capture_buffer_items(
+        &self,
+        user_id: &str,
+        session_id: &str,
+    ) -> Result<CaptureBufferItemsResult> {
+        self.database.initialize()?;
+        let connection = self.database.connect()?;
+        let session = CaptureBufferRepository::get_session(&connection, user_id, session_id)?
+            .ok_or_else(|| {
+                LifeOsError::InvalidInput(format!("capture buffer session not found: {session_id}"))
+            })?;
+        let items = CaptureBufferRepository::list_items(&connection, user_id, session_id)?;
+        Ok(CaptureBufferItemsResult { session, items })
+    }
+
+    pub fn delete_capture_buffer_item(
+        &self,
+        user_id: &str,
+        session_id: &str,
+        item_id: &str,
+    ) -> Result<CaptureBufferItemsResult> {
+        self.database.initialize()?;
+        let mut connection = self.database.connect()?;
+        CaptureBufferRepository::delete_item(&mut connection, user_id, session_id, item_id)?;
+        let session = CaptureBufferRepository::get_session(&connection, user_id, session_id)?
+            .ok_or_else(|| {
+                LifeOsError::InvalidInput(format!("capture buffer session not found: {session_id}"))
+            })?;
+        let items = CaptureBufferRepository::list_items(&connection, user_id, session_id)?;
+        Ok(CaptureBufferItemsResult { session, items })
+    }
+
+    pub fn process_capture_buffer_session(
+        &self,
+        input: &ProcessCaptureBufferSessionInput,
+    ) -> Result<CaptureBufferProcessResult> {
+        self.database.initialize()?;
+        input.validate()?;
+
+        let connection = self.database.connect()?;
+        let session =
+            CaptureBufferRepository::get_session(&connection, &input.user_id, &input.session_id)?
+                .ok_or_else(|| {
+                LifeOsError::InvalidInput(format!(
+                    "capture buffer session not found: {}",
+                    input.session_id
+                ))
+            })?;
+        let items =
+            CaptureBufferRepository::list_items(&connection, &input.user_id, &input.session_id)?;
+        if items.is_empty() {
+            return Err(LifeOsError::InvalidInput(
+                "capture buffer session has no items".to_string(),
+            ));
+        }
+        let combined_text = items
+            .iter()
+            .map(|item| item.raw_text.trim())
+            .filter(|value| !value.is_empty())
+            .collect::<Vec<_>>()
+            .join("\n");
+        if combined_text.trim().is_empty() {
+            return Err(LifeOsError::InvalidInput(
+                "capture buffer session combined text is empty".to_string(),
+            ));
+        }
+        drop(connection);
+
+        let inbox_entry = self.enqueue_capture_inbox(&CreateCaptureInboxEntryInput {
+            user_id: input.user_id.clone(),
+            source: session.source.clone(),
+            entry_point: session.entry_point.clone(),
+            raw_text: combined_text.clone(),
+            context_date: session.context_date.clone(),
+            route_hint: session.route_hint.clone(),
+            record_type_hint: None,
+            mode_hint: session.mode_hint.clone(),
+            parser_mode_hint: session.parser_mode_hint.clone(),
+            device_context: None,
+        })?;
+        let process_result = self.process_capture_inbox(&ProcessCaptureInboxInput {
+            user_id: input.user_id.clone(),
+            inbox_id: inbox_entry.id.clone(),
+            parser_mode_override: None,
+        })?;
+        let auto_commit_result = if input.auto_commit {
+            Some(
+                self.process_capture_inbox_and_commit(&ProcessCaptureInboxAndCommitInput {
+                    user_id: input.user_id.clone(),
+                    inbox_id: inbox_entry.id.clone(),
+                    parser_mode_override: None,
+                })?,
+            )
+        } else {
+            None
+        };
+        let mut connection = self.database.connect()?;
+        let session = CaptureBufferRepository::mark_processed(
+            &mut connection,
+            &input.user_id,
+            &input.session_id,
+            &combined_text,
+            &inbox_entry.id,
+            auto_commit_result.is_some(),
+        )?;
+        Ok(CaptureBufferProcessResult {
+            session,
+            items,
+            combined_text,
+            inbox_entry,
+            process_result,
+            auto_commit_result,
+        })
     }
 
     pub fn list_capture_inbox(

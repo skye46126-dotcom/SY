@@ -1,4 +1,5 @@
 mod ai;
+mod capture_buffer;
 mod capture_inbox;
 mod common;
 mod cost;
@@ -25,6 +26,11 @@ pub use ai::{
     CreateAiServiceConfigInput, DraftDimensionBinding, DraftField, DraftFieldSource, DraftIntent,
     DraftLinks, DraftProjectLink, DraftStatus, DraftTagLink, DraftValidation, ParseContext,
     ParsePipelineResult, ParserMode, ReviewableDraft, TypedDraftKind,
+};
+pub use capture_buffer::{
+    AppendCaptureBufferItemInput, CaptureBufferAppendResult, CaptureBufferItem,
+    CaptureBufferItemsResult, CaptureBufferProcessResult, CaptureBufferSession,
+    CaptureBufferSessionStatus, CreateCaptureBufferSessionInput, ProcessCaptureBufferSessionInput,
 };
 pub use capture_inbox::{
     CaptureInboxAutoCommitResult, CaptureInboxEntry, CaptureInboxProcessResult, CaptureInboxStatus,

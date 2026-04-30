@@ -1,15 +1,16 @@
 use chrono::{Datelike, Local};
 use life_os_core::{
     AiCaptureCommitInput, AiCommitInput, AiCommitOptions, AiDraftKind, AiParseDraft, AiParseInput,
-    AiService, BackupService, BackupType, CapexCostInput, CaptureService,
-    CommitCaptureDraftEnvelopeInput, CommitReviewableDraftInput, CostService,
-    CreateAiServiceConfigInput, CreateCaptureInboxEntryInput, CreateCloudSyncConfigInput,
-    CreateExpenseRecordInput, CreateIncomeRecordInput, CreateLearningRecordInput,
-    CreateProjectInput, CreateTagInput, CreateTimeRecordInput, Database, DemoDataService,
-    DimensionOptionInput, MonthlyCostBaselineInput, ProcessCaptureInboxInput, ProjectAllocation,
-    ProjectService, RecordKind, RecordService, RecurringCostRuleInput, RemoteBackupFile,
-    RemoteDownloadResult, RemoteUploadResult, ReviewNoteDraft, ReviewService, SnapshotService,
-    SnapshotWindow, cloud::CloudSyncTransport,
+    AiService, AppendCaptureBufferItemInput, BackupService, BackupType, CapexCostInput,
+    CaptureService, CommitCaptureDraftEnvelopeInput, CommitReviewableDraftInput, CostService,
+    CreateAiServiceConfigInput, CreateCaptureBufferSessionInput, CreateCaptureInboxEntryInput,
+    CreateCloudSyncConfigInput, CreateExpenseRecordInput, CreateIncomeRecordInput,
+    CreateLearningRecordInput, CreateProjectInput, CreateTagInput, CreateTimeRecordInput, Database,
+    DemoDataService, DimensionOptionInput, MonthlyCostBaselineInput,
+    ProcessCaptureBufferSessionInput, ProcessCaptureInboxInput, ProjectAllocation, ProjectService,
+    RecordKind, RecordService, RecurringCostRuleInput, RemoteBackupFile, RemoteDownloadResult,
+    RemoteUploadResult, ReviewNoteDraft, ReviewService, SnapshotService, SnapshotWindow,
+    cloud::CloudSyncTransport,
 };
 use rusqlite::params;
 use std::collections::BTreeMap;
@@ -46,6 +47,8 @@ fn migrations_seed_dimensions_and_default_user() {
         "review_snapshots",
         "review_notes",
         "capture_inbox",
+        "capture_buffer_sessions",
+        "capture_buffer_items",
         "dimension_options",
         "metric_snapshot_projects",
     ];
@@ -273,6 +276,75 @@ fn capture_session_profile_resolves_defaults_from_inbox() {
             .iter()
             .any(|item| item == "parser_mode")
     );
+}
+
+#[test]
+fn capture_buffer_can_append_multiple_items_and_process_once() {
+    let directory = tempdir().expect("tempdir");
+    let database_path = directory.path().join("life_os.db");
+    let record_service = RecordService::new(&database_path);
+    let user = record_service.init_database().expect("init database");
+    let capture_service = CaptureService::new(&database_path);
+
+    let session = capture_service
+        .get_or_create_active_capture_buffer_session(&CreateCaptureBufferSessionInput {
+            user_id: user.id.clone(),
+            source: "quick_capture".to_string(),
+            entry_point: "quick_capture".to_string(),
+            context_date: Some("2026-04-25".to_string()),
+            route_hint: Some("/capture?mode=ai".to_string()),
+            mode_hint: Some("ai".to_string()),
+            parser_mode_hint: Some(life_os_core::ParserMode::Rule),
+        })
+        .expect("create session");
+
+    capture_service
+        .append_capture_buffer_item(&AppendCaptureBufferItemInput {
+            user_id: user.id.clone(),
+            session_id: Some(session.id.clone()),
+            source: "quick_capture".to_string(),
+            entry_point: Some("quick_capture".to_string()),
+            context_date: Some("2026-04-25".to_string()),
+            route_hint: Some("/capture?mode=ai".to_string()),
+            mode_hint: Some("ai".to_string()),
+            parser_mode_hint: Some(life_os_core::ParserMode::Rule),
+            raw_text: "今天学习 Rust FFI 1小时".to_string(),
+            input_kind: Some("text".to_string()),
+        })
+        .expect("append item 1");
+    capture_service
+        .append_capture_buffer_item(&AppendCaptureBufferItemInput {
+            user_id: user.id.clone(),
+            session_id: Some(session.id.clone()),
+            source: "quick_capture".to_string(),
+            entry_point: Some("quick_capture".to_string()),
+            context_date: Some("2026-04-25".to_string()),
+            route_hint: Some("/capture?mode=ai".to_string()),
+            mode_hint: Some("ai".to_string()),
+            parser_mode_hint: Some(life_os_core::ParserMode::Rule),
+            raw_text: "效率 8，AI 30".to_string(),
+            input_kind: Some("text".to_string()),
+        })
+        .expect("append item 2");
+
+    let listed = capture_service
+        .list_capture_buffer_items(&user.id, &session.id)
+        .expect("list items");
+    assert_eq!(listed.items.len(), 2);
+
+    let processed = capture_service
+        .process_capture_buffer_session(&ProcessCaptureBufferSessionInput {
+            user_id: user.id.clone(),
+            session_id: session.id.clone(),
+            auto_commit: false,
+        })
+        .expect("process buffer session");
+
+    assert!(processed.combined_text.contains("今天学习 Rust FFI 1小时"));
+    assert!(processed.combined_text.contains("效率 8，AI 30"));
+    assert_eq!(processed.process_result.draft_envelope.items.len(), 1);
+    assert!(processed.auto_commit_result.is_none());
+    assert_eq!(processed.session.status.as_str(), "processed");
 }
 
 #[test]
